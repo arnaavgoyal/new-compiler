@@ -1,0 +1,83 @@
+#ifndef TOKEN
+#define TOKEN(X) 
+#endif
+
+#ifndef KEYWORD
+#define KEYWORD(X)
+#endif
+
+#ifndef OPERATOR
+#define OPERATOR(X,Y)
+#endif
+
+// tokens
+
+TOKEN(unknown)
+
+TOKEN(eof)
+
+TOKEN(comment)
+
+TOKEN(identifier)
+
+TOKEN(numeric_literal)
+TOKEN(character_literal)
+TOKEN(string_literal)
+
+
+// keywords
+
+KEYWORD(if)
+KEYWORD(else)
+KEYWORD(for)
+KEYWORD(while)
+KEYWORD(continue)
+KEYWORD(break)
+KEYWORD(return)
+
+KEYWORD(bool)
+KEYWORD(int16)
+KEYWORD(uint16)
+KEYWORD(int32)
+KEYWORD(uint32)
+KEYWORD(int64)
+KEYWORD(uint64)
+KEYWORD(float32)
+KEYWORD(float64)
+
+KEYWORD(static)
+
+// operators
+
+OPERATOR(leftparen, "(")
+OPERATOR(rightparen, ")")
+OPERATOR(leftbracket, "[")
+OPERATOR(rightbracket, "]")
+OPERATOR(leftbrace, "{")
+OPERATOR(rightbrace, "}")
+
+OPERATOR(plusplus, "++")
+OPERATOR(minusminus, "--")
+OPERATOR(plus, "+")
+OPERATOR(minus, "-")
+OPERATOR(asterisk, "*")
+OPERATOR(slash, "/")
+
+OPERATOR(exclamation, "!")
+OPERATOR(ampamp, "&&")
+OPERATOR(pipepipe, "||")
+
+OPERATOR(greater, ">")
+OPERATOR(less, "<")
+OPERATOR(greaterequal, ">=")
+OPERATOR(lessequal, "<=")
+OPERATOR(equalequal, "==")
+
+OPERATOR(equal, "=")
+
+OPERATOR(comma, ",")
+OPERATOR(semicolon, ";")
+
+#undef OPERATOR
+#undef KEYWORD
+#undef TOKEN
