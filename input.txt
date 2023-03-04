@@ -1,2 +1,6 @@
-* && ==
-! -- (;)
+#define<iostream>
+
+int main (int argc, char *argv[]) {
+    void *(*fp)(char *);
+    return 0;
+}

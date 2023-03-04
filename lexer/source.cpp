@@ -8,6 +8,14 @@ SourceFileManager::SourceFileManager() {
     this->sources = std::vector<std::ifstream *>();
 }
 
+SourceFileManager::~SourceFileManager() {
+    for (int i = 0; i < sources.size(); i++) {
+        (*sources[i]).close();
+        delete sources[i];
+    }
+    std::cout << "files cleaned up\n";
+}
+
 SourceFileID SourceFileManager::add_source(std::string const &path) {
     this->source_paths.push_back(path);
     this->sources.push_back(new std::ifstream(path));

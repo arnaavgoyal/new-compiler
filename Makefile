@@ -5,7 +5,7 @@ OBJECTS = $(SOURCES:%.cpp=%.o)
 DEPENDENCIES = $(OBJECTS:%.o=%.d)
 PROJECT := compiler.exe
 
-run: $(PROJECT) clean
+run: $(PROJECT)
 	./$(PROJECT)
 
 $(PROJECT): $(OBJECTS)

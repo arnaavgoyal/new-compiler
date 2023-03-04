@@ -1,4 +1,4 @@
-#include <cstdio>
+#include <iostream>
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
@@ -11,7 +11,12 @@ int main() {
     Token tk = Token();
     lexer.lex(tk);
     while (tk.get_type() != token::eof) {
-        printf("%s\n", (char const *)tk.get_ptr());
+        std::cout << tk.get_raw_line() << ":" << tk.get_raw_col() << ": " << *(std::string *)(tk.get_ptr()) << std::endl;
+        if (tk.needs_dealloc()) {
+            delete tk.get_ptr();
+            tk.clear();
+        }
         lexer.lex(tk);
     }
+    return 0;
 }

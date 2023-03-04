@@ -17,11 +17,66 @@ Lexer::Lexer(SourceFileManager &manager, SourceFileID src_id, bool sc = false) {
 }
 
 void Lexer::lex_numeric_literal(Token &tk) {
-    std::cout << "num\n";
+    int c;
+    std::string *str = new std::string;
+    tk.set(token::numeric_literal, src_id, line, col, str, true);
+    bool end = false;
+    while (!end) {
+        c = src->peek();
+        switch (c) {
+            case '0': case '1':
+            case '2': case '3':
+            case '4': case '5':
+            case '6': case '7':
+            case '8': case '9':
+                str->push_back(c);
+                src->get();
+                col++;
+                break;
+            default:
+                end = true;
+                break;
+        }
+    }
 }
 
 void Lexer::lex_identifier(Token &tk) {
-    std::cout << "ident\n";
+    int c;
+    std::string *ident = new std::string;
+    tk.set(token::identifier, src_id, line, col, ident, true);
+    bool end = false;
+    while (!end) {
+        c = src->peek();
+        switch (c) {
+            case '0': case '1':
+            case '2': case '3':
+            case '4': case '5':
+            case '6': case '7':
+            case '8': case '9':
+            case 'A': case 'B': case 'C': case 'D':
+            case 'E': case 'F': case 'G': case 'H':
+            case 'I': case 'J': case 'K': case 'L':
+            case 'M': case 'N': case 'O': case 'P':
+            case 'Q': case 'R': case 'S': case 'T':
+            case 'U': case 'V': case 'W': case 'X':
+            case 'Y': case 'Z':
+            case 'a': case 'b': case 'c': case 'd':
+            case 'e': case 'f': case 'g': case 'h':
+            case 'i': case 'j': case 'k': case 'l':
+            case 'm': case 'n': case 'o': case 'p':
+            case 'q': case 'r': case 's': case 't':
+            case 'u': case 'v': case 'w': case 'x':
+            case 'y': case 'z':
+            case '_':
+                ident->push_back(c);
+                src->get();
+                col++;
+                break;
+            default:
+                end = true;
+                break;
+        }
+    }
 }
 
 void Lexer::lex_char_literal(Token &tk) {
@@ -41,15 +96,15 @@ bool Lexer::lex_block_comment(Token &tk) {
 }
 
 void Lexer::rectify_token(Token &tk, token::token_type type, int c) {
-    tk.set(type, src_id, line, col, nullptr);
+    std::string *str;
     if (type == token::unknown) {
-        int *ptr = (int *)malloc(sizeof(int));
-        *ptr = c;
-        tk.set_ptr((void *)ptr);
+        str = new std::string;
+        str->push_back((char)c);
     }
     else {
-        tk.set_ptr((void *)token::get_operator_string(type));
+        str = new std::string(token::get_operator_string(type));
     }
+    tk.set(type, src_id, line, col, (void *)str, true);
 }
 
 void Lexer::lex(Token &tk) {
@@ -78,6 +133,7 @@ lex_start:
             goto lex_start;
 
         case ' ':
+            col++;
         case '\t':
         case '\f':
         case '\v':
@@ -88,6 +144,7 @@ lex_start:
         case '4': case '5':
         case '6': case '7':
         case '8': case '9':
+            src->unget();
             lex_numeric_literal(tk);
             return;
 
@@ -106,6 +163,7 @@ lex_start:
         case 'u': case 'v': case 'w': case 'x':
         case 'y': case 'z':
         case '_':
+            src->unget();
             lex_identifier(tk);
             return;
 
@@ -139,6 +197,7 @@ lex_start:
             if (src->peek() == '+') {
                 type = token::op_plusplus;
                 c = src->get();
+                col++;
             }
             else
                 type = token::op_plus;
@@ -147,6 +206,7 @@ lex_start:
             if (src->peek() == '-') {
                 type = token::op_minusminus;
                 c = src->get();
+                col++;
             }
             else
                 type = token::op_minus;
@@ -158,6 +218,7 @@ lex_start:
             c = src->peek();
             if (c == '/') {
                 src->get();
+                col++;
                 if (lex_line_comment(tk)) {
                     return;
                 }
@@ -165,6 +226,7 @@ lex_start:
             }
             else if (c == '*') {
                 src->get();
+                col++;
                 if (lex_block_comment(tk)) {
                     return;
                 }
@@ -178,6 +240,7 @@ lex_start:
             break;
         case '&':
             if (src->peek() == '&') {
+                col++;
                 type = token::op_ampamp;
                 c = src->get();
             }
@@ -186,6 +249,7 @@ lex_start:
             break;
         case '|':
             if (src->peek() == '|') {
+                col++;
                 type = token::op_pipepipe;
                 c = src->get();
             }
@@ -195,6 +259,7 @@ lex_start:
         
         case '>':
             if (src->peek() == '=') {
+                col++;
                 type = token::op_greaterequal;
                 c = src->get();
             }
@@ -203,6 +268,7 @@ lex_start:
             break;
         case '<':
             if (src->peek() == '=') {
+                col++;
                 type = token::op_lessequal;
                 c = src->get();
             }
@@ -211,6 +277,7 @@ lex_start:
             break;
         case '=':
             if (src->peek() == '=') {
+                col++;
                 type = token::op_equalequal;
                 c = src->get();
             }
@@ -232,5 +299,6 @@ lex_start:
     }
 
     rectify_token(tk, type, c);
+    col++;
     return;
 }

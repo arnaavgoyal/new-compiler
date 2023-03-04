@@ -22,6 +22,7 @@ private:
     std::vector<std::ifstream *> sources;
 public:
     SourceFileManager();
+    ~SourceFileManager();
     SourceFileID add_source(std::string const &path);
     std::string const get_source_path(SourceFileID const &src_id);
     std::ifstream *get_source(SourceFileID const &src_id);
