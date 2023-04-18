@@ -1,6 +1,15 @@
-#include "tokentypes.h"
-#include <cstdio>
-#include <stdlib.h>
+#include "lexer/tokentypes.h"
+
+char const *token::get_token_string(token_type t) {
+    switch (t) {
+    #define TOKEN(A) case A: return #A;
+    #define KEYWORD(A) case kw_##A: return #A;
+    #define OPERATOR(A,B) case op_##A: return #A;
+    #include "tokendefs"
+    default: break;
+    }
+    return nullptr;
+}
 
 char const *token::get_keyword_string(token_type t) {
     switch (t) {
@@ -17,6 +26,5 @@ char const *token::get_operator_string(token_type t) {
     #include "tokendefs"
     default: break;
     }
-    exit(1);
     return nullptr;
 }

@@ -2,21 +2,18 @@
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
-#include "lexer/source.h"
+#include "source/source.h"
+#include "parser/ast.h"
+#include "parser/parser.h"
 
 int main() {
-    SourceFileManager file_manager = SourceFileManager();
+    SourceFileManager file_manager;
     SourceFileID src_id = file_manager.add_source("input.txt");
-    Lexer lexer = Lexer(file_manager, src_id, true);
-    Token tk = Token();
-    lexer.lex(tk);
-    while (tk.get_type() != token::eof) {
-        std::cout << tk.get_raw_line() << ":" << tk.get_raw_col() << ": " << *(std::string *)(tk.get_ptr()) << std::endl;
-        if (tk.needs_dealloc()) {
-            delete tk.get_ptr();
-            tk.clear();
-        }
-        lexer.lex(tk);
+    Lexer lexer(file_manager, src_id, true);
+    Parser parser(lexer);
+    ASTNode *tree;
+    while ((tree = parser.parse()) != nullptr) {
+        print_ast(tree);
     }
     return 0;
 }

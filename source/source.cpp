@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "source.h"
+#include "source/source.h"
 
 SourceFileManager::SourceFileManager() {
     this->source_paths = std::vector<std::string>();

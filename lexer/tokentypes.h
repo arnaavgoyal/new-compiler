@@ -11,6 +11,8 @@ namespace token {
         NUM_TOKENS
     };
 
+    char const *get_token_string(token_type t);
+
     char const *get_keyword_string(token_type t);
 
     char const *get_operator_string(token_type t);

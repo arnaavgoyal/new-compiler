@@ -1,7 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
-#include "source.h"
+#include "source/source.h"
 #include "token.h"
 #include "tokentypes.h"
 #include <fstream>
@@ -27,6 +27,7 @@ private:
     void rectify_token(Token &tk, token::token_type type, int c);
 
 public:
+    Lexer();
     Lexer(SourceFileManager &manager, SourceFileID src_id, bool sc);
     void lex(Token &tk);
 };

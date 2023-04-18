@@ -2,10 +2,12 @@
 #include <iostream>
 #include <fstream>
 
-#include "lexer.h"
-#include "source.h"
-#include "token.h"
-#include "tokentypes.h"
+#include "lexer/lexer.h"
+#include "source/source.h"
+#include "lexer/token.h"
+#include "lexer/tokentypes.h"
+
+Lexer::Lexer() { }
 
 Lexer::Lexer(SourceFileManager &manager, SourceFileID src_id, bool sc = false) {
     this->src_manager = manager;
@@ -19,7 +21,7 @@ Lexer::Lexer(SourceFileManager &manager, SourceFileID src_id, bool sc = false) {
 void Lexer::lex_numeric_literal(Token &tk) {
     int c;
     std::string *str = new std::string;
-    tk.set(token::numeric_literal, src_id, line, col, str, true);
+    tk.set(token::numeric_literal, src_id, line, col, str);
     bool end = false;
     while (!end) {
         c = src->peek();
@@ -43,7 +45,7 @@ void Lexer::lex_numeric_literal(Token &tk) {
 void Lexer::lex_identifier(Token &tk) {
     int c;
     std::string *ident = new std::string;
-    tk.set(token::identifier, src_id, line, col, ident, true);
+    tk.set(token::identifier, src_id, line, col, ident);
     bool end = false;
     while (!end) {
         c = src->peek();
@@ -80,19 +82,49 @@ void Lexer::lex_identifier(Token &tk) {
 }
 
 void Lexer::lex_char_literal(Token &tk) {
-    std::cout << "char\n";
+    std::string *s = new std::string;
+    int c;
+    while ((c = src->get()) != '\'') {
+        col++;
+        s->push_back(c);
+    }
+    col++;
+    tk.set(token::character_literal, src_id, line, col, s);
 }
 
 void Lexer::lex_string_literal(Token &tk) {
-    std::cout << "str\n";
+    std::string *s = new std::string;
+    int c;
+    while ((c = src->get()) != '"') {
+        col++;
+        s->push_back(c);
+    }
+    col++;
+    tk.set(token::string_literal, src_id, line, col, s);
 }
 
 bool Lexer::lex_line_comment(Token &tk) {
-    std::cout << "l com\n";
+    if (this->save_comments) {
+        std::string *s = new std::string;
+        tk.set(token::comment, src_id, line, col, s);
+        int c;
+        while ((c = src->get()) != '\n') {
+            s->push_back(c);
+        }
+        src->unget();
+        return true;
+    }
+    else {
+        while (src->get() != '\n') { }
+        src->unget();
+        return false;
+    }
 }
 
 bool Lexer::lex_block_comment(Token &tk) {
-    std::cout << "b com\n";
+    std::cout << "NYI\n";
+    exit(EXIT_FAILURE);
+    return false;
 }
 
 void Lexer::rectify_token(Token &tk, token::token_type type, int c) {
@@ -104,7 +136,7 @@ void Lexer::rectify_token(Token &tk, token::token_type type, int c) {
     else {
         str = new std::string(token::get_operator_string(type));
     }
-    tk.set(type, src_id, line, col, (void *)str, true);
+    tk.set(type, src_id, line, col, (void *)str);
 }
 
 void Lexer::lex(Token &tk) {
@@ -148,6 +180,88 @@ lex_start:
             lex_numeric_literal(tk);
             return;
 
+        // keyword first chars
+        case 'b':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("bool") == 0) {
+                tk.set_type(token::kw_bool);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("break") == 0) {
+                tk.set_type(token::kw_break);
+            }
+            return;
+        case 'c':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("continue") == 0) {
+                tk.set_type(token::kw_continue);
+            }
+            return;
+        case 'e':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("else") == 0) {
+                tk.set_type(token::kw_else);
+            }
+            return;
+        case 'f':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("for") == 0) {
+                tk.set_type(token::kw_for);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("f32") == 0) {
+                tk.set_type(token::kw_f32);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("f64") == 0) {
+                tk.set_type(token::kw_f64);
+            }
+            return;
+        case 'i':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("if") == 0) {
+                tk.set_type(token::kw_if);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("i16") == 0) {
+                tk.set_type(token::kw_i16);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("i32") == 0) {
+                tk.set_type(token::kw_i32);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("i64") == 0) {
+                tk.set_type(token::kw_i64);
+            }
+            return;
+        case 'r':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("return") == 0) {
+                tk.set_type(token::kw_return);
+            }
+            return;
+        case 'u':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("u16") == 0) {
+                tk.set_type(token::kw_u16);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("u32") == 0) {
+                tk.set_type(token::kw_u32);
+            }
+            else if (((std::string *)tk.get_ptr())->compare("u64") == 0) {
+                tk.set_type(token::kw_u64);
+            }
+            return;
+        case 'w':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.get_ptr())->compare("while") == 0) {
+                tk.set_type(token::kw_while);
+            }
+            return;
+
         case 'A': case 'B': case 'C': case 'D':
         case 'E': case 'F': case 'G': case 'H':
         case 'I': case 'J': case 'K': case 'L':
@@ -155,22 +269,21 @@ lex_start:
         case 'Q': case 'R': case 'S': case 'T':
         case 'U': case 'V': case 'W': case 'X':
         case 'Y': case 'Z':
-        case 'a': case 'b': case 'c': case 'd':
-        case 'e': case 'f': case 'g': case 'h':
-        case 'i': case 'j': case 'k': case 'l':
-        case 'm': case 'n': case 'o': case 'p':
-        case 'q': case 'r': case 's': case 't':
-        case 'u': case 'v': case 'w': case 'x':
-        case 'y': case 'z':
-        case '_':
+        case 'a': case 'd': case 'g': case 'h':
+        case 'j': case 'k': case 'l': case 'm':
+        case 'n': case 'o': case 'p': case 'q':
+        case 's': case 't': case 'v': case 'x':
+        case 'y': case 'z': case '_':
             src->unget();
             lex_identifier(tk);
             return;
 
         case '\'':
+            col++;
             lex_char_literal(tk);
             return;
         case '"':
+            col++;
             lex_string_literal(tk);
             return;
 
@@ -218,7 +331,7 @@ lex_start:
             c = src->peek();
             if (c == '/') {
                 src->get();
-                col++;
+                col += 2;
                 if (lex_line_comment(tk)) {
                     return;
                 }
@@ -226,7 +339,7 @@ lex_start:
             }
             else if (c == '*') {
                 src->get();
-                col++;
+                col += 2;
                 if (lex_block_comment(tk)) {
                     return;
                 }
@@ -234,9 +347,18 @@ lex_start:
             }
             type = token::op_slash;
             break;
+        case '%':
+            type = token::op_percent;
+            break;
         
         case '!':
-            type = token::op_exclamation;
+            if (src->peek() == '=') {
+                col++;
+                type = token::op_exclamationequal;
+                c = src->get();
+            }
+            else
+                type = token::op_exclamation;
             break;
         case '&':
             if (src->peek() == '&') {
@@ -245,7 +367,7 @@ lex_start:
                 c = src->get();
             }
             else
-                type = token::unknown;
+                type = token::op_amp;
             break;
         case '|':
             if (src->peek() == '|') {

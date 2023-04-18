@@ -36,16 +36,14 @@ KEYWORD(break)
 KEYWORD(return)
 
 KEYWORD(bool)
-KEYWORD(int16)
-KEYWORD(uint16)
-KEYWORD(int32)
-KEYWORD(uint32)
-KEYWORD(int64)
-KEYWORD(uint64)
-KEYWORD(float32)
-KEYWORD(float64)
-
-KEYWORD(static)
+KEYWORD(i16)
+KEYWORD(u16)
+KEYWORD(i32)
+KEYWORD(u32)
+KEYWORD(i64)
+KEYWORD(u64)
+KEYWORD(f32)
+KEYWORD(f64)
 
 // operators
 
@@ -62,6 +60,8 @@ OPERATOR(plus, "+")
 OPERATOR(minus, "-")
 OPERATOR(asterisk, "*")
 OPERATOR(slash, "/")
+OPERATOR(percent, "%")
+OPERATOR(amp, "&")
 
 OPERATOR(exclamation, "!")
 OPERATOR(ampamp, "&&")
@@ -72,6 +72,7 @@ OPERATOR(less, "<")
 OPERATOR(greaterequal, ">=")
 OPERATOR(lessequal, "<=")
 OPERATOR(equalequal, "==")
+OPERATOR(exclamationequal, "!=")
 
 OPERATOR(equal, "=")
 
