@@ -11,9 +11,14 @@ int main() {
     SourceFileID src_id = file_manager.add_source("input.txt");
     Lexer lexer(file_manager, src_id, true);
     Parser parser(lexer);
-    ASTNode *tree;
-    while ((tree = parser.parse()) != nullptr) {
-        print_ast(tree);
+    ASTNode *n;
+    ASTNode *tree = new ASTNode;
+    tree->data = new std::string("Translation Unit");
+    tree->type = ast::unknown;
+    while ((n = parser.parse_stmt()) != nullptr) {
+        tree->list.push_back(n);
+        //std::cout << token::get_token_string(parser.tk.get_type()) << std::endl;
     }
+    print_ast(tree);
     return 0;
 }

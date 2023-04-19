@@ -41,7 +41,10 @@ namespace ast {
         unary_op,
 
         // binary operation
-        binary_op
+        binary_op,
+
+        // unknown (for debugging purposes)
+        unknown
     };
 
 }

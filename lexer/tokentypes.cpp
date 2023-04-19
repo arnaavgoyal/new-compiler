@@ -8,7 +8,7 @@ char const *token::get_token_string(token_type t) {
     #include "tokendefs"
     default: break;
     }
-    return nullptr;
+    return "";
 }
 
 char const *token::get_keyword_string(token_type t) {
@@ -17,7 +17,7 @@ char const *token::get_keyword_string(token_type t) {
     #include "tokendefs"
     default: break;
     }
-    return nullptr;
+    return "";
 }
 
 char const *token::get_operator_string(token_type t) {
@@ -26,5 +26,5 @@ char const *token::get_operator_string(token_type t) {
     #include "tokendefs"
     default: break;
     }
-    return nullptr;
+    return "";
 }

@@ -6,13 +6,14 @@
 
 class Token {
 private:
-    token::token_type type;
     SourceFileID src_id;
     int raw_line;
     int raw_col;
     void *ptr;
 
 public:
+    token::token_type type;
+
     Token();
     Token(token::token_type type, SourceFileID src, int r_line, int r_col, void *ptr);
     ~Token();

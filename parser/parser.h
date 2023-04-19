@@ -5,16 +5,21 @@
 #include "lexer/lexer.h"
 #include "source/source.h"
 
-/** Operator precedences taken from https://en.cppreference.com/w/c/language/operator_precedence */
+/**
+ * Operator precedences taken from 
+ * https://en.cppreference.com/w/c/language/operator_precedence
+ */
 
 class Parser {
-private:
+public:
 
     /** The lexer to generate tokens from */
     Lexer lexer;
 
     /** The current token */
     Token tk;
+
+private:
 
     /**
      * OPERATOR PRECEDENCE [1].
@@ -174,16 +179,20 @@ private:
      * Parses a comma expression given that the current token is the first
      * token of the expression.
      * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a, b;', then it will contain ';' after this function is done.
+     * If the given node is nullptr, this function will parse the expr as if comma
+     * is a binary operator. However, if the given node is not nullptr, this
+     * function will parse the expr as if comma is a separator (func decl,
+     * call expr, etc).
+     * 
+     * ALWAYS consumes all parsed tokens EXCEPT for the stop token. Thus, the current
+     * token will be left containing the stop token.
      * 
      * Dynamically allocates all generated ast nodes. The caller is responsible for
      * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_comma(ASTNode *cn = nullptr);
+    ASTNode *parse_comma(token::token_type stop, ASTNode *cn);
 
     /**
      * Parses an expression given that the current token is the first token of the
@@ -214,16 +223,17 @@ public:
     Parser(Lexer &l);
 
     /**
-     * Parses as long as the Lexer provides valid tokens.
+     * Parses a statement given that the current token is the start of the
+     * statement. Recursively descends into scoped statement blocks.
      * 
-     * Once done, returns the generated abstract syntax tree.
+     * Once done, this function returns the generated abstract syntax tree.
      * 
      * Dynamically allocates all generated ast nodes. The caller is responsible for
      * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast
     */
-    ASTNode *parse();
+    ASTNode *parse_stmt();
 };
 
 #endif

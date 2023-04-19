@@ -42,6 +42,8 @@ void print_ast(ASTNode *tree, std::string str) {
             case ast::var_decl:
                 type_str = "var decl";
                 break;
+            default:
+                type_str = "?";
         }
 
         std::cout << str << "`" << type_str << " '"

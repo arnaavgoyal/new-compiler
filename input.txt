@@ -1,3 +1,14 @@
-return (a - b) * c(d, (e, f - g));
-i32 myvar1 = 1, myvar2 = 2, myvar3 = 3;
-a = b = *c = d = 0;
+f32 helper (abc) {
+    return 0;
+}
+
+bool foo (xyz) {
+    return true;
+}
+
+i32 main (x, y, z) {
+    int32*(*)[](*)(i32, bool);
+    i32 myvar1 = (a - b) * c(d, (e, f - g));
+    myvar1 = mayvar1 * 3;
+    return myvar1;
+}
