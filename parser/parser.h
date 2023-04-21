@@ -4,51 +4,60 @@
 #include "parser/ast.h"
 #include "lexer/lexer.h"
 #include "source/source.h"
-
-/**
- * Operator precedences taken from 
- * https://en.cppreference.com/w/c/language/operator_precedence
- */
+#include "memory/allocator.h"
 
 class Parser {
-public:
+private:
+
+    /** ------------------- FIELDS ------------------- */
 
     /** The lexer to generate tokens from */
-    Lexer lexer;
+    Lexer &lexer;
 
     /** The current token */
     Token tk;
 
-private:
+    /** The previous token's loc */
+    SourceLocation prev_tk_loc;
+
+    /** Allocator for AST nodes */
+    Allocator<ASTNode> &node_allocator;
+
+    /** ------------------- UTILS ------------------- */
+
+    void consume();
+
+    /** ------------------- EXPRESSION PARSING ------------------- */
+
+    /**
+     * Operator precedences taken from 
+     * https://en.cppreference.com/w/c/language/operator_precedence
+    */
 
     /**
      * OPERATOR PRECEDENCE [1].
      * 
-     * Parses a postfix expression given that the current token is a decl_ref.
+     * Parses a postfix expression given that the current token is the first token
+     * after the "unit" (literal, identifier, or parenthesized expr) it applies to.
      * 
      * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
      * the token AFTER the last relevant postfix token. For example, if current token
-     * contains 'a' in 'a[0] * b', then it will contain '*' after this function is done.
+     * contains '[' in 'a[0] * b', then it will contain '*' after this function is done.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
+     * @param node the unit node to apply to
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_postfix();
+    ASTNode *parse_postfix(ASTNode *node);
 
     /**
      * OPERATOR PRECEDENCE [1, 2].
      * 
-     * Parses an expression given that the current token is a "unit",
-     * meaning that it is either a literal or a decl_ref with no binary operators.
+     * Parses an expression given that the current token is the first token of
+     * the prefix expression. IDENTIFIERS ARE HANDLED HERE.
      * 
      * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
      * the token AFTER the last relevant "unit" token. For example, if current token
      * contains '*' in '*&a[0] - b', then it will contain '-' after this function is done.
-     * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
@@ -64,9 +73,6 @@ private:
      * the token AFTER the last relevant token. For example, if the current token
      * contains 'a' in 'a / *b - c', then it will contain '-' after this function is done.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_multiplicative();
@@ -80,9 +86,6 @@ private:
      * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a + b >= c', then it will contain '>=' after this function is done.
-     * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
@@ -98,9 +101,6 @@ private:
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a >= b == c', then it will contain '==' after this function is done.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_gl_relational();
@@ -114,9 +114,6 @@ private:
      * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a == b && c', then it will contain '&&' after this function is done.
-     * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
@@ -132,9 +129,6 @@ private:
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a && b || c', then it will contain '||' after this function is done.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_logical_and();
@@ -149,9 +143,6 @@ private:
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a || b;', then it will contain ';' after this function is done.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_logical_or();
@@ -165,9 +156,6 @@ private:
      * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
      * the token AFTER the last relevant token. For example, if the current token contains
      * 'a' in 'a = b, c', then it will contain ',' after this function is done.
-     * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
@@ -187,9 +175,6 @@ private:
      * ALWAYS consumes all parsed tokens EXCEPT for the stop token. Thus, the current
      * token will be left containing the stop token.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_comma(token::token_type stop, ASTNode *cn);
@@ -200,27 +185,36 @@ private:
      * 
      * ALWAYS consumes all parsed tokens, EXCEPT for the stop token.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @param stop the token to stop at
      * @return pointer to the generated ast or nullptr if no expression was found
     */
     ASTNode *parse_expr(token::token_type stop);
 
-public:
+    /** ------------------- STATEMENT PARSING ------------------- */
 
     /**
-     * Empty default constructor.
+     * Parses a variable declaration given that the current token is the type.
+     * 
+     * ALWAYS consumes all parsed tokens. For example, if the current token is 'bool'
+     * in 'bool foo = 0;', then the current token will be '=' after this function returns.
+     * 
+     * @return the generated var_decl node
     */
-    Parser();
+    ASTNode *parse_var_decl();
 
     /**
-     * Constructs a Parser that will use the given Lexer as its source
-     * of tokens.
-     * @param l the Lexer to use
+     * Parses a function declaration's parameters OR a call expression's arguments given
+     * that the current token is the left parenthesis after the function name.
+     * 
+     * 
+     * ALWAYS consumes all parsed tokens, INCLUDING the end parenthesis. For example,
+     * if current token is '(' in 'bool foo(bool x);', then current token will be ';'
+     * after this function returns.
+     * 
+     * @param func the func decl node to add the parsed param nodes to
+     * @param call if true, parses as call_expr ; if false, parses as func_decl
     */
-    Parser(Lexer &l);
+    void parse_func_params(ASTNode *func, bool call);
 
     /**
      * Parses a statement given that the current token is the start of the
@@ -228,12 +222,33 @@ public:
      * 
      * Once done, this function returns the generated abstract syntax tree.
      * 
-     * Dynamically allocates all generated ast nodes. The caller is responsible for
-     * the deallocation of all nodes returned by this function.
-     * 
      * @return pointer to the generated ast
     */
     ASTNode *parse_stmt();
+
+public:
+
+    /**
+     * Constructs a Parser.
+     * 
+     * @param lexer the lexer to use
+     * @param node_allocator the allocator to use for generated nodes
+    */
+    Parser(Lexer &lexer, Allocator<ASTNode> &node_allocator);
+
+    /**
+     * Destructor.
+    */
+    ~Parser();
+
+    /**
+     * Client-facing parse function. Parses until error or eof,
+     * and returns the generated tree.
+     * 
+     * @return the tree
+    */
+    ASTNode *parse();
+    
 };
 
 #endif

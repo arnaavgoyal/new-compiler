@@ -6,6 +6,10 @@
 #define KEYWORD(X)
 #endif
 
+#ifndef TYPE
+#define TYPE(X) KEYWORD(X)
+#endif
+
 #ifndef OPERATOR
 #define OPERATOR(X,Y)
 #endif
@@ -35,15 +39,17 @@ KEYWORD(continue)
 KEYWORD(break)
 KEYWORD(return)
 
-KEYWORD(bool)
-KEYWORD(i16)
-KEYWORD(u16)
-KEYWORD(i32)
-KEYWORD(u32)
-KEYWORD(i64)
-KEYWORD(u64)
-KEYWORD(f32)
-KEYWORD(f64)
+// type keywords
+
+TYPE(bool)
+TYPE(i16)
+TYPE(u16)
+TYPE(i32)
+TYPE(u32)
+TYPE(i64)
+TYPE(u64)
+TYPE(f32)
+TYPE(f64)
 
 // operators
 

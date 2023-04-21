@@ -7,21 +7,10 @@
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
 
-Lexer::Lexer() { }
-
-Lexer::Lexer(SourceFileManager &manager, SourceFileID src_id, bool sc = false) {
-    this->src_manager = manager;
-    this->src_id = src_id;
-    this->src = manager.get_source(src_id);
-    this->save_comments = sc;
-    this->line = 1;
-    this->col = 1;
-}
-
 void Lexer::lex_numeric_literal(Token &tk) {
     int c;
-    std::string *str = new std::string;
-    tk.set(token::numeric_literal, src_id, line, col, str);
+    std::string *str = str_allocator.alloc();
+    tk.str = str;
     bool end = false;
     while (!end) {
         c = src->peek();
@@ -40,12 +29,13 @@ void Lexer::lex_numeric_literal(Token &tk) {
                 break;
         }
     }
+    col--;
 }
 
 void Lexer::lex_identifier(Token &tk) {
     int c;
-    std::string *ident = new std::string;
-    tk.set(token::identifier, src_id, line, col, ident);
+    std::string *ident = str_allocator.alloc();
+    tk.str = ident;
     bool end = false;
     while (!end) {
         c = src->peek();
@@ -79,44 +69,46 @@ void Lexer::lex_identifier(Token &tk) {
                 break;
         }
     }
+    col--;
 }
 
 void Lexer::lex_char_literal(Token &tk) {
-    std::string *s = new std::string;
+    std::string *s = str_allocator.alloc();
+    tk.str = s;
     int c;
     while ((c = src->get()) != '\'') {
         col++;
         s->push_back(c);
     }
-    col++;
-    tk.set(token::character_literal, src_id, line, col, s);
 }
 
 void Lexer::lex_string_literal(Token &tk) {
-    std::string *s = new std::string;
+    std::string *s = str_allocator.alloc();
+    tk.str = s;
     int c;
     while ((c = src->get()) != '"') {
         col++;
         s->push_back(c);
     }
-    col++;
-    tk.set(token::string_literal, src_id, line, col, s);
 }
 
 bool Lexer::lex_line_comment(Token &tk) {
     if (this->save_comments) {
-        std::string *s = new std::string;
-        tk.set(token::comment, src_id, line, col, s);
+        std::string *s = str_allocator.alloc();
+        tk.str = s;
         int c;
         while ((c = src->get()) != '\n') {
+            col++;
             s->push_back(c);
         }
         src->unget();
+        col--;
         return true;
     }
     else {
-        while (src->get() != '\n') { }
+        while (src->get() != '\n') { col++; }
         src->unget();
+        col--;
         return false;
     }
 }
@@ -127,32 +119,22 @@ bool Lexer::lex_block_comment(Token &tk) {
     return false;
 }
 
-void Lexer::rectify_token(Token &tk, token::token_type type, int c) {
-    std::string *str;
-    if (type == token::unknown) {
-        str = new std::string;
-        str->push_back((char)c);
-    }
-    else {
-        str = new std::string(token::get_operator_string(type));
-    }
-    tk.set(type, src_id, line, col, (void *)str);
-}
-
-void Lexer::lex(Token &tk) {
+void Lexer::lex_token(Token &tk) {
     int c;
-    bool at_line_start = true;
     token::token_type type;
     tk.clear();
 
 lex_start:
+
+    start_offset = src->tellg();
+    start_col = col;
     c = src->get();
     switch (c){
 
         case '\0':
         case EOF:
-            tk.set_type(token::eof);
-            return;
+            type = token::eof;
+            break;
 
         case '\r':
             if (src->peek() == '\n')
@@ -160,12 +142,12 @@ lex_start:
             [[fallthrough]];
         case '\n':
             line++;
-            at_line_start = true;
             col = 1;
             goto lex_start;
 
         case ' ':
             col++;
+            [[fallthrough]];
         case '\t':
         case '\f':
         case '\v':
@@ -178,89 +160,118 @@ lex_start:
         case '8': case '9':
             src->unget();
             lex_numeric_literal(tk);
-            return;
+            type = token::numeric_literal;
+            break;
 
         // keyword first chars
+        // currently, these call lex_identifier, which allocs a std::string and
+        // reads the identifier into it. However, if it is classified as a keyword
+        // afterwards, the alloced string will never be used.
+        // TODO: fix this error
         case 'b':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("bool") == 0) {
-                tk.set_type(token::kw_bool);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_bool)) == 0) {
+                type = token::kw_bool;
             }
-            else if (((std::string *)tk.get_ptr())->compare("break") == 0) {
-                tk.set_type(token::kw_break);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_break)) == 0) {
+                type = token::kw_break;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'c':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("continue") == 0) {
-                tk.set_type(token::kw_continue);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_continue)) == 0) {
+                type = token::kw_continue;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'e':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("else") == 0) {
-                tk.set_type(token::kw_else);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_else)) == 0) {
+                type = token::kw_else;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'f':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("for") == 0) {
-                tk.set_type(token::kw_for);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_for)) == 0) {
+                type = token::kw_for;
             }
-            else if (((std::string *)tk.get_ptr())->compare("f32") == 0) {
-                tk.set_type(token::kw_f32);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f32)) == 0) {
+                type = token::kw_f32;
             }
-            else if (((std::string *)tk.get_ptr())->compare("f64") == 0) {
-                tk.set_type(token::kw_f64);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f64)) == 0) {
+                type = token::kw_f64;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'i':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("if") == 0) {
-                tk.set_type(token::kw_if);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_if)) == 0) {
+                type = token::kw_if;
             }
-            else if (((std::string *)tk.get_ptr())->compare("i16") == 0) {
-                tk.set_type(token::kw_i16);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i16)) == 0) {
+                type = token::kw_i16;
             }
-            else if (((std::string *)tk.get_ptr())->compare("i32") == 0) {
-                tk.set_type(token::kw_i32);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i32)) == 0) {
+                type = token::kw_i32;
             }
-            else if (((std::string *)tk.get_ptr())->compare("i64") == 0) {
-                tk.set_type(token::kw_i64);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i64)) == 0) {
+                type = token::kw_i64;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'r':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("return") == 0) {
-                tk.set_type(token::kw_return);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_return)) == 0) {
+                type = token::kw_return;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'u':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("u16") == 0) {
-                tk.set_type(token::kw_u16);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u16)) == 0) {
+                type = token::kw_u16;
             }
-            else if (((std::string *)tk.get_ptr())->compare("u32") == 0) {
-                tk.set_type(token::kw_u32);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u32)) == 0) {
+                type = token::kw_u32;
             }
-            else if (((std::string *)tk.get_ptr())->compare("u64") == 0) {
-                tk.set_type(token::kw_u64);
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u64)) == 0) {
+                type = token::kw_u64;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'w':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.get_ptr())->compare("while") == 0) {
-                tk.set_type(token::kw_while);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_while)) == 0) {
+                type = token::kw_while;
             }
-            return;
+            else {
+                type = token::identifier;
+            }
+            break;
 
         case 'A': case 'B': case 'C': case 'D':
         case 'E': case 'F': case 'G': case 'H':
@@ -276,16 +287,19 @@ lex_start:
         case 'y': case 'z': case '_':
             src->unget();
             lex_identifier(tk);
-            return;
+            type = token::identifier;
+            break;
 
         case '\'':
             col++;
             lex_char_literal(tk);
-            return;
+            type = token::character_literal;
+            break;
         case '"':
             col++;
             lex_string_literal(tk);
-            return;
+            type = token::string_literal;
+            break;
 
         case '(':
             type = token::op_leftparen;
@@ -333,7 +347,8 @@ lex_start:
                 src->get();
                 col += 2;
                 if (lex_line_comment(tk)) {
-                    return;
+                    type = token::comment;
+                    break;
                 }
                 goto lex_start;
             }
@@ -341,7 +356,8 @@ lex_start:
                 src->get();
                 col += 2;
                 if (lex_block_comment(tk)) {
-                    return;
+                    type = token::comment;
+                    break;
                 }
                 goto lex_start;
             }
@@ -420,7 +436,38 @@ lex_start:
 
     }
 
-    rectify_token(tk, type, c);
+    tk.set(
+        type,
+        SourceLocation(
+            src_id,
+            start_offset, (SourceLocation::byte_offset_t)src->tellg() - 1,
+            line, start_col, line, col
+        )
+    );
+
     col++;
     return;
+}
+
+Lexer::Lexer(
+    SourceID src_id,
+    Allocator<std::string> &str_allocator,
+    bool save_comments
+) : str_allocator(str_allocator) {
+    this->src_id = src_id;
+    this->src = SourceManager::open_source(src_id);
+    this->save_comments = save_comments;
+    this->line = 1;
+    this->col = 1;
+}
+
+Lexer::~Lexer() {
+    src->close();
+    delete src;
+    src = nullptr;
+    std::cout << "Lexer destroyed." << std::endl;
+}
+
+void Lexer::lex(Token &tk) {
+    lex_token(tk);
 }

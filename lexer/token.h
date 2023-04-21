@@ -3,34 +3,82 @@
 
 #include "lexer/tokentypes.h"
 #include "source/source.h"
+#include "symbol/symbol.h"
 
 class Token {
+
+    // Lexer writes directly into str when creating tokens
+    friend class Lexer;
+    
 private:
-    SourceFileID src_id;
-    int raw_line;
-    int raw_col;
-    void *ptr;
+
+    /** token type */
+    token::token_type type;
+    
+    /** source location of token */
+    SourceLocation loc;
+
+    /**
+     * data is different based on type:
+     * a) identifier     --  (std::string *)     owned by Allocator
+     * b) literal        --  (std::string *)     owned by Allocator
+     * c) operator       --  nullptr (use token::get_operator_string())
+     * c) keyword        --  nullptr (use token::get_keyword_string())
+    */
+    std::string *str;
+
+    /**
+     * Constructs a token with given fields.
+     * 
+     * @param type the token type
+     * @param src_loc the source location of the token
+    */
+    Token(
+        token::token_type type,
+        SourceLocation src_loc
+    ) { set(type, src_loc); }
+
+    /**
+     * Set all token fields to the given fields.
+     * 
+     * @param type the token type
+     * @param src_loc the source location of the token
+    */
+    void set(
+        token::token_type type,
+        SourceLocation src_loc
+    ) { this->type = type; loc = src_loc; }
+
+    /**
+     * Clears token to default unknown token.
+    */
+    void clear();
 
 public:
-    token::token_type type;
 
+    /**
+     * Constructs an unknown token with invalid source location.
+    */
     Token();
-    Token(token::token_type type, SourceFileID src, int r_line, int r_col, void *ptr);
-    ~Token();
-    void set(token::token_type type, SourceFileID src, int r_line, int r_col, void *ptr);
-    void clear();
-    Token &operator=(Token &other);
+
+    /**
+     * Forbid copy to preserve uniqueness of tokens.
+    */
+    Token(Token const &other) = delete;
+    Token &operator=(Token const &other) = delete;
 
     token::token_type get_type() { return type; }
-    void set_type(token::token_type type) { this->type = type; }
-    SourceFileID get_source_id() { return src_id; }
-    void set_source_id(SourceFileID id) { src_id = id; }
-    int get_raw_line() { return raw_line; }
-    void set_raw_line(int line) { raw_line = line; }
-    int get_raw_col() { return raw_col; }
-    void set_raw_col(int col) { raw_col = col; }
-    void *get_ptr() { return ptr; }
-    void set_ptr(void *ptr) { this->ptr = ptr; }
+    SourceLocation get_src_loc() { return loc; }
+    std::string const *get_identifier_str() { return str; }
+    std::string const *get_literal_str() { return str; }
+    char const *get_operator_str() { return token::get_operator_string(type); }
+    char const *get_keyword_str() { return token::get_keyword_string(type); }
+
+    /**
+     * Gets token name as string for debugging purposes.
+    */
+    char const *get_print_str();
+
 };
 
 #endif

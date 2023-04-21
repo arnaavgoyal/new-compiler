@@ -6,25 +6,49 @@ char const *token::get_token_string(token_type t) {
     #define KEYWORD(A) case kw_##A: return #A;
     #define OPERATOR(A,B) case op_##A: return #A;
     #include "tokendefs"
-    default: break;
+    default: return "";
     }
-    return "";
 }
 
 char const *token::get_keyword_string(token_type t) {
     switch (t) {
     #define KEYWORD(A) case kw_##A: return #A;
     #include "tokendefs"
+    #undef KEYWORD
     default: break;
     }
-    return "";
+    return nullptr;
 }
 
 char const *token::get_operator_string(token_type t) {
     switch (t) {
     #define OPERATOR(A,B) case op_##A: return B;
     #include "tokendefs"
+    #undef OPERATOR
     default: break;
     }
-    return "";
+    return nullptr;
+}
+
+bool token::is_literal(token_type t) {
+    return (t == character_literal || t == numeric_literal || t == string_literal);
+}
+
+bool token::is_primitive_type(token_type t) {
+    switch (t) {
+    #define TYPE(A) case kw_##A:
+    #include "tokendefs"
+    #undef TYPE
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool token::is_keyword(token_type t) {
+    return (get_keyword_string(t) != nullptr);
+}
+
+bool token::is_operator(token_type t) {
+    return (get_operator_string(t) != nullptr);
 }
