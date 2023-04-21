@@ -190,6 +190,16 @@ private:
     */
     ASTNode *parse_expr(token::token_type stop);
 
+    ASTNode *left_assoc_bin_op(
+        ASTNode *(*fp)(),
+        std::vector<token::token_type> const &types
+    );
+    
+    ASTNode *right_assoc_bin_op(
+        ASTNode *(*fp)(),
+        std::vector<token::token_type> const &types
+    );
+
     /** ------------------- STATEMENT PARSING ------------------- */
 
     /**

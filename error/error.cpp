@@ -82,25 +82,13 @@ void ErrorHandler::print_loc_highlight(SourceLocation loc) {
     delete src;
 }
 
-void ErrorHandler::handle_missing_expr(SourceLocation loc) {
+void ErrorHandler::handle_missing(SourceLocation loc, char const *missing) {
 
     // print preamble
     print_error_preamble(loc);
 
     // print error
-    std::cout << "expected expression" << std::endl;
-
-    // print loc highlight
-    print_loc_highlight(loc);
-}
-
-void ErrorHandler::handle_missing_token(SourceLocation loc, char const *tok) {
-
-    // print preamble
-    print_error_preamble(loc);
-
-    // print error
-    std::cout << "Expected " << tok << std::endl;
+    std::cout << "expected " << missing << std::endl;
 
     // print loc highlight
     print_loc_highlight(loc);

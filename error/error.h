@@ -49,21 +49,13 @@ private:
 public:
 
     /**
-     * Handles a missing expr error.
+     * Handles a missing (expected __) error.
      * 
      * @param type the type of error
      * @param loc the location of the error
+     * @param missing string to print for what is missing
     */
-    static void handle_missing_expr(SourceLocation loc);
-
-    /**
-     * Handles a missing token error.
-     * 
-     * @param type the type of error
-     * @param loc the location of the error
-     * @param tok string to print for token
-    */
-    static void handle_missing_token(SourceLocation loc, char const *tok);
+    static void handle_missing(SourceLocation loc, char const *missing);
 
 };
 

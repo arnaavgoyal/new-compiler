@@ -8,6 +8,7 @@
 #include "error/error.h"
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 void Parser::consume() {
     prev_tk_loc = tk.get_src_loc();
@@ -275,7 +276,7 @@ ASTNode *Parser::parse_multiplicative() {
                 consume();
                 node = parse_prefix();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -311,7 +312,7 @@ ASTNode *Parser::parse_additive() {
                 consume();
                 node = parse_multiplicative();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -349,7 +350,7 @@ ASTNode *Parser::parse_gl_relational() {
                 consume();
                 node = parse_additive();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -383,7 +384,7 @@ ASTNode *Parser::parse_eq_relational() {
                 consume();
                 node = parse_gl_relational();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -416,7 +417,7 @@ ASTNode *Parser::parse_logical_and() {
                 consume();
                 node = parse_eq_relational();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -449,7 +450,7 @@ ASTNode *Parser::parse_logical_or() {
                 consume();
                 node = parse_logical_and();
                 if (node == nullptr) {
-                    ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                     exit(EXIT_FAILURE);
                 }
                 n->loc.copy_end(node->loc);
@@ -481,7 +482,7 @@ ASTNode *Parser::parse_assignment() {
             consume();
             node = parse_assignment();
             if (node == nullptr) {
-                ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                 exit(EXIT_FAILURE);
             }
             n->loc.copy_end(node->loc);
@@ -537,7 +538,7 @@ ASTNode *Parser::parse_comma(token::token_type stop, ASTNode *cn) {
                     consume();
                     node = parse_assignment();
                     if (node == nullptr) {
-                        ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                        ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                         exit(EXIT_FAILURE);
                     }
                     n->loc.copy_end(node->loc);
@@ -554,7 +555,7 @@ ASTNode *Parser::parse_comma(token::token_type stop, ASTNode *cn) {
     }
     
     if (tk.get_type() != stop) {
-        ErrorHandler::handle_missing_token(tk.get_src_loc(), token::get_token_string(stop));
+        ErrorHandler::handle_missing(tk.get_src_loc(), token::get_token_string(stop));
         exit(EXIT_FAILURE);
     }
 
@@ -565,12 +566,74 @@ ASTNode *Parser::parse_expr(token::token_type stop) {
     return parse_comma(stop, nullptr);
 }
 
+ASTNode *Parser::left_assoc_bin_op(
+    ASTNode *(*higher_prec)(),
+    std::vector<token::token_type> const &types
+) {
+    ASTNode *node = higher_prec();
+    ASTNode *n;
+    bool go = true;
+    while (go) {
+        if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
+            n = node_allocator.alloc();
+            n->set(
+                ast::node_type::binary_op,
+                tk.get_type(),
+                (void *)tk.get_operator_str()
+            );
+            n->loc = node->loc;
+            n->list.push_back(node);
+            consume();
+            node = higher_prec();
+            if (node == nullptr) {
+                ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
+                exit(EXIT_FAILURE);
+            }
+            n->loc.copy_end(node->loc);
+            n->list.push_back(node);
+            node = n;
+        }
+        else {
+            go = false;
+        }
+    }
+    return node;
+}
+
+ASTNode *Parser::right_assoc_bin_op(
+    ASTNode *(*higher_prec)(),
+    std::vector<token::token_type> const &types
+) {
+    ASTNode *node = higher_prec();
+    ASTNode *n;
+    if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
+        n = node_allocator.alloc();
+        n->set(
+            ast::node_type::binary_op,
+            tk.get_type(),
+            (void *)tk.get_operator_str()
+        );
+        n->loc = node->loc;
+        n->list.push_back(node);
+        consume();
+        node = right_assoc_bin_op(higher_prec, types);
+        if (node == nullptr) {
+            ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
+            exit(EXIT_FAILURE);
+        }
+        n->loc.copy_end(node->loc);
+        n->list.push_back(node);
+        node = n;
+    }
+    return node;
+}
+
 ASTNode *Parser::parse_var_decl() {
     // assumes that current token is a type
     // FOR NOW check if is ident or keyword
     // TODO: change this when type checking is implemented
     if (tk.get_type() != token::identifier && !token::is_keyword(tk.get_type())) {
-        ErrorHandler::handle_missing_token(tk.get_src_loc(), "type");
+        ErrorHandler::handle_missing(tk.get_src_loc(), "type");
         exit(EXIT_FAILURE);
     }
 
@@ -589,7 +652,7 @@ ASTNode *Parser::parse_var_decl() {
 
     // expect ident
     if (tk.get_type() != token::identifier) {
-        ErrorHandler::handle_missing_token(tk.get_src_loc(), "identifier");
+        ErrorHandler::handle_missing(tk.get_src_loc(), "identifier");
         exit(EXIT_FAILURE);
     }
 
@@ -653,7 +716,7 @@ void Parser::parse_func_params(ASTNode *func, bool call) {
                 return;
             default:
                 // no right paren
-                ErrorHandler::handle_missing_token(tk.get_src_loc(), "')'");
+                ErrorHandler::handle_missing(tk.get_src_loc(), "')'");
                 exit(EXIT_FAILURE);
         }
     }
@@ -700,7 +763,7 @@ ASTNode *Parser::parse_stmt() {
 
                 // reached eof without encountering end brace
                 else if (tk.get_type() == token::eof) {
-                    ErrorHandler::handle_missing_token(tk.get_src_loc(), "'}'");
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "'}'");
                     exit(EXIT_FAILURE);
                 }
 
@@ -745,7 +808,7 @@ ASTNode *Parser::parse_stmt() {
 
             // check if there was an expr
             if (temp == nullptr) {
-                ErrorHandler::handle_missing_expr(tk.get_src_loc());
+                ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                 exit(EXIT_FAILURE);
             }
 
@@ -778,7 +841,7 @@ ASTNode *Parser::parse_stmt() {
             consume();
 
             if (tk.get_type() != token::identifier) {
-                ErrorHandler::handle_missing_token(tk.get_src_loc(), "identifier");
+                ErrorHandler::handle_missing(tk.get_src_loc(), "identifier");
                 exit(EXIT_FAILURE);
             }
 
@@ -821,7 +884,7 @@ ASTNode *Parser::parse_stmt() {
 
                 // unknown
                 else {
-                    ErrorHandler::handle_missing_token(tk.get_src_loc(), "';' or '{'");
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "';' or '{'");
                     exit(EXIT_FAILURE);
                 }
             }
@@ -849,7 +912,7 @@ ASTNode *Parser::parse_stmt() {
 
                 // unknown
                 else {
-                    ErrorHandler::handle_missing_token(tk.get_src_loc(), "';' or '='");
+                    ErrorHandler::handle_missing(tk.get_src_loc(), "';' or '='");
                     exit(EXIT_FAILURE);
                 }
 
