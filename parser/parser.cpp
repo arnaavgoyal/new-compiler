@@ -17,8 +17,6 @@ void Parser::consume() {
 
 ASTNode *Parser::parse_postfix(ASTNode *node) {
 
-    //std::cout << "parse_postfix:START\n";
-
     // Iterate over every postfix operator (if any)
     ASTNode *n = nullptr;
     ASTNode *j = nullptr;
@@ -61,7 +59,7 @@ ASTNode *Parser::parse_postfix(ASTNode *node) {
                 consume();
 
                 // parse func call arguments
-                parse_comma(token::op_rightparen, node);
+                parse_expr(token::op_rightparen, node);
 
                 // get end loc
                 node->loc.copy_end(tk.get_src_loc());
@@ -97,15 +95,13 @@ ASTNode *Parser::parse_postfix(ASTNode *node) {
 
             // no postfix operators left
             default:
-                //std::cout << "  parse_postfix:DONE\n";
                 return node;
         }
     }
 }
 
 ASTNode *Parser::parse_prefix() {
-    //std::cout << "parse_prefix:START\n";
-    //std::cout << tk.get_print_str() << std::endl;
+
     token::token_type type = tk.get_type();
 
     ASTNode *node = nullptr;
@@ -251,256 +247,77 @@ ASTNode *Parser::parse_prefix() {
             node = nullptr;
             break;
     }
-    //std::cout << "  parse_prefix:DONE\n";
+
     return node;
 }
 
 ASTNode *Parser::parse_multiplicative() {
-    //std::cout << "parse_mult:START\n";
-    ASTNode *node = parse_prefix();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_asterisk:
-            case token::op_slash:
-            case token::op_percent:
-                // bin mult op
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_prefix();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // no bin mult ops left
-                //std::cout << "  parse_mult:DONE\n";
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_asterisk,
+        token::op_slash,
+        token::op_percent
+    };
+    return left_assoc_bin_op(parse_prefix, types);
 }
 
 ASTNode *Parser::parse_additive() {
-    //std::cout << "parse_add:START\n";
-    ASTNode *node = parse_multiplicative();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_plus:
-            case token::op_minus:
-                // bin add op
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_multiplicative();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // no bin add ops left
-                //std::cout << "  parse_add:DONE\n";
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_plus,
+        token::op_minus
+    };
+    return left_assoc_bin_op(parse_multiplicative, types);
 }
 
 ASTNode *Parser::parse_gl_relational() {
-    //std::cout << "parse_gl:START\n";
-    ASTNode *node = parse_additive();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_greater:
-            case token::op_greaterequal:
-            case token::op_less:
-            case token::op_lessequal:
-                // bin relational op
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_additive();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // no bin relational ops left
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_greater,
+        token::op_greaterequal,
+        token::op_less,
+        token::op_lessequal
+    };
+    return left_assoc_bin_op(parse_additive, types);
 }
 
 ASTNode *Parser::parse_eq_relational() {
-    //std::cout << "parse_eq:START\n";
-    ASTNode *node = parse_gl_relational();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_equalequal:
-            case token::op_exclamationequal:
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_gl_relational();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // no bin relational ops left
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_equalequal,
+        token::op_exclamationequal
+    };
+    return left_assoc_bin_op(parse_gl_relational, types);
 }
 
 ASTNode *Parser::parse_logical_and() {
-    //std::cout << "parse_and:START\n";
-    ASTNode *node = parse_eq_relational();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_ampamp:
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_eq_relational();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // none left
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_ampamp
+    };
+    return left_assoc_bin_op(parse_eq_relational, types);
 }
 
 ASTNode *Parser::parse_logical_or() {
-    //std::cout << "parse_or:START\n";
-    ASTNode *node = parse_logical_and();
-    ASTNode *n;
-    while (true) {
-        switch (tk.get_type()) {
-            case token::op_pipepipe:
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::binary_op,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                consume();
-                node = parse_logical_and();
-                if (node == nullptr) {
-                    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                    exit(EXIT_FAILURE);
-                }
-                n->loc.copy_end(node->loc);
-                n->list.push_back(node);
-                node = n;
-                break;
-
-            default:
-                // none left
-                return node;
-        }
-    }
+    static std::vector<token::token_type> types {
+        token::op_pipepipe
+    };
+    return left_assoc_bin_op(parse_logical_and, types);
 }
 
 ASTNode *Parser::parse_assignment() {
-    //std::cout << "parse_assign:START\n";
-    ASTNode *node = parse_logical_or();
-    ASTNode *n;
-    switch (tk.get_type()) {
-        case token::op_equal:
-            n = node_allocator.alloc();
-            n->set(
-                ast::node_type::binary_op,
-                tk.get_type(),
-                (void *)tk.get_operator_str()
-            );
-            n->loc = node->loc;
-            n->list.push_back(node);
-            consume();
-            node = parse_assignment();
-            if (node == nullptr) {
-                ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                exit(EXIT_FAILURE);
-            }
-            n->loc.copy_end(node->loc);
-            n->list.push_back(node);
-            node = n;
-            break;
-        default:
-            break;
-    }
-    return node;
+    static std::vector<token::token_type> types {
+        token::op_equal
+    };
+    return right_assoc_bin_op(parse_logical_or, types);
 }
 
 ASTNode *Parser::parse_comma(token::token_type stop, ASTNode *cn) {
-    //std::cout << "parse_comma:START\n";
+
+    // for binary op
+    static std::vector<token::token_type> types {
+        token::op_comma
+    };
+
     ASTNode *node;
 
-    // func decl param / call expr arg separator
-    if (cn != nullptr) {
+    // call expr arg separator
+    if (cn) {
         while (true) {
             node = parse_assignment();
             if (node == nullptr) {
@@ -519,58 +336,28 @@ ASTNode *Parser::parse_comma(token::token_type stop, ASTNode *cn) {
 
     // binary op
     else {
-
-        node = parse_assignment();
-
-        ASTNode *n;
-        bool br = true;
-        while (br) {
-            switch (tk.get_type()) {
-                case token::op_comma:
-                    n = node_allocator.alloc();
-                    n->set(
-                        ast::node_type::binary_op,
-                        tk.get_type(),
-                        (void *)tk.get_operator_str()
-                    );
-                    n->loc = node->loc;
-                    n->list.push_back(node);
-                    consume();
-                    node = parse_assignment();
-                    if (node == nullptr) {
-                        ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                        exit(EXIT_FAILURE);
-                    }
-                    n->loc.copy_end(node->loc);
-                    n->list.push_back(node);
-                    node = n;
-                    break;
-
-                default:
-                    // none left
-                    br = false;
-                    break;
-            }
-        }
-    }
-    
-    if (tk.get_type() != stop) {
-        ErrorHandler::handle_missing(tk.get_src_loc(), token::get_token_string(stop));
-        exit(EXIT_FAILURE);
+        node = left_assoc_bin_op(parse_assignment, types);  
     }
 
     return node;
 }
 
-ASTNode *Parser::parse_expr(token::token_type stop) {
-    return parse_comma(stop, nullptr);
+ASTNode *Parser::parse_expr(token::token_type stop, ASTNode *cn) {
+    ASTNode *node = parse_comma(stop, cn);
+    if (tk.get_type() != stop) {
+        std::string missing = "'";
+        missing = missing + token::get_operator_string(stop) + "'";
+        ErrorHandler::handle_missing(tk.get_src_loc(), missing.c_str());
+        exit(EXIT_FAILURE);
+    }
+    return node;
 }
 
 ASTNode *Parser::left_assoc_bin_op(
-    ASTNode *(*higher_prec)(),
+    ASTNode *(Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
-    ASTNode *node = higher_prec();
+    ASTNode *node = (this->*higher_prec)();
     ASTNode *n;
     bool go = true;
     while (go) {
@@ -584,7 +371,7 @@ ASTNode *Parser::left_assoc_bin_op(
             n->loc = node->loc;
             n->list.push_back(node);
             consume();
-            node = higher_prec();
+            node = (this->*higher_prec)();
             if (node == nullptr) {
                 ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
                 exit(EXIT_FAILURE);
@@ -601,10 +388,10 @@ ASTNode *Parser::left_assoc_bin_op(
 }
 
 ASTNode *Parser::right_assoc_bin_op(
-    ASTNode *(*higher_prec)(),
+    ASTNode *(Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
-    ASTNode *node = higher_prec();
+    ASTNode *node = (this->*higher_prec)();
     ASTNode *n;
     if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
         n = node_allocator.alloc();
@@ -723,7 +510,7 @@ void Parser::parse_func_params(ASTNode *func, bool call) {
 }
 
 ASTNode *Parser::parse_stmt() {
-    //std::cout << "parse_stmt:START\n";
+    
     ASTNode *node;
     ASTNode *temp;
 
@@ -733,13 +520,13 @@ ASTNode *Parser::parse_stmt() {
     switch (tk.get_type()) {
 
         case token::eof:
-            //std::cout << "parse_stmt:eof\n";
+        
             node = nullptr;
             break;
 
         // scoped statement block
         case token::op_leftbrace:
-            //std::cout << "parse_stmt:scoped block\n";
+        
             node = node_allocator.alloc();
             node->set(
                 ast::node_type::stmt_block,
@@ -782,8 +569,7 @@ ASTNode *Parser::parse_stmt() {
 
         // return statement
         case token::kw_return:
-            //std::cout << "parse_stmt:return\n";
-            //std::cout << tk.get_keyword_str() << std::endl;
+
             node = node_allocator.alloc();
             node->set(
                 ast::ret_stmt,
@@ -829,7 +615,6 @@ ASTNode *Parser::parse_stmt() {
         case token::kw_u64:
         case token::kw_f32:
         case token::kw_f64:
-            //std::cout << "parse_stmt:type decl\n";
         
             // generic decl -- type unknown so far
             node = node_allocator.alloc();
@@ -928,7 +713,6 @@ ASTNode *Parser::parse_stmt() {
 
         // assume that it is an expr by default
         default:
-            //std::cout << "parse_stmt:default expr\n";
 
             // parse expr until semi
             node = parse_expr(token::op_semicolon);
@@ -938,8 +722,6 @@ ASTNode *Parser::parse_stmt() {
             break;
     }
 
-    //std::cout << token::get_token_string(tk.get_type()) << std::endl;
-    //std::cout << "  parse_stmt:DONE\n";
     return node;
 }
 

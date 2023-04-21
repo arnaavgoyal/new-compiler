@@ -169,8 +169,7 @@ private:
      * 
      * If the given node is nullptr, this function will parse the expr as if comma
      * is a binary operator. However, if the given node is not nullptr, this
-     * function will parse the expr as if comma is a separator (func decl,
-     * call expr, etc).
+     * function will parse the expr as if comma is a separator (call expr).
      * 
      * ALWAYS consumes all parsed tokens EXCEPT for the stop token. Thus, the current
      * token will be left containing the stop token.
@@ -188,15 +187,15 @@ private:
      * @param stop the token to stop at
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_expr(token::token_type stop);
+    ASTNode *parse_expr(token::token_type stop, ASTNode *cn = nullptr);
 
     ASTNode *left_assoc_bin_op(
-        ASTNode *(*fp)(),
+        ASTNode *(Parser::*fp)(),
         std::vector<token::token_type> const &types
     );
-    
+
     ASTNode *right_assoc_bin_op(
-        ASTNode *(*fp)(),
+        ASTNode *(Parser::*fp)(),
         std::vector<token::token_type> const &types
     );
 
