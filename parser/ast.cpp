@@ -1,8 +1,8 @@
-#include "ast.h"
+#include "parser/ast.h"
 #include <iostream>
 #include <iomanip>
 #include "lexer/tokentypes.h"
-#include "symbol/symbol.h"
+#include "lexer/token.h"
 #include "source/source.h"
 
 static void print_err_loc_preamble(SourceLocation loc) {
@@ -26,6 +26,7 @@ void ASTNode::set(ast::node_type type, token::token_type token_type, void *data)
 }
 
 void ASTNode::print_ast(ASTNode *tree, std::string str) {
+
     if (tree != nullptr) {
 
         std::string type_str;
@@ -75,8 +76,15 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
             case ast::paren_expr:
                 type_str = "paren expr";
                 break;
+            case ast::typedef_stmt:
+                type_str = "typedef stmt";
+                break;
+            case ast::type:
+                type_str = "type";
+                break;
             default:
                 type_str = "?";
+                break;
         }
 
         std::cout << str << "`" << type_str << " '";

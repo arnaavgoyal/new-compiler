@@ -1,14 +1,20 @@
 #ifndef TOKENTYPES_H
 #define TOKENTYPES_H
 
+#include <string>
+#include <vector>
+
 namespace token {
 
     enum token_type {
-        #define TOKEN(A) A,
-        #define KEYWORD(A) kw_##A,
-        #define OPERATOR(A,B) op_##A,
-        #include "tokendefs"
+
+#define TOKEN(A) A,
+#define KEYWORD(A) kw_##A,
+#define OPERATOR(A,B) op_##A,
+#include "tokendefs"
+
         NUM_TOKENS
+
     };
 
     /**
@@ -57,6 +63,11 @@ namespace token {
      * Determines if the given token type is an operator.
     */
     bool is_operator(token_type t);
+
+    /**
+     * 
+    */
+    std::vector<std::string const *> get_types_list ();
 
 }
 

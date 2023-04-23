@@ -7,53 +7,68 @@
 #include "source/source.h"
 #include "parser/ast.h"
 #include "parser/parser.h"
-#include "symbol/symbol.h"
 #include "memory/allocator.h"
 #include "error/error.h"
+#include "analyzer/analyzer.h"
+#include "analyzer/type.h"
 
-void test_lexer() {
-#define LOC_NUM_WIDTH 2
-    SourceID src_id = SourceManager::add_source("input.c");
-    Allocator<std::string> *str_allocator = new Allocator<std::string>;
-    Lexer lexer(src_id, *str_allocator, true);
-    Token tk;
-    SourceLocation loc;
-    lexer.lex(tk);
-    while (tk.get_type() != token::eof) {
-        loc = tk.get_src_loc();
-        std::cout
-            << std::setfill('0')
-            << SourceManager::get_source_path(loc.src_id) << " @ "
-            << std::setw(LOC_NUM_WIDTH) << loc.start_row  << ":"
-            << std::setw(LOC_NUM_WIDTH) << loc.start_col  << "::"
-            << std::setw(LOC_NUM_WIDTH) << loc.end_row    << ":"
-            << std::setw(LOC_NUM_WIDTH) << loc.end_col    << ": "
-            << tk.get_print_str() << std::endl;
-        lexer.lex(tk);
-    }
-    delete str_allocator;
-    return;
-#undef LOC_NUM_WIDTH
-}
-
-void test_parser() {
-    SourceID src_id = SourceManager::add_source("input.c");
-    Allocator<std::string> str_allocator;
-    Lexer lexer(src_id, str_allocator, false);
-    Allocator<ASTNode> node_allocator;
-    Parser parser(lexer, node_allocator);
-    ASTNode *tree = parser.parse();
-    tree->print();
-    return;
-}
+//#define DEBUG
 
 int main() {
     
-    //test_lexer();
+    // Make all necessary allocators
+    Allocator<std::string> str_alloc;
+    Allocator<ASTNode> node_alloc;
+    Allocator<Type> type_alloc;
+    Allocator<std::vector<Type *>> vec_alloc;
 
-    test_parser();
+    // Add source to source manager
+    SourceID src_id = SourceManager::add_source("input.c");
 
+    // Make lexer
+    Lexer lexer(src_id, str_alloc, false);
+
+#ifdef DEBUG
+    std::cout << "Lexer made\n";
+#endif
+
+    // Make symbol table
+    SymbolTable symtable;
+
+#ifdef DEBUG
+    std::cout << "Symbol table made\n";
+#endif
+
+    // Make list of primitive types
+    std::vector<std::string const *> primitives = token::get_types_list();
+
+#ifdef DEBUG
+    std::cout << "Primitives made\n";
+#endif
+
+    // Make semantic analyzer
+    SemanticAnalyzer analyzer(symtable, type_alloc, primitives);
+
+#ifdef DEBUG
+    std::cout << "Analyzer made\n";
+#endif
+
+    // Make parser
+    Parser parser(lexer, analyzer, node_alloc, type_alloc, str_alloc, vec_alloc);
+
+#ifdef DEBUG
+    std::cout << "Parser made\n";
+#endif
+
+    // Get ast
+    ASTNode *tree = parser.parse();
+
+    // print ast
+    tree->print();
+
+#ifdef DEBUG
     std::cout << "Done testing." << std::endl;
+#endif
 
     return 0;
 }

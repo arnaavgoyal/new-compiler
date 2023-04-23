@@ -6,6 +6,7 @@
 #include <stack>
 #include <vector>
 #include "lexer/tokentypes.h"
+#include "analyzer/type.h"
 
 /** LeBlanc-Cook style symbol table */
 
@@ -38,34 +39,24 @@ private:
     symbol::scope_id_t scope_id;
     
     /**
-     * pointer to the symbol that is the decl type of this symbol.
-     * not applicable for symbols that are themselves types.
+     * pointer to the type of this symbol
     */
-    Symbol const *type_ptr;
-
-    /**
-     * extra data:
-     * 1) var -- nullptr
-     * 2) func -- pointer to params
-     * 3) type -- nullptr
-    */
-    void *data;
+    Type const *type_ptr;
 
     /**
      * Constructs a symbol with all fields as given.
     */
     Symbol(
-        std::string name,
+        std::string const &name,
         symbol::symbol_type type,
         symbol::scope_id_t scope_id,
-        Symbol const *type_ptr,
+        Type const *type_ptr,
         void *data
     ) :
         name(name),
         type(type),
         scope_id(scope_id),
-        type_ptr(type_ptr),
-        data(data)
+        type_ptr(type_ptr)
     { }
 
 public:
@@ -77,6 +68,8 @@ public:
     Symbol &operator=(Symbol const &other) = delete;
 
     std::string const &get_name() const { return name; }
+    symbol::symbol_type get_type() const { return type; }
+    Type const *get_type_ptr() const { return type_ptr; }
 
 };
 
@@ -84,12 +77,13 @@ class SymbolTable {
 private:
 
     enum scope_status { open, closed };
-    using multimap = std::multimap<std::string, Symbol *>;
+    using sym_list = std::vector<Symbol *>;
+    using hash_table = std::map<std::string, sym_list>;
     using stack = std::stack<symbol::scope_id_t>;
     using vector = std::vector<std::pair<symbol::scope_id_t, scope_status>>;
 
     /** symbol hash table */
-    multimap table;
+    hash_table table;
 
     /** scope stack */
     stack scope_stack;
@@ -114,11 +108,12 @@ private:
 public:
 
     SymbolTable();
-    Symbol const *lookup (std::string const &name) const;
+    Symbol const *lookup (std::string const &name);
+    Symbol const *lookup_in_current_scope(std::string const &name);
     Symbol const *insert(
-        std::string name,
+        std::string const &name,
         symbol::symbol_type type,
-        Symbol const *type_ptr,
+        Type const *type_ptr,
         void *data
     );
     void enter_scope();

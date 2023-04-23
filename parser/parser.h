@@ -5,6 +5,8 @@
 #include "lexer/lexer.h"
 #include "source/source.h"
 #include "memory/allocator.h"
+#include "analyzer/analyzer.h"
+#include "analyzer/type.h"
 
 class Parser {
 private:
@@ -13,6 +15,9 @@ private:
 
     /** The lexer to generate tokens from */
     Lexer &lexer;
+
+    /** The semantic analyzer to use */
+    SemanticAnalyzer &analyzer;
 
     /** The current token */
     Token tk;
@@ -23,9 +28,63 @@ private:
     /** Allocator for AST nodes */
     Allocator<ASTNode> &node_allocator;
 
+    /** Allocator for types */
+    Allocator<Type> &type_allocator;
+
+    /** Allocator for strings */
+    Allocator<std::string> &str_allocator;
+
+    /** Allocator for type vectors */
+    Allocator<std::vector<Type *>> &type_vec_allocator;
+
     /** ------------------- UTILS ------------------- */
 
+    /**
+     * Caches the current token's source loc, then consumes the current
+     * token and advances to the next token.
+    */
     void consume();
+
+    /**
+     * Generically implements the parsing of a left-associative binary operation
+     * at a precedence level.
+     * 
+     * @param higher_prec the higher precedence function to call when parsing
+     *                    operands
+     * @param types list of tokens to consider equal precedence for the operation
+    */
+    ASTNode *left_assoc_bin_op(
+        ASTNode *(Parser::*higher_prec)(),
+        std::vector<token::token_type> const &types
+    );
+
+    /**
+     * Generically implements the parsing of a right-associative binary operation
+     * at a precedence level.
+     * 
+     * @param higher_prec the higher precedence function to call when parsing
+     *                    operands
+     * @param types list of tokens to consider equal precedence for the operation
+    */
+    ASTNode *right_assoc_bin_op(
+        ASTNode *(Parser::*higher_prec)(),
+        std::vector<token::token_type> const &types
+    );
+
+    /**
+     * Generically implements the parsing of an N-operand operation at a
+     * precedence level.
+     * 
+     * @param higher_prec the higher precedence function to call when parsing
+     *                    operands
+     * @param types list of tokens to consider equal precedence for the operation
+     * @param node the existing node to add all parsed nodes to
+    */
+    void n_operand_op(
+        ASTNode *(Parser::*higher_prec)(),
+        std::vector<token::token_type> const &types,
+        ASTNode *node
+    );
 
     /** ------------------- EXPRESSION PARSING ------------------- */
 
@@ -167,16 +226,13 @@ private:
      * Parses a comma expression given that the current token is the first
      * token of the expression.
      * 
-     * If the given node is nullptr, this function will parse the expr as if comma
-     * is a binary operator. However, if the given node is not nullptr, this
-     * function will parse the expr as if comma is a separator (call expr).
-     * 
-     * ALWAYS consumes all parsed tokens EXCEPT for the stop token. Thus, the current
-     * token will be left containing the stop token.
+     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
+     * the token AFTER the last relevant token. For example, if the current token contains
+     * 'a' in 'a, b, c;', then it will contain ';' after this function is done.
      * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_comma(token::token_type stop, ASTNode *cn);
+    ASTNode *parse_comma();
 
     /**
      * Parses an expression given that the current token is the first token of the
@@ -187,43 +243,34 @@ private:
      * @param stop the token to stop at
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_expr(token::token_type stop, ASTNode *cn = nullptr);
-
-    ASTNode *left_assoc_bin_op(
-        ASTNode *(Parser::*fp)(),
-        std::vector<token::token_type> const &types
-    );
-
-    ASTNode *right_assoc_bin_op(
-        ASTNode *(Parser::*fp)(),
-        std::vector<token::token_type> const &types
-    );
+    ASTNode *parse_expr(token::token_type stop);
 
     /** ------------------- STATEMENT PARSING ------------------- */
 
     /**
-     * Parses a variable declaration given that the current token is the type.
+     * Parses a call expression's argument list and appends a node to the given node
+     * for every argument.
      * 
-     * ALWAYS consumes all parsed tokens. For example, if the current token is 'bool'
-     * in 'bool foo = 0;', then the current token will be '=' after this function returns.
+     * Expects that the current token when called is the left parenthesis at the start
+     * of the argument list.
      * 
-     * @return the generated var_decl node
+     * When this function returns, the current token will be the first token after the
+     * end of the call list, WHICH INCLUDES the right parenthesis at the end. For example,
+     * when parsing "(a, b);", if the current token before call is '(', then the current
+     * token after return will be ';'.
+     * 
+     * @param node the node to add the arguments to
     */
-    ASTNode *parse_var_decl();
+    void parse_call_args(ASTNode *node);
 
     /**
-     * Parses a function declaration's parameters OR a call expression's arguments given
-     * that the current token is the left parenthesis after the function name.
+     * Parses a type given that the current token is the first token of the type.
      * 
-     * 
-     * ALWAYS consumes all parsed tokens, INCLUDING the end parenthesis. For example,
-     * if current token is '(' in 'bool foo(bool x);', then current token will be ';'
-     * after this function returns.
-     * 
-     * @param func the func decl node to add the parsed param nodes to
-     * @param call if true, parses as call_expr ; if false, parses as func_decl
+     * @return pointer to the parsed type or nullptr if no type was found
     */
-    void parse_func_params(ASTNode *func, bool call);
+    Type *parse_type();
+
+    ASTNode *parse_decl();
 
     /**
      * Parses a statement given that the current token is the start of the
@@ -241,9 +288,17 @@ public:
      * Constructs a Parser.
      * 
      * @param lexer the lexer to use
+     * @param analyzer the semantic analyzer to use
      * @param node_allocator the allocator to use for generated nodes
     */
-    Parser(Lexer &lexer, Allocator<ASTNode> &node_allocator);
+    Parser(
+        Lexer &lexer,
+        SemanticAnalyzer &analyzer,
+        Allocator<ASTNode> &node_allocator,
+        Allocator<Type> &type_allocator,
+        Allocator<std::string> &str_allocator,
+        Allocator<std::vector<Type *>> &type_vec_allocator
+    );
 
     /**
      * Destructor.

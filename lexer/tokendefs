@@ -33,15 +33,24 @@ TOKEN(string_literal)
 
 KEYWORD(if)
 KEYWORD(else)
+
 KEYWORD(for)
 KEYWORD(while)
+
 KEYWORD(continue)
 KEYWORD(break)
 KEYWORD(return)
 
+KEYWORD(typedef)
+KEYWORD(func)
+KEYWORD(decl)
+KEYWORD(using)
+
 // type keywords
 
-TYPE(bool)
+TYPE(void)
+TYPE(i8)
+TYPE(u8)
 TYPE(i16)
 TYPE(u16)
 TYPE(i32)
@@ -59,6 +68,7 @@ OPERATOR(leftbracket, "[")
 OPERATOR(rightbracket, "]")
 OPERATOR(leftbrace, "{")
 OPERATOR(rightbrace, "}")
+OPERATOR(equalgreater, "=>")
 
 OPERATOR(plusplus, "++")
 OPERATOR(minusminus, "--")
@@ -86,5 +96,6 @@ OPERATOR(comma, ",")
 OPERATOR(semicolon, ";")
 
 #undef OPERATOR
+#undef TYPE
 #undef KEYWORD
 #undef TOKEN

@@ -17,10 +17,11 @@ namespace error {
 
     enum error_type {
 
-        // syntax errors
-        missing_expr,
-        missing_token,
-
+        missing,
+        redeclared,
+        unknown,
+        nyi,
+        deprecated
     };
 
 }
@@ -56,6 +57,10 @@ public:
      * @param missing string to print for what is missing
     */
     static void handle_missing(SourceLocation loc, char const *missing);
+
+    static void handle_redeclared(SourceLocation loc, char const *redeclared);
+
+    static void handle(error::error_type type, SourceLocation loc, char const *str);
 
 };
 

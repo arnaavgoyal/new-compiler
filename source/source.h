@@ -119,6 +119,11 @@ public:
     SourceLocation const &operator=(SourceLocation const &other);
 
     /**
+     * Copy source from another src loc.
+    */
+    void copy_src(SourceLocation const &other);
+
+    /**
      * Copy start fields from another src loc.
     */
     void copy_start(SourceLocation const &other);

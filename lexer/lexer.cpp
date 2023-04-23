@@ -1,11 +1,12 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
-
 #include "lexer/lexer.h"
 #include "source/source.h"
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
+
+//#define DEBUG
 
 void Lexer::lex_numeric_literal(Token &tk) {
     int c;
@@ -163,7 +164,6 @@ lex_start:
             type = token::numeric_literal;
             break;
 
-        // keyword first chars
         // currently, these call lex_identifier, which allocs a std::string and
         // reads the identifier into it. However, if it is classified as a keyword
         // afterwards, the alloced string will never be used.
@@ -171,10 +171,7 @@ lex_start:
         case 'b':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_bool)) == 0) {
-                type = token::kw_bool;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_break)) == 0) {
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_break)) == 0) {
                 type = token::kw_break;
             }
             else {
@@ -186,6 +183,16 @@ lex_start:
             lex_identifier(tk);
             if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_continue)) == 0) {
                 type = token::kw_continue;
+            }
+            else {
+                type = token::identifier;
+            }
+            break;
+        case 'd':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_decl)) == 0) {
+                type = token::kw_decl;
             }
             else {
                 type = token::identifier;
@@ -213,6 +220,9 @@ lex_start:
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f64)) == 0) {
                 type = token::kw_f64;
             }
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_func)) == 0) {
+                type = token::kw_func;
+            }
             else {
                 type = token::identifier;
             }
@@ -220,8 +230,8 @@ lex_start:
         case 'i':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_if)) == 0) {
-                type = token::kw_if;
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i8)) == 0) {
+                type = token::kw_i8;
             }
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i16)) == 0) {
                 type = token::kw_i16;
@@ -232,15 +242,38 @@ lex_start:
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i64)) == 0) {
                 type = token::kw_i64;
             }
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_if)) == 0) {
+                type = token::kw_if;
+            }
             else {
                 type = token::identifier;
             }
+            break;
+        case 'l':
+            src->unget();
+            lex_identifier(tk);
+            type = token::identifier;
             break;
         case 'r':
             src->unget();
             lex_identifier(tk);
             if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_return)) == 0) {
                 type = token::kw_return;
+            }
+            else {
+                type = token::identifier;
+            }
+            break;
+        case 's':
+            src->unget();
+            lex_identifier(tk);
+            type = token::identifier;
+            break;
+        case 't':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_typedef)) == 0) {
+                type = token::kw_typedef;
             }
             else {
                 type = token::identifier;
@@ -258,6 +291,9 @@ lex_start:
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u64)) == 0) {
                 type = token::kw_u64;
             }
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_using)) == 0) {
+                type = token::kw_using;
+            }
             else {
                 type = token::identifier;
             }
@@ -272,7 +308,8 @@ lex_start:
                 type = token::identifier;
             }
             break;
-
+        
+        // chars that no keyword starts with
         case 'A': case 'B': case 'C': case 'D':
         case 'E': case 'F': case 'G': case 'H':
         case 'I': case 'J': case 'K': case 'L':
@@ -280,10 +317,10 @@ lex_start:
         case 'Q': case 'R': case 'S': case 'T':
         case 'U': case 'V': case 'W': case 'X':
         case 'Y': case 'Z':
-        case 'a': case 'd': case 'g': case 'h':
-        case 'j': case 'k': case 'l': case 'm':
+        case 'a': case 'g': case 'h':
+        case 'j': case 'k': case 'm':
         case 'n': case 'o': case 'p': case 'q':
-        case 's': case 't': case 'v': case 'x':
+        case 'v': case 'x':
         case 'y': case 'z': case '_':
             src->unget();
             lex_identifier(tk);
@@ -419,6 +456,11 @@ lex_start:
                 type = token::op_equalequal;
                 c = src->get();
             }
+            else if (src->peek() == '>') {
+                col++;
+                type=token::op_equalgreater;
+                c = src->get();
+            }
             else {
                 type = token::op_equal;
             }
@@ -465,7 +507,9 @@ Lexer::~Lexer() {
     src->close();
     delete src;
     src = nullptr;
+#ifdef DEBUG
     std::cout << "Lexer destroyed." << std::endl;
+#endif
 }
 
 void Lexer::lex(Token &tk) {

@@ -1,10 +1,10 @@
-#ifndef AST_H
-#define AST_H
+#ifndef O_AST_H
+#define O_AST_H
 
 #include <vector>
 #include <string>
-#include "symbol/symbol.h"
 #include "source/source.h"
+#include "lexer/token.h"
 
 namespace ast {
 
@@ -12,6 +12,9 @@ namespace ast {
 
         // translation unit
         translation_unit,
+
+        // type
+        type,
 
         // integer literal
         int_lit,
@@ -33,6 +36,9 @@ namespace ast {
 
         // return statement
         ret_stmt,
+
+        // typedef statement
+        typedef_stmt,
 
         // a scoped block of statements (func def, loop body, etc)
         stmt_block,
@@ -92,7 +98,7 @@ private:
     /**
      * Internal overload for print_ast().
     */
-    static void print_ast(ASTNode *tree, std::string str);
+    void print_ast(ASTNode *tree, std::string str);
 
 public:
 
@@ -105,8 +111,13 @@ public:
 
     void set(ast::node_type type, token::token_type token_type, void *data);
 
-    std::vector<ASTNode *> const get_list() { return list; };
-    ast::node_type get_type() { return type; };
+    std::vector<ASTNode *> const get_list() { return list; }
+    ast::node_type get_type() { return type; }
+    SourceLocation get_loc() { return loc; }
+    std::string const *get_identifier_str() { return (std::string *)data; }
+    std::string const *get_literal_str() { return (std::string *)data; }
+    char const *get_operator_str() { return (char const *)data; }
+    char const *get_keyword_str() { return (char const *)data; }
 
     /**
      * Prints an ast node and all of its contents in a tree format.

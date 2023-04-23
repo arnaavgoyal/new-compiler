@@ -64,6 +64,10 @@ SourceLocation const &SourceLocation::operator=(SourceLocation const &other) {
     return *this;
 }
 
+void SourceLocation::copy_src(SourceLocation const &other) {
+    src_id = other.src_id;
+}
+
 void SourceLocation::copy_start(SourceLocation const &other) {
     start_offset = other.start_offset;
     start_row    = other.start_row;

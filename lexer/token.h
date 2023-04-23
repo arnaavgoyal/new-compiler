@@ -3,7 +3,6 @@
 
 #include "lexer/tokentypes.h"
 #include "source/source.h"
-#include "symbol/symbol.h"
 
 class Token {
 
