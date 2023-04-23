@@ -10,7 +10,7 @@
 #include "memory/allocator.h"
 #include "error/error.h"
 #include "analyzer/analyzer.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 
 //#define DEBUG
 
@@ -39,22 +39,30 @@ int main() {
     std::cout << "Symbol table made\n";
 #endif
 
-    // Make list of primitive types
-    std::vector<std::string const *> primitives = token::get_types_list();
+    // Get list of primitive types
+    std::vector<token::token_type> primitives = token::get_types_list();
 
 #ifdef DEBUG
     std::cout << "Primitives made\n";
 #endif
 
     // Make semantic analyzer
-    SemanticAnalyzer analyzer(symtable, type_alloc, primitives);
+    SemanticAnalyzer analyzer(symtable);
 
 #ifdef DEBUG
     std::cout << "Analyzer made\n";
 #endif
 
     // Make parser
-    Parser parser(lexer, analyzer, node_alloc, type_alloc, str_alloc, vec_alloc);
+    Parser parser(
+        lexer,
+        analyzer,
+        node_alloc,
+        type_alloc,
+        str_alloc,
+        vec_alloc,
+        primitives
+    );
 
 #ifdef DEBUG
     std::cout << "Parser made\n";

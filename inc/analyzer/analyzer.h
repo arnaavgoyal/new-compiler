@@ -3,25 +3,20 @@
 
 #include <string>
 #include "analyzer/symbol.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 #include "parser/ast.h"
 #include "memory/allocator.h"
 #include <string>
-#include "analyzer/type.h"
 
 class SemanticAnalyzer {
 private:
 
     SymbolTable &symtable;
 
-    Allocator<Type> &type_allocator;
-
 public:
 
     SemanticAnalyzer(
-        SymbolTable &symtable,
-        Allocator<Type> &type_allocator,
-        std::vector<std::string const *> const &primitives
+        SymbolTable &symtable
     );
 
     void enter_scope();

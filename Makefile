@@ -1,9 +1,13 @@
-CPP := g++
-CPPFLAGS := -Wall -g -MMD -c -I "C:\development\compiler\compiler3\new-compiler"
-SOURCES = $(wildcard *.cpp) $(wildcard */*.cpp)
-OBJECTS = $(SOURCES:%.cpp=%.o)
-DEPENDENCIES = $(OBJECTS:%.o=%.d)
+INCDIR := inc
+SRCDIR := src
 PROJECT := compiler.exe
+
+CPP := g++
+CPPFLAGS := -Wall -g -MMD -c -I $(INCDIR)
+
+SOURCES := $(wildcard *.cpp) $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/*/*.cpp)
+OBJECTS := $(SOURCES:%.cpp=%.o)
+DEPENDENCIES = $(OBJECTS:%.o=%.d)
 
 run: $(PROJECT)
 	./$(PROJECT)

@@ -1,12 +1,14 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "lexer/tokentypes.h"
+#include "lexer/token.h"
 #include "parser/ast.h"
 #include "lexer/lexer.h"
 #include "source/source.h"
 #include "memory/allocator.h"
 #include "analyzer/analyzer.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 
 class Parser {
 private:
@@ -297,7 +299,8 @@ public:
         Allocator<ASTNode> &node_allocator,
         Allocator<Type> &type_allocator,
         Allocator<std::string> &str_allocator,
-        Allocator<std::vector<Type *>> &type_vec_allocator
+        Allocator<std::vector<Type *>> &type_vec_allocator,
+        std::vector<token::token_type> &primitives
     );
 
     /**

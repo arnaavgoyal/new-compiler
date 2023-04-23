@@ -14,24 +14,10 @@ bool SemanticAnalyzer::declared_in_any_active_scope(std::string const *ident) {
 }
 
 SemanticAnalyzer::SemanticAnalyzer(
-    SymbolTable &symtable,
-    Allocator<Type> &type_allocator,
-    std::vector<std::string const *> const &primitives
-) :
-    symtable(symtable),
-    type_allocator(type_allocator) {
+    SymbolTable &symtable
+) : symtable(symtable) {
     
     // global scope is entered by default
-    // populate with primitive types
-    Type *type;
-    std::vector<std::string const *>::const_iterator start = primitives.begin();
-    while (start != primitives.end()) {
-        type = type_allocator.alloc();
-        type->str = (std::string *)*start;
-        type->type = type::primitive_type;
-        symtable.insert(**start, symbol::type, type, nullptr);
-        start++;
-    }
 }
 
 void SemanticAnalyzer::enter_scope() {

@@ -1,4 +1,4 @@
-#include "analyzer/type.h"
+#include "parser/type.h"
 
 Type::Type() {
     str = nullptr;

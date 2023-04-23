@@ -67,7 +67,12 @@ namespace token {
     /**
      * 
     */
-    std::vector<std::string const *> get_types_list ();
+    std::vector<token::token_type> get_all_keywords();
+
+    /**
+     * 
+    */
+    std::vector<token::token_type> get_types_list();
 
 }
 

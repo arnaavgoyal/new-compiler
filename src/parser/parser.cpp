@@ -9,7 +9,7 @@
 #include <iomanip>
 #include <algorithm>
 #include "analyzer/analyzer.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 
 //#define DEBUG
 
@@ -1077,7 +1077,8 @@ Parser::Parser(Lexer &lexer,
     Allocator<ASTNode> &node_allocator,
     Allocator<Type> &type_allocator,
     Allocator<std::string> &str_allocator,
-    Allocator<std::vector<Type *>> &type_vec_allocator
+    Allocator<std::vector<Type *>> &type_vec_allocator,
+    std::vector<token::token_type> &primitives
 ) :
     lexer(lexer),
     analyzer(analyzer),
@@ -1085,6 +1086,20 @@ Parser::Parser(Lexer &lexer,
     type_allocator(type_allocator),
     str_allocator(str_allocator),
     type_vec_allocator(type_vec_allocator) {
+
+    // add all primitive types
+    Type *type;
+    std::string *str;
+    std::vector<token::token_type>::const_iterator start = primitives.begin();
+    while (start != primitives.end()) {
+        str = str_allocator.alloc();
+        *str = std::string(token::get_keyword_string(*start));
+        type = type_allocator.alloc();
+        type->str = str;
+        type->type = type::primitive_type;
+        analyzer.add_type(str, type);
+        start++;
+    }
 
     // initial lex so that tk contains the first token
     consume();

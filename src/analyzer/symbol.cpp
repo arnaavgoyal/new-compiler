@@ -1,5 +1,5 @@
 #include "analyzer/symbol.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 #include <iterator>
 #include <iostream>
 

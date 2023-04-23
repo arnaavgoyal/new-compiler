@@ -1,4 +1,4 @@
-#include "tokentypes.h"
+#include "lexer/tokentypes.h"
 #include <string>
 #include <vector>
 
@@ -8,7 +8,7 @@ char const *token::get_token_string(token_type t) {
 #define TOKEN(A) case A: return #A;
 #define KEYWORD(A) case kw_##A: return #A;
 #define OPERATOR(A,B) case op_##A: return #A;
-#include "tokendefs"
+#include "lexer/tokendefs"
 
         default: return "";
 
@@ -19,7 +19,7 @@ char const *token::get_keyword_string(token_type t) {
     switch (t) {
 
 #define KEYWORD(A) case kw_##A: return #A;
-#include "tokendefs"
+#include "lexer/tokendefs"
 
         default: break;
 
@@ -31,7 +31,7 @@ char const *token::get_operator_string(token_type t) {
     switch (t) {
 
 #define OPERATOR(A,B) case op_##A: return B;
-#include "tokendefs"
+#include "lexer/tokendefs"
 
         default: break;
 
@@ -47,7 +47,7 @@ bool token::is_primitive_type(token_type t) {
     switch (t) {
 
 #define TYPE(A) case kw_##A:
-#include "tokendefs"
+#include "lexer/tokendefs"
 
         return true;
     
@@ -64,11 +64,21 @@ bool token::is_operator(token_type t) {
     return (get_operator_string(t) != nullptr);
 }
 
-std::vector<std::string const *> token::get_types_list () {
-    std::vector<std::string const *> prims {
+std::vector<token::token_type> token::get_all_keywords() {
+    std::vector<token::token_type> kws {
 
-#define TYPE(A) new std::string(#A),
-#include "tokendefs"
+#define KEYWORD(A) kw_##A,
+#include "lexer/tokendefs"
+
+    };
+    return kws;
+}
+
+std::vector<token::token_type> token::get_types_list () {
+    std::vector<token::token_type> prims {
+
+#define TYPE(A) kw_##A,
+#include "lexer/tokendefs"
 
     };
     return prims;

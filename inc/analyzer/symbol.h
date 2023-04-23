@@ -6,7 +6,7 @@
 #include <stack>
 #include <vector>
 #include "lexer/tokentypes.h"
-#include "analyzer/type.h"
+#include "parser/type.h"
 
 /** LeBlanc-Cook style symbol table */
 
