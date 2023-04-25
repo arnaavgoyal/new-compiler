@@ -87,34 +87,42 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
                 break;
         }
 
-        std::cout << str << "`" << type_str << " '";
+        if (tree->type != ast::recovery) {
 
-        if (token::is_keyword(tree->token_type) || token::is_operator(tree->token_type)) {
-            std::cout << (char const *)tree->data;
-        }
-        else if (token::is_literal(tree->token_type) || tree->token_type == token::identifier) {
-            std::cout << *(std::string *)tree->data;
-        }
+            std::cout << str << "`" << type_str << " '";
 
-        std::cout << "' ";
-        fflush(stdout);
-        print_err_loc_preamble(tree->loc);
-        std::cout << std::endl;
-
-        str.push_back(' ');
-        str.push_back('|');
-        int size = tree->list.size();
-        for (int i = 0; i < size; i++) {
-            if (i == size - 1) {
-                str.pop_back();
-                str.push_back(' ');
+            if (token::is_keyword(tree->token_type) || token::is_operator(tree->token_type)) {
+                std::cout << (char const *)tree->data;
             }
-            print_ast(tree->list[i], str);
+            else if (token::is_literal(tree->token_type) || tree->token_type == token::identifier) {
+                std::cout << *(std::string *)tree->data;
+            }
+
+            std::cout << "' ";
+            fflush(stdout);
+            print_err_loc_preamble(tree->loc);
+            std::cout << std::endl;
+
+            str.push_back(' ');
+            str.push_back('|');
+            int size = tree->list.size();
+            for (int i = 0; i < size; i++) {
+                if (i == size - 1) {
+                    str.pop_back();
+                    str.push_back(' ');
+                }
+                print_ast(tree->list[i], str);
+            }
+        }
+
+        // error recovery node
+        else  {
+            std::cout << str << "`" << "invalid -- error recovery" << std::endl;
         }
     }
 
     else {
-        std::cout << str << "`" << "invalid -- NULL" << std::endl;
+        std::cout << str << "`" << "invalid -- nullptr" << std::endl;
     }
 }
 

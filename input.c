@@ -12,12 +12,10 @@ decl () i64
 
 decl () i32
 => main () {
-    using hehe = []*i32;
-    //typedef []*i32 hehe;
+    using = []*i32;
     decl i64 myvar1 = (foo());
     decl []*i32 myvar2 = (1 - myvar1++)() * 3 / (4, (myvar1, 6 - 7, 8));
-    decl hehe myvar3 = myvar2;
-    //typedef hehe mimi;
-    decl mimi myvar4 = myvar2 = 4;
-    return myvar1;
+    func hehe myvar3 = myvar2;
+    mimi = myvar4 = ;
+    return myvar1();
 }

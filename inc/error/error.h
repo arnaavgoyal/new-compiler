@@ -2,6 +2,7 @@
 #define ERROR_H
 
 #include "source/source.h"
+#include <vector>
 
 #define BLK "\e[0;90m"
 #define RED "\e[0;91m"
@@ -19,6 +20,7 @@ namespace error {
 
         missing,
         redeclared,
+        undeclared,
         unknown,
         nyi,
         deprecated
@@ -29,12 +31,20 @@ namespace error {
 class ErrorHandler {
 private:
 
-    using color = char const *;
+    struct Error {
+        error::error_type type;
+        SourceLocation loc;
+        char const *str;
+    };
 
+    /** list of errors */
+    static std::vector<Error> list;
 
-
-    static void print_error_preamble(SourceLocation loc);
-    static void set_stream_color(color col);
+    /**
+     * Prints the error preamble.
+     * @param loc
+    */
+    static void print_error_preamble(SourceLocation &loc);
 
     /**
      * Sets the given stream to the start of the current line (i.e. the next
@@ -43,24 +53,35 @@ private:
      * @param stream
      * @param loc
     */
-    static void set_stream_to_line_start(std::ifstream *stream, SourceLocation loc);
+    static void set_stream_to_line_start(std::ifstream *stream, SourceLocation &loc);
 
-    static void print_loc_highlight(SourceLocation loc);
+    /**
+     * Prints the pretty location highlight of error at location within
+     * the source code.
+     * @param loc
+    */
+    static void print_loc_highlight(SourceLocation &loc);
+
+    /**
+     * Prints an error.
+    */
+   static void print_error(Error &err);
 
 public:
 
     /**
-     * Handles a missing (expected __) error.
+     * Handles an error.
      * 
      * @param type the type of error
      * @param loc the location of the error
      * @param missing string to print for what is missing
     */
-    static void handle_missing(SourceLocation loc, char const *missing);
-
-    static void handle_redeclared(SourceLocation loc, char const *redeclared);
-
     static void handle(error::error_type type, SourceLocation loc, char const *str);
+
+    /**
+     * Dumps all queued errors.
+    */
+   static void dump();
 
 };
 

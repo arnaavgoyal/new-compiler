@@ -3,7 +3,7 @@ SRCDIR := src
 PROJECT := compiler.exe
 
 CPP := g++
-CPPFLAGS := -Wall -g -MMD -c -I $(INCDIR)
+CPPFLAGS := -Wall -g -MMD -c -I inc
 
 SOURCES := $(wildcard *.cpp) $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/*/*.cpp)
 OBJECTS := $(SOURCES:%.cpp=%.o)

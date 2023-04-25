@@ -3,12 +3,12 @@
 #include "memory/allocator.h"
 #include "error/error.h"
 
-bool SemanticAnalyzer::declared_in_current_scope(std::string const *ident) {
+bool SemanticAnalyzer::used_in_current_scope(std::string const *ident) {
     Symbol const *sym = symtable.lookup_in_current_scope(*ident);
     return sym != nullptr;
 }
 
-bool SemanticAnalyzer::declared_in_any_active_scope(std::string const *ident) {
+bool SemanticAnalyzer::used_in_any_active_scope(std::string const *ident) {
     Symbol const *sym = symtable.lookup(*ident);
     return sym != nullptr;
 }
@@ -26,6 +26,22 @@ void SemanticAnalyzer::enter_scope() {
 
 void SemanticAnalyzer::exit_scope() {
     symtable.exit_scope();
+}
+
+bool SemanticAnalyzer::declared_in_current_scope(std::string const *str) {
+    Symbol const *sym = symtable.lookup_in_current_scope(*str);
+    if (sym == nullptr || sym->get_type() == symbol::type) {
+        return false;
+    }
+    return true;
+}
+
+bool SemanticAnalyzer::declared_in_any_scope(std::string const *str) {
+    Symbol const *sym = symtable.lookup(*str);
+    if (sym == nullptr || sym->get_type() == symbol::type) {
+        return false;
+    }
+    return true;
 }
 
 Type const *SemanticAnalyzer::get_type_by_string(std::string const *str) {
@@ -53,9 +69,9 @@ void SemanticAnalyzer::act_on_declaration(
     SourceLocation loc
 ) {
     // error - already declared in current scope
-    if (declared_in_current_scope(decl_name)) {
+    if (used_in_current_scope(decl_name)) {
         ErrorHandler::handle(error::redeclared, loc, decl_name->c_str());
-        exit(EXIT_FAILURE);
+        
     }
     symtable.insert(*decl_name, symtype, type_ptr, nullptr);
 }
@@ -66,9 +82,9 @@ void SemanticAnalyzer::act_on_type_alias(
     SourceLocation loc
 ) {
     // error - already declared in current scope
-    if (declared_in_current_scope(alias)) {
+    if (used_in_current_scope(alias)) {
         ErrorHandler::handle(error::redeclared, loc, alias->c_str());
-        exit(EXIT_FAILURE);
+        
     }
     symtable.insert(*alias, symbol::type, type_ptr, nullptr);
 }

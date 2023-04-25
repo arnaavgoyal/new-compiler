@@ -61,6 +61,9 @@ namespace ast {
         // binary operation
         binary_op,
 
+        // error recovery
+        recovery,
+
         // unknown (for debugging purposes)
         unknown
     };

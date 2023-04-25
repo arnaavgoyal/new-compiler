@@ -22,9 +22,11 @@ public:
     void enter_scope();
     void exit_scope();
 
-    bool declared_in_current_scope(std::string const *ident);
-    bool declared_in_any_active_scope(std::string const *ident);
-    
+    bool used_in_current_scope(std::string const *ident);
+    bool used_in_any_active_scope(std::string const *ident);
+
+    bool declared_in_current_scope(std::string const *str);
+    bool declared_in_any_scope(std::string const *str);
     Type const *get_type_by_string(std::string const *str);
 
     void add_type(

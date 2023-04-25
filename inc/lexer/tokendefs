@@ -41,7 +41,6 @@ KEYWORD(continue)
 KEYWORD(break)
 KEYWORD(return)
 
-KEYWORD(typedef)
 KEYWORD(func)
 KEYWORD(decl)
 KEYWORD(using)

@@ -48,6 +48,21 @@ private:
     void consume();
 
     /**
+     * Makes a new error recovery node with the current token's
+     * source location.
+     * 
+     * @return the recovery node
+    */
+    ASTNode *recovery();
+
+    /**
+     * Forwards to the next instance of token of given type.
+     * 
+     * @param type the type of token
+    */
+    void skip_to(token::token_type type);
+
+    /**
      * Generically implements the parsing of a left-associative binary operation
      * at a precedence level.
      * 
@@ -237,15 +252,17 @@ private:
     ASTNode *parse_comma();
 
     /**
-     * Parses an expression given that the current token is the first token of the
-     * expression.
+     * This function serves as the entry point for parsing expressions. It
+     * will simply call the lowest precedence expression function to start
+     * the parsing.
      * 
-     * ALWAYS consumes all parsed tokens, EXCEPT for the stop token.
+     * The current token must be the first token of the expression.
      * 
-     * @param stop the token to stop at
+     * ALWAYS consumes all parsed tokens.
+     * 
      * @return pointer to the generated ast or nullptr if no expression was found
     */
-    ASTNode *parse_expr(token::token_type stop);
+    ASTNode *parse_expr();
 
     /** ------------------- STATEMENT PARSING ------------------- */
 

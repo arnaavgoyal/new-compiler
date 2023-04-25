@@ -5,25 +5,17 @@ int nerd = 0;
 
 int *foo(int i);
 
-int foo();
-
 int k = 0;
 
-int bar(int !) {
-
-}
+typedef int i32;
 
 int main(int argc, char *argv[]) {
-    int xyz() {
 
-    }
-    int i = 1;
-    int j = foo(i = 2);
-    int foo[;
-    typedef urmom k;
-    k ii = 0;
-    int k = 0;
-    k x = k;
-    printf("%d\n", j);
+    typedef double i32;
+
+    xd double urmom
+
+    int i32 = 0;
+
     return 0;
 }

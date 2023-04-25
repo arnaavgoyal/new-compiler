@@ -74,6 +74,9 @@ int main() {
     // print ast
     tree->print();
 
+    // dump errors
+    ErrorHandler::dump();
+
 #ifdef DEBUG
     std::cout << "Done testing." << std::endl;
 #endif

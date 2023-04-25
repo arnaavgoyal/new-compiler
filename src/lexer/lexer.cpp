@@ -272,12 +272,7 @@ lex_start:
         case 't':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_typedef)) == 0) {
-                type = token::kw_typedef;
-            }
-            else {
-                type = token::identifier;
-            }
+            type = token::identifier;
             break;
         case 'u':
             src->unget();

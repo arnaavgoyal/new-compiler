@@ -18,6 +18,38 @@ void Parser::consume() {
     lexer.lex(tk);
 }
 
+ASTNode *Parser::recovery() {
+    ASTNode *node = node_allocator.alloc();
+    node->type = ast::recovery;
+    node->loc = tk.get_src_loc();
+    return node;
+}
+
+void Parser::skip_to(token::token_type type) {
+
+    bool kw = false;
+
+    if (!(kw = token::is_keyword(type)) && !token::is_operator(type)) {
+        std::cout << "Parser::skip_to() called with !op && !kw token type\n";
+        return;
+    }
+
+    while (tk.get_type() != type) {
+        if (tk.get_type() == token::eof) {
+
+            // fatal error
+            std::string *msg = str_allocator.alloc();
+            *msg += '\'';
+            *msg += kw ? token::get_keyword_string(type) : token::get_operator_string(type);
+            *msg += '\'';
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), msg->c_str());
+            ErrorHandler::dump();
+            exit(EXIT_FAILURE);
+        }
+        consume();
+    }
+}
+
 ASTNode *Parser::left_assoc_bin_op(
     ASTNode *(Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
@@ -38,8 +70,8 @@ ASTNode *Parser::left_assoc_bin_op(
             consume();
             node = (this->*higher_prec)();
             if (node == nullptr) {
-                ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-                exit(EXIT_FAILURE);
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+                node = recovery();
             }
             n->loc.copy_end(node->loc);
             n->list.push_back(node);
@@ -70,8 +102,8 @@ ASTNode *Parser::right_assoc_bin_op(
         consume();
         node = right_assoc_bin_op(higher_prec, types);
         if (node == nullptr) {
-            ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-            exit(EXIT_FAILURE);
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+            node = recovery();
         }
         n->loc.copy_end(node->loc);
         n->list.push_back(node);
@@ -99,11 +131,10 @@ void Parser::n_operand_op(
             return;
         }
     }
-    ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-    exit(EXIT_FAILURE);
+    ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+    node->list.push_back(recovery());
+    return;
 }
-
-
 
 ASTNode *Parser::parse_postfix(ASTNode *node) {
 
@@ -170,7 +201,7 @@ ASTNode *Parser::parse_postfix(ASTNode *node) {
                 consume();
 
                 // Parse expression inside of subscript
-                j = parse_expr(token::op_rightbracket);
+                j = parse_expr();
                 n->list.push_back(j);
 
                 n->loc.copy_end(tk.get_src_loc());
@@ -216,7 +247,7 @@ ASTNode *Parser::parse_prefix() {
             consume();
 
             // parse expr
-            node->list.push_back(parse_expr(token::op_rightparen));
+            node->list.push_back(parse_expr());
 
             // save end_* loc
             node->loc.copy_end(tk.get_src_loc());
@@ -231,14 +262,25 @@ ASTNode *Parser::parse_prefix() {
         // identifier with no prefix operators
         case token::identifier:
 
-            // create node for identifier
-            node = node_allocator.alloc();
-            node->set(
-                ast::ref_expr,
-                tk.get_type(),
-                (void *)tk.get_identifier_str()
-            );
-            node->loc = tk.get_src_loc();
+            // identifier reference is not valid
+            if (!analyzer.declared_in_any_scope(tk.get_identifier_str())) {
+
+                ErrorHandler::handle(error::undeclared, tk.get_src_loc(), tk.get_identifier_str()->c_str());
+                node = recovery();
+            }
+
+            // valid
+            else {
+
+                // create node for identifier
+                node = node_allocator.alloc();
+                node->set(
+                    ast::ref_expr,
+                    tk.get_type(),
+                    (void *)tk.get_identifier_str()
+                );
+                node->loc = tk.get_src_loc();
+            }
 
             // consume identifier
             consume();
@@ -401,14 +443,8 @@ ASTNode *Parser::parse_comma() {
     return left_assoc_bin_op(parse_assignment, types);
 }
 
-ASTNode *Parser::parse_expr(token::token_type stop) {
+ASTNode *Parser::parse_expr() {
     ASTNode *node = parse_comma();
-    if (tk.get_type() != stop) {
-        std::string missing = "'";
-        missing = missing + token::get_operator_string(stop) + "'";
-        ErrorHandler::handle_missing(tk.get_src_loc(), missing.c_str());
-        exit(EXIT_FAILURE);
-    }
     return node;
 }
 
@@ -435,7 +471,8 @@ void Parser::parse_call_args(ASTNode *node) {
         // expects an expression to have been parsed
         if (arg == nullptr) {
             ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            exit(EXIT_FAILURE);
+            arg = recovery();
+            std::cout << "call arg - recovered: token: " << tk.get_print_str() << std::endl;
         }
         
         // add to node
@@ -446,6 +483,8 @@ void Parser::parse_call_args(ASTNode *node) {
 
             // another arg
             case token::op_comma:
+                // consume comma
+                consume();
                 break;
 
             // no more args
@@ -455,13 +494,15 @@ void Parser::parse_call_args(ASTNode *node) {
             
             // error - something else
             default:
+                std::cout << "call arg, unknown\n";
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                exit(EXIT_FAILURE);
-                break;
+                //skip_to(token::op_rightparen);
+                //break;
+                return;
         }
     }
 
-    // consume right paren
+    // consume right paren (or unknown token)
     consume();
 }
 
@@ -692,6 +733,9 @@ ASTNode *Parser::parse_decl() {
     SourceLocation loc;
     bool func = false;
 
+    // cache start loc
+    loc = tk.get_src_loc();
+
     // expects to be on type
     // so parse type
     type = parse_type();
@@ -699,7 +743,7 @@ ASTNode *Parser::parse_decl() {
     // expects type to have been found
     if (type == nullptr) {
         ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-        exit(EXIT_FAILURE);
+        return recovery();
     }
 
     // the first type type determines the type of decl
@@ -711,7 +755,7 @@ ASTNode *Parser::parse_decl() {
         // func decls must have '=>' token
         if (tk.get_type() != token::op_equalgreater) {
             ErrorHandler::handle(error::missing, tk.get_src_loc(), "'=>'");
-            exit(EXIT_FAILURE);
+            return recovery();
         }
 
         // consume '=>'
@@ -721,17 +765,15 @@ ASTNode *Parser::parse_decl() {
     // expects identifier
     if (tk.get_type() != token::identifier) {
         ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-        exit(EXIT_FAILURE);
+        return recovery();
     }
-
-    // cache loc start_*
-    loc = tk.get_src_loc();
 
     // make node
     node = node_allocator.alloc();
     node->type = func ? ast::func_decl : ast::var_decl;
     node->token_type = token::identifier;
     node->data = (void *)tk.get_identifier_str();
+    loc.copy_end(tk.get_src_loc());
     node->loc = loc;
 
     // consume identifier
@@ -806,8 +848,8 @@ ASTNode *Parser::parse_stmt() {
 
             // reached eof without encountering end brace
             else if (tk.get_type() == token::eof) {
-                ErrorHandler::handle_missing(tk.get_src_loc(), "'}'");
-                exit(EXIT_FAILURE);
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
+                return recovery();
             }
 
             // statement
@@ -837,8 +879,10 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting identifier
         if (tk.get_type() != token::identifier) {
-            ErrorHandler::handle_missing(tk.get_src_loc(), "identifier");
-            exit(EXIT_FAILURE);
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
+            skip_to(token::op_semicolon);
+            consume();
+            return recovery();
         }
 
         node->set(
@@ -853,8 +897,8 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting '='
         if (tk.get_type() != token::op_equal) {
-            ErrorHandler::handle_missing(tk.get_src_loc(), "'='");
-            exit(EXIT_FAILURE);
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'='");
+            return recovery();
         }
 
         // consume '='
@@ -869,7 +913,7 @@ ASTNode *Parser::parse_stmt() {
         // expecting type
         if (t == nullptr) {
             ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-            exit(EXIT_FAILURE);
+            return recovery();
         }
 
         // append "type" node to node
@@ -886,63 +930,6 @@ ASTNode *Parser::parse_stmt() {
 
         // notify analyzer
         analyzer.act_on_type_alias((std::string *)node->data, t, node->loc);
-    }
-
-    // typedef (DEPRECATED for now)
-    else if (tk_type == token::kw_typedef) {
-
-        ErrorHandler::handle(error::deprecated, tk.get_src_loc(), tk.get_keyword_str());
-        exit(EXIT_FAILURE);
-
-        node = node_allocator.alloc();
-
-        // cache start loc
-        node->loc = tk.get_src_loc();
-
-        // consume typedef keyword
-        consume();
-
-        // cache type loc
-        SourceLocation tloc = tk.get_src_loc();
-
-        // expecting type
-        Type *t = parse_type();
-
-        if (t == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-            exit(EXIT_FAILURE);
-        }
-
-        // append "type" node to typedef node
-        temp = node_allocator.alloc();
-        temp->set(
-            ast::type,
-            tk.get_type(),
-            (void *)t->str
-        );
-        tloc.copy_end(prev_tk_loc);
-        temp->loc = tloc;
-        temp->token_type = token::identifier;
-        node->list.push_back(temp);
-
-        // expecting identifier
-        if (tk.get_type() != token::identifier) {
-            ErrorHandler::handle_missing(tk.get_src_loc(), "identifier");
-            exit(EXIT_FAILURE);
-        }
-
-        node->set(
-            ast::typedef_stmt,
-            tk.get_type(),
-            (void *)tk.get_identifier_str()
-        );
-        node->loc.copy_end(tk.get_src_loc());
-
-        // notify analyzer
-        analyzer.act_on_type_alias(tk.get_identifier_str(), t, node->loc);
-
-        // consume ident
-        consume();
     }
 
     // return statement
@@ -962,12 +949,12 @@ ASTNode *Parser::parse_stmt() {
         consume();
 
         // parse expr until semi
-        temp = parse_expr(token::op_semicolon);
+        temp = parse_expr();
 
         // check if there was an expr
         if (temp == nullptr) {
-            ErrorHandler::handle_missing(tk.get_src_loc(), "expression");
-            exit(EXIT_FAILURE);
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+            return recovery();
         }
 
         // get loc end_*
@@ -1003,13 +990,13 @@ ASTNode *Parser::parse_stmt() {
             // TODO: make this allowed
             else if (tk.get_type() == token::op_semicolon) {
                 ErrorHandler::handle(error::nyi, tk.get_src_loc(), "function prototyping");
-                exit(EXIT_FAILURE);
+                return recovery();
             }
 
             // other
             else {
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
-                exit(EXIT_FAILURE);
+                return recovery();
             }
         }
 
@@ -1023,12 +1010,12 @@ ASTNode *Parser::parse_stmt() {
                 consume();
 
                 // parse expr
-                temp = parse_expr(token::op_semicolon);
+                temp = parse_expr();
 
                 // ensure expr was parsed
                 if (temp == nullptr) {
                     ErrorHandler::handle(error::missing, tk.get_src_loc(), "expr");
-                    exit(EXIT_FAILURE);
+                    return recovery();
                 }
                 
                 // add expr to decl node
@@ -1040,32 +1027,41 @@ ASTNode *Parser::parse_stmt() {
     // func (DEPRECATED for now)
     else if  (tk_type == token::kw_func) {
         ErrorHandler::handle(error::deprecated, tk.get_src_loc(), tk.get_keyword_str());
-        exit(EXIT_FAILURE);
+        node = recovery();
+        skip_to(token::op_semicolon);
     }
 
     // assume that it is an expr by default
-    else if (tk_type == token::identifier || token::is_literal(tk_type)) {
-
-        // parse expr until semi
-        node = parse_expr(token::op_semicolon);
-    }
-
-    // unknown
     else {
-#ifdef DEBUG
-        std::cout << "unknown: ";
-        std::cout << tk.get_print_str() << std::endl;
-#endif
+
+        // parse expr
+        node = parse_expr();
+
+        if (node == nullptr) {
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+            node = recovery();
+        }
     }
 
     // require semicolon at end of stmt
-    if (tk.get_type() != token::op_semicolon) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "';'");
-        exit(EXIT_FAILURE);
-    }
+    if (tk.get_type() == token::op_semicolon) {
 
-    // consume semi
-    consume();
+        // consume semi
+        consume();
+    }
+    else {
+        ErrorHandler::handle(error::missing, tk.get_src_loc(), "';'");
+
+        // known token
+        if (tk.get_type() != token::unknown) {
+            // do not consume
+        }
+
+        // unknown token
+        else {
+            consume();
+        }
+    }
 
     return node;
 }
