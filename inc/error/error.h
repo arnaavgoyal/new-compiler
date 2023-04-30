@@ -1,29 +1,23 @@
 #ifndef ERROR_H
 #define ERROR_H
 
+#include "stdlib.h"
 #include "source/source.h"
 #include <vector>
-
-#define BLK "\e[0;90m"
-#define RED "\e[0;91m"
-#define GRN "\e[0;92m"
-#define YLW "\e[0;93m"
-#define BLU "\e[0;94m"
-#define PRP "\e[0;95m"
-#define CYA "\e[0;96m"
-#define WHT "\e[0;97m"
-#define RST "\e[0m"
 
 namespace error {
 
     enum error_type {
 
+        // syntax errors
         missing,
-        redeclared,
-        undeclared,
-        unknown,
-        nyi,
-        deprecated
+
+        // semantic errors
+        ident_is_not_a_typename,
+
+        // dev errors
+        deprecated,
+        nyi
     };
 
 }
@@ -81,7 +75,9 @@ public:
     /**
      * Dumps all queued errors.
     */
-   static void dump();
+    static void dump();
+
+    static void prog_exit() { dump(); exit(EXIT_FAILURE); }
 
 };
 

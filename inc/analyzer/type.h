@@ -14,13 +14,13 @@ namespace type {
         alias_type,
         function_type,
 
-        unknown_type
+        error_type
     };
 }
 
 class Type {
 
-    friend class Parser;
+    friend class SemanticAnalyzer;
 
 public:
 
@@ -33,24 +33,28 @@ public:
     union {
 
         /** the type that this pointer type points to */
-        Type *points_to;
+        Type const *points_to;
 
         /** the type that this array type is an array of */
-        Type *array_of;
+        Type const *array_of;
 
         /** the type that this alias type is an alias of */
-        Type *alias_of;
+        Type const *alias_of;
 
         /** the type that this func type returns */
-        Type *returns;
+        Type const *returns;
     };
 
-    /** if type is function, this points to the list of param types */
-    std::vector<Type *> *params;
+    union {
+
+        /** if type is function, this points to the list of param types */
+        std::vector<Type const *> params;
+    };
 
 public:
 
     Type();
+    ~Type() { };
 
     /**
      * Prevent copying.

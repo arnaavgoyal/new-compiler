@@ -1,5 +1,4 @@
 #include "parser/parser.h"
-#include "parser/ast.h"
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
 #include "lexer/lexer.h"
@@ -9,7 +8,6 @@
 #include <iomanip>
 #include <algorithm>
 #include "analyzer/analyzer.h"
-#include "parser/type.h"
 
 //#define DEBUG
 
@@ -18,129 +16,145 @@ void Parser::consume() {
     lexer.lex(tk);
 }
 
-ASTNode *Parser::recovery() {
-    ASTNode *node = node_allocator.alloc();
-    node->type = ast::recovery;
-    node->loc = tk.get_src_loc();
-    return node;
-}
+// void Parser::match(token::token_type expected) {
+//     bool kw = false;
 
-void Parser::skip_to(token::token_type type) {
+//     if (!(kw = token::is_keyword(expected)) && !token::is_operator(expected)) {
+//         std::cout << "Parser::match() called with !op && !kw token type\n";
+//         return;
+//     }
 
-    bool kw = false;
+//     if (tk.get_type() == expected) {
+//         return;
+//     }
 
-    if (!(kw = token::is_keyword(type)) && !token::is_operator(type)) {
-        std::cout << "Parser::skip_to() called with !op && !kw token type\n";
-        return;
-    }
+//     std::string *msg = str_allocator.alloc();
+//     *msg += '\'';
+//     *msg += kw ? token::get_keyword_string(expected) : token::get_operator_string(expected);
+//     *msg += '\'';
+//     ErrorHandler::handle(error::missing, tk.get_src_loc(), msg->c_str());
+// }
 
-    while (tk.get_type() != type) {
-        if (tk.get_type() == token::eof) {
+// void Parser::skip_to(token::token_type type) {
 
-            // fatal error
-            std::string *msg = str_allocator.alloc();
-            *msg += '\'';
-            *msg += kw ? token::get_keyword_string(type) : token::get_operator_string(type);
-            *msg += '\'';
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), msg->c_str());
-            ErrorHandler::dump();
-            exit(EXIT_FAILURE);
-        }
-        consume();
-    }
-}
+//     bool kw = false;
 
-ASTNode *Parser::left_assoc_bin_op(
-    ASTNode *(Parser::*higher_prec)(),
+//     if (!(kw = token::is_keyword(type)) && !token::is_operator(type)) {
+//         std::cout << "Parser::skip_to() called with !op && !kw token type\n";
+//         return;
+//     }
+
+//     while (tk.get_type() != type) {
+//         if (tk.get_type() == token::eof) {
+
+//             // fatal error
+//             std::string *msg = str_allocator.alloc();
+//             *msg += '\'';
+//             *msg += kw ? token::get_keyword_string(type) : token::get_operator_string(type);
+//             *msg += '\'';
+//             ErrorHandler::handle(error::missing, tk.get_src_loc(), msg->c_str());
+//             ErrorHandler::dump();
+//             exit(EXIT_FAILURE);
+//         }
+//         consume();
+//     }
+// }
+
+AnalyzerResult Parser::left_assoc_bin_op(
+    AnalyzerResult (Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
-    ASTNode *node = (this->*higher_prec)();
-    ASTNode *n;
+    // get result of left side
+    AnalyzerResult lhs = (this->*higher_prec)();
+
+    AnalyzerResult rhs;
+    AnalyzerResult binop;
+    SourceLocation op_loc;
+    token::token_type op_type;
     bool go = true;
     while (go) {
         if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
-            n = node_allocator.alloc();
-            n->set(
-                ast::node_type::binary_op,
-                tk.get_type(),
-                (void *)tk.get_operator_str()
-            );
-            n->loc = node->loc;
-            n->list.push_back(node);
+
+            // cache type and loc of op token
+            op_type = tk.get_type();
+            op_loc = tk.get_src_loc();
+
+            // consume op token
             consume();
-            node = (this->*higher_prec)();
-            if (node == nullptr) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-                node = recovery();
-            }
-            n->loc.copy_end(node->loc);
-            n->list.push_back(node);
-            node = n;
+
+            // get result of right side (higher prec)
+            rhs = (this->*higher_prec)();
+
+            // get result of binary op
+            binop = analyzer.analyze_binary_op_expr(op_type, lhs, rhs, op_loc);
         }
         else {
             go = false;
         }
     }
-    return node;
+    return binop;
 }
 
-ASTNode *Parser::right_assoc_bin_op(
-    ASTNode *(Parser::*higher_prec)(),
+AnalyzerResult Parser::right_assoc_bin_op(
+    AnalyzerResult (Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
-    ASTNode *node = (this->*higher_prec)();
-    ASTNode *n;
+    // get lhs result
+    AnalyzerResult lhs = (this->*higher_prec)();
+    
+    AnalyzerResult rhs;
+    AnalyzerResult binop;
+    SourceLocation op_loc;
+    token::token_type op_type;
     if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
-        n = node_allocator.alloc();
-        n->set(
-            ast::node_type::binary_op,
-            tk.get_type(),
-            (void *)tk.get_operator_str()
-        );
-        n->loc = node->loc;
-        n->list.push_back(node);
+
+        // cache type and loc of op token
+        op_type = tk.get_type();
+        op_loc = tk.get_src_loc();
+
+        // consume op token
         consume();
-        node = right_assoc_bin_op(higher_prec, types);
-        if (node == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            node = recovery();
-        }
-        n->loc.copy_end(node->loc);
-        n->list.push_back(node);
-        node = n;
+
+        // get result of rhs (same prec)
+        rhs = right_assoc_bin_op(higher_prec, types);
+
+        // get result of binary op
+        binop = analyzer.analyze_binary_op_expr(op_type, lhs, rhs, op_loc);
     }
-    return node;
+    return binop;
 }
 
-void Parser::n_operand_op(
-        ASTNode *(Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types,
-        ASTNode *node
-) {
-    ASTNode *operand = (this->*higher_prec)();
-    if (operand == nullptr) {
-        return;
-    }
-    while (operand != nullptr) {
-        node->list.push_back(operand);
-        if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
-            consume();
-            operand = (this->*higher_prec)();
-        }
-        else {
-            return;
-        }
-    }
-    ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-    node->list.push_back(recovery());
-    return;
-}
+// void Parser::n_operand_op(
+//         ASTNode *(Parser::*higher_prec)(),
+//         std::vector<token::token_type> const &types,
+//         ASTNode *node
+// ) {
+//     ASTNode *operand = (this->*higher_prec)();
+//     if (operand == nullptr) {
+//         return;
+//     }
+//     while (operand != nullptr) {
+//         node->list.push_back(operand);
+//         if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
+//             consume();
+//             operand = (this->*higher_prec)();
+//         }
+//         else {
+//             return;
+//         }
+//     }
+//     // parse error
+//     ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+//     ErrorHandler::prog_exit();
+//     return;
+// }
 
-ASTNode *Parser::parse_postfix(ASTNode *node) {
+AnalyzerResult Parser::parse_postfix(AnalyzerResult pre) {
 
     // Iterate over every postfix operator (if any)
-    ASTNode *n = nullptr;
-    ASTNode *j = nullptr;
+    AnalyzerResult res = pre;
+    SourceLocation op_loc;
+    std::vector<AnalyzerResult> args;
     while (true) {
         switch (tk.get_type()) {
 
@@ -148,64 +162,54 @@ ASTNode *Parser::parse_postfix(ASTNode *node) {
             case token::op_plusplus:
             case token::op_minusminus:
 
-                // Make new node
-                n = node_allocator.alloc();
-                n->set(
-                    ast::node_type::unary_op,
+                // get result for postfix op
+                res = analyzer.analyze_postfix_op_expr(
                     tk.get_type(),
-                    (void *)tk.get_operator_str()
+                    pre,
+                    tk.get_src_loc()
                 );
-                n->loc = node->loc;
-                n->loc.copy_end(tk.get_src_loc());
-                n->list.push_back(node);
-                node = n;
 
-                // consume operator
+                // consume op token
                 consume();
                 break;
             
             // func call
             case token::op_leftparen:
 
-                n = node_allocator.alloc();
-                n->set(
-                    ast::call_expr,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
+                // cache call start loc
+                op_loc = tk.get_src_loc();
+
+                // parse call args
+                args = parse_call_args();
+
+                // get result of call expr
+                res = analyzer.analyze_call_expr(
+                    pre,
+                    args,
+                    op_loc,
+                    prev_tk_loc
                 );
-                n->loc = node->loc;
-                n->list.push_back(node);
-                node = n;
-
-                // don't consume left paren
-                // parse func call arguments
-                parse_call_args(node);
-                // this ^ call consumes the right paren
-
-                // get end loc
-                node->loc.copy_end(prev_tk_loc);
                 break;
 
             // array subscript
             case token::op_leftbracket:
-                n = node_allocator.alloc();
-                n->set(
-                    ast::subscript_expr,
-                    tk.get_type(),
-                    (void *)tk.get_operator_str()
-                );
-                n->loc = node->loc;
-                n->list.push_back(node);
+                
+                // save op loc
+                op_loc = tk.get_src_loc();
 
                 // consume left bracket
                 consume();
 
-                // Parse expression inside of subscript
-                j = parse_expr();
-                n->list.push_back(j);
+                // get result for expr inside brackets
+                res = parse_expr();
 
-                n->loc.copy_end(tk.get_src_loc());
-                node = n;
+                // get result for array subscript
+                res = analyzer.analyze_subscript_expr(
+                    pre,
+                    res,
+                    op_loc,
+                    tk.get_src_loc()
+                );
 
                 // consume right bracket
                 consume();
@@ -213,93 +217,66 @@ ASTNode *Parser::parse_postfix(ASTNode *node) {
 
             // no postfix operators left
             default:
-                return node;
+                return res;
         }
     }
 }
 
-ASTNode *Parser::parse_prefix() {
+AnalyzerResult Parser::parse_prefix() {
 
     token::token_type type = tk.get_type();
 
-    ASTNode *node = nullptr;
-    ASTNode *temp;
-    SourceLocation t_loc;
+    AnalyzerResult res;
+    SourceLocation op_loc;
+    token::token_type op_type;
     switch (type) {
 
-        // parenthesized expr or typecast
+        // parenthesized expr
         case token::op_leftparen:
 
-            // TODO: check for typecast
-
-            // make node for paren expr
-            node = node_allocator.alloc();
-            node->set(
-                ast::paren_expr,
-                tk.get_type(),
-                (void *)tk.get_operator_str()
-            );
-
-            // save start_* loc
-            node->loc = tk.get_src_loc();
+            // save left paren loc
+            op_loc = tk.get_src_loc();
 
             // consume left paren
             consume();
 
             // parse expr
-            node->list.push_back(parse_expr());
+            res = parse_expr();
 
-            // save end_* loc
-            node->loc.copy_end(tk.get_src_loc());
+            // get result
+            res = analyzer.analyze_paren_expr(res, op_loc, tk.get_src_loc());
 
             // consume right paren
             consume();
 
             // parse postfix
-            node = parse_postfix(node);
+            res = parse_postfix(res);
             break;
 
         // identifier with no prefix operators
         case token::identifier:
 
-            // identifier reference is not valid
-            if (!analyzer.declared_in_any_scope(tk.get_identifier_str())) {
-
-                ErrorHandler::handle(error::undeclared, tk.get_src_loc(), tk.get_identifier_str()->c_str());
-                node = recovery();
-            }
-
-            // valid
-            else {
-
-                // create node for identifier
-                node = node_allocator.alloc();
-                node->set(
-                    ast::ref_expr,
-                    tk.get_type(),
-                    (void *)tk.get_identifier_str()
-                );
-                node->loc = tk.get_src_loc();
-            }
+            // get result for reference
+            res = analyzer.analyze_ref_expr(
+                tk.get_identifier_str(),
+                tk.get_src_loc()
+            );
 
             // consume identifier
             consume();
 
             // parse postfix operators
-            node = parse_postfix(node);
+            res = parse_postfix(res);
             break;
 
         // char literal
         case token::character_literal:
 
-            // make node
-            node = node_allocator.alloc();
-            node->set(
-                ast::node_type::char_lit,
-                tk.get_type(),
-                (void *)tk.get_literal_str()
+            // get result for char lit
+            res = analyzer.analyze_character_literal(
+                tk.get_literal_str(),
+                tk.get_src_loc()
             );
-            node->loc = tk.get_src_loc();
 
             // next
             consume();
@@ -308,17 +285,11 @@ ASTNode *Parser::parse_prefix() {
         // numeric literal
         case token::numeric_literal:
 
-            // make node
-            node = node_allocator.alloc();
-            node->set(
-                // numeric_literal type is any type of number,
-                // meaning it could be an int or a float.
-                // TODO: fix this
-                ast::node_type::int_lit,
-                tk.get_type(),
-                (void *)tk.get_literal_str()
+            // get result for num lit
+            res = analyzer.analyze_numeric_literal(
+                tk.get_literal_str(),
+                tk.get_src_loc()
             );
-            node->loc = tk.get_src_loc();
 
             // next
             consume();
@@ -327,14 +298,11 @@ ASTNode *Parser::parse_prefix() {
         // string literal
         case token::string_literal:
 
-            // make node
-            node = node_allocator.alloc();
-            node->set(
-                ast::node_type::str_lit,
-                tk.get_type(),
-                (void *)tk.get_literal_str()
+            // get result for char lit
+            res = analyzer.analyze_string_literal(
+                tk.get_literal_str(),
+                tk.get_src_loc()
             );
-            node->loc = tk.get_src_loc();
 
             // next
             consume();
@@ -349,38 +317,32 @@ ASTNode *Parser::parse_prefix() {
         case token::op_asterisk:
         case token::op_amp:
 
-            // make node
-            node = node_allocator.alloc();
-            node->set(
-                ast::node_type::unary_op,
-                tk.get_type(),
-                (void *)tk.get_operator_str()
-            );
-            node->loc = tk.get_src_loc();
+            // save op token loc
+            op_loc = tk.get_src_loc();
 
-            // next
+            // consume op token
             consume();
 
             // recursively descend
-            temp = parse_prefix();
-            node->list.push_back(temp);
+            res = parse_prefix();
 
-            // update loc with ending point
-            node->loc.copy_end(temp->loc);
+            // get result for prefix op
+            res = analyzer.analyze_prefix_op_expr(type, res, op_loc);
             break;
 
         // empty
         default:
             
-            // this nullptr propagates up the precedence chain
-            node = nullptr;
+            // error -- no expr
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+            ErrorHandler::prog_exit();
             break;
     }
 
-    return node;
+    return res;
 }
 
-ASTNode *Parser::parse_multiplicative() {
+AnalyzerResult Parser::parse_multiplicative() {
     static std::vector<token::token_type> types {
         token::op_asterisk,
         token::op_slash,
@@ -389,7 +351,7 @@ ASTNode *Parser::parse_multiplicative() {
     return left_assoc_bin_op(parse_prefix, types);
 }
 
-ASTNode *Parser::parse_additive() {
+AnalyzerResult Parser::parse_additive() {
     static std::vector<token::token_type> types {
         token::op_plus,
         token::op_minus
@@ -397,7 +359,7 @@ ASTNode *Parser::parse_additive() {
     return left_assoc_bin_op(parse_multiplicative, types);
 }
 
-ASTNode *Parser::parse_gl_relational() {
+AnalyzerResult Parser::parse_gl_relational() {
     static std::vector<token::token_type> types {
         token::op_greater,
         token::op_greaterequal,
@@ -407,7 +369,7 @@ ASTNode *Parser::parse_gl_relational() {
     return left_assoc_bin_op(parse_additive, types);
 }
 
-ASTNode *Parser::parse_eq_relational() {
+AnalyzerResult Parser::parse_eq_relational() {
     static std::vector<token::token_type> types {
         token::op_equalequal,
         token::op_exclamationequal
@@ -415,40 +377,42 @@ ASTNode *Parser::parse_eq_relational() {
     return left_assoc_bin_op(parse_gl_relational, types);
 }
 
-ASTNode *Parser::parse_logical_and() {
+AnalyzerResult Parser::parse_logical_and() {
     static std::vector<token::token_type> types {
         token::op_ampamp
     };
     return left_assoc_bin_op(parse_eq_relational, types);
 }
 
-ASTNode *Parser::parse_logical_or() {
+AnalyzerResult Parser::parse_logical_or() {
     static std::vector<token::token_type> types {
         token::op_pipepipe
     };
     return left_assoc_bin_op(parse_logical_and, types);
 }
 
-ASTNode *Parser::parse_assignment() {
+AnalyzerResult Parser::parse_assignment() {
     static std::vector<token::token_type> types {
         token::op_equal
     };
     return right_assoc_bin_op(parse_logical_or, types);
 }
 
-ASTNode *Parser::parse_comma() {
+AnalyzerResult Parser::parse_comma() {
     static std::vector<token::token_type> types {
         token::op_comma
     };
     return left_assoc_bin_op(parse_assignment, types);
 }
 
-ASTNode *Parser::parse_expr() {
-    ASTNode *node = parse_comma();
+AnalyzerResult Parser::parse_expr() {
+    AnalyzerResult node = parse_comma();
     return node;
 }
 
-void Parser::parse_call_args(ASTNode *node) {
+std::vector<AnalyzerResult> Parser::parse_call_args() {
+
+    std::vector<AnalyzerResult> args;
 
     // consume left paren
     consume();
@@ -458,25 +422,18 @@ void Parser::parse_call_args(ASTNode *node) {
         
         // consume right paren
         consume();
-        return;
+        return args;
     }
 
-    ASTNode *arg = nullptr;
+    AnalyzerResult arg;
     bool go = true;
     while (go) {
 
         // parse expr
         arg = parse_assignment();
-
-        // expects an expression to have been parsed
-        if (arg == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            arg = recovery();
-            std::cout << "call arg - recovered: token: " << tk.get_print_str() << std::endl;
-        }
         
         // add to node
-        node->list.push_back(arg);
+        args.push_back(arg);
 
         // next action based on current token
         switch (tk.get_type()) {
@@ -496,21 +453,25 @@ void Parser::parse_call_args(ASTNode *node) {
             default:
                 std::cout << "call arg, unknown\n";
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                //skip_to(token::op_rightparen);
-                //break;
-                return;
+                ErrorHandler::prog_exit();
         }
     }
 
-    // consume right paren (or unknown token)
+    // consume right paren
     consume();
+
+    return args;
 }
 
-Type *Parser::parse_type() {
+AnalyzerResult Parser::parse_type() {
 
-    Type *type = nullptr;
-    Type *temp = nullptr;
+    AnalyzerResult type;
+    AnalyzerResult temp;
+    std::vector<AnalyzerResult> param_list;
+    SourceLocation loc_cache;
     bool go;
+
+    std::cout << "beginning type parse\n";
 
     // expects curr token to be the first token of type
     switch (tk.get_type()) {
@@ -527,14 +488,10 @@ Type *Parser::parse_type() {
             //   1        ( ..., <type>,)
             //   2        ( ...
 
-            // make func type
-            type = type_allocator.alloc();
-            type->type = type::function_type;
-            type->str = str_allocator.alloc();
-            type->params = type_vec_allocator.alloc();
+            // cache start loc
+            loc_cache = tk.get_src_loc();
 
             // consume left paren
-            *type->str += tk.get_operator_str();
             consume();
 
             // VALID 1
@@ -551,17 +508,8 @@ Type *Parser::parse_type() {
                     // parse type
                     temp = parse_type();
 
-                    // expects a type to have been found
-                    if (temp == nullptr) {
-                        ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                        exit(EXIT_FAILURE);
-                    }
-
-                    // update string representation
-                    *(std::string *)type->str += *temp->str;
-
                     // add to func type params list
-                    type->params->push_back(temp);
+                    param_list.push_back(temp);
 
                     // next action based on current token
                     switch (tk.get_type()) {
@@ -570,131 +518,116 @@ Type *Parser::parse_type() {
                         case token::op_comma:
 
                             // consume comma
-                            *type->str += tk.get_operator_str();
                             consume();
                             break;
 
                         // end of param list
                         case token::op_rightparen:
 
-                            // consume right paren
+                            // break loop
                             go = false;
                             break;
                         
                         // error - something else
                         default:
-
+                            
+                            // parse error
                             ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                            exit(EXIT_FAILURE);
+                            ErrorHandler::prog_exit();
                             break;
                     }
                 }
             }
 
             // consume right paren
-            *type->str += tk.get_operator_str();
             consume();
 
-            // return type
+            // parse return type
             temp = parse_type();
 
-            // expects a type to have been parsed
-            if (temp == nullptr) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                exit(EXIT_FAILURE);
-            }
-            
-            // update string representation
-            *(std::string *)type->str += *temp->str;
+            std::cout << "got return type\n";
 
-            // set return type of func type
-            type->returns = temp;
+            // analyze func type
+            type = analyzer.analyze_function_type(
+                param_list,
+                temp,
+                loc_cache,
+                prev_tk_loc
+            );
+
+            std::cout << "finished func type parse\n";
 
             break;
 
         // identifier
         case token::identifier:
 
-            // get corresponding type, if it exists
-            // TODO: fix const workaround
-            type = (Type *)analyzer.get_type_by_string(tk.get_identifier_str());
-
-            // check if type was found
-            if (type == nullptr) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                exit(EXIT_FAILURE);
-            }
+            // get corresponding type
+            type = analyzer.analyze_typename(
+                tk.get_identifier_str(),
+                tk.get_src_loc()
+            );
 
             // consume type
             consume();
 
-            return type;
+            std::cout << "finished typename parse\n";
+
+            break;
 
         // pointer
         case token::op_asterisk:
 
-            // make pointer type
-            type = type_allocator.alloc();
-            type->str = str_allocator.alloc();
-            type->type = type::pointer_type;
+            // cache asterisk loc
+            loc_cache = tk.get_src_loc();
 
             // consume asterisk
-            *type->str += tk.get_operator_str();
             consume();
 
             // get pointee type
             temp = parse_type();
 
-            // expects a type to have been parsed
-            if (temp == nullptr) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                exit(EXIT_FAILURE);
-            }
+            // analyze
+            type = analyzer.analyze_pointer_type(
+                temp,
+                loc_cache
+            );
 
-            // add to string representation
-            *(std::string *)type->str += *temp->str;
-
-            // set pointee type of pointer type
-            type->returns = temp;
+            std::cout << "finished pointer type parse\n";
 
             break;
 
         // array
         case token::op_leftbracket:
 
-            // make array type
-            type = type_allocator.alloc();
-            type->str = str_allocator.alloc();
-            type->type = type::array_type;
+            // cache left bracket loc
+            loc_cache = tk.get_src_loc();
 
             // consume left bracket
-            *type->str += tk.get_operator_str();
             consume();
 
             // expects right bracket
             if (tk.get_type() != token::op_rightbracket) {
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "']'");
-                exit(EXIT_FAILURE);
+                ErrorHandler::prog_exit();
             }
 
+            // update bracket loc
+            loc_cache.copy_end(tk.get_src_loc());
+
             // consume right bracket
-            *type->str += tk.get_operator_str();
             consume();
 
             // get type that this is array of
             temp = parse_type();
 
-            // expects a type to have been parsed
-            if (temp == nullptr) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                exit(EXIT_FAILURE);
-            }
+            // analyze
+            type = analyzer.analyze_array_type(
+                temp,
+                loc_cache
+            );
 
-            // add to string representation
-            *(std::string *)type->str += *temp->str;
-
-            // set type this array is of
-            type->array_of = temp;
+            std::cout << "finished array type parse\n";
 
             break;
 
@@ -705,138 +638,242 @@ Type *Parser::parse_type() {
             if (token::is_primitive_type(tk.get_type())) {
 
                 // parse primitive type
-                type = (Type *)analyzer.get_type_by_string(tk.get_identifier_str());
+                type = analyzer.analyze_primitive_type(
+                    tk.get_type(),
+                    tk.get_src_loc()
+                );
 
                 // consume prim type
                 consume();
             }
-            
-            // no point in doing the lookup at the end of the function
-            return type;
-    }
 
-    if ((temp = (Type *)analyzer.get_type_by_string(type->str)) != nullptr) {
-        type = temp;
-    }
-    else {
-        analyzer.add_type(type->str, type);
+            // error type
+            else {
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
+                ErrorHandler::prog_exit();
+            }
+
+            std::cout << "finished prim type parse\n";
+
+            break;
     }
 
     return type;
-
 }
 
-ASTNode *Parser::parse_decl() {
+void Parser::parse_decl() {
 
-    ASTNode *node = nullptr;
-    Type *type = nullptr;
+    AnalyzerResult type;
     SourceLocation loc;
-    bool func = false;
+
+    // consume decl keyword
+    consume();
 
     // cache start loc
     loc = tk.get_src_loc();
+
+    std::cout << "before decl type parse\n";
 
     // expects to be on type
     // so parse type
     type = parse_type();
 
-    // expects type to have been found
-    if (type == nullptr) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-        return recovery();
-    }
-
-    // the first type type determines the type of decl
-    if (type->type == type::function_type) {
-        func = true;
-
-        // 
-
-        // func decls must have '=>' token
-        if (tk.get_type() != token::op_equalgreater) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'=>'");
-            return recovery();
-        }
-
-        // consume '=>'
-        consume();
-    }
+    std::cout << "after decl type parse\n";
 
     // expects identifier
     if (tk.get_type() != token::identifier) {
         ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-        return recovery();
+        ErrorHandler::prog_exit();
     }
 
-    // make node
-    node = node_allocator.alloc();
-    node->type = func ? ast::func_decl : ast::var_decl;
-    node->token_type = token::identifier;
-    node->data = (void *)tk.get_identifier_str();
-    loc.copy_end(tk.get_src_loc());
-    node->loc = loc;
+    // save identifier
+    std::string const *ident = tk.get_identifier_str();
+
+    // save identifier loc
+    SourceLocation ident_loc = tk.get_src_loc();
 
     // consume identifier
     consume();
 
-    if (func) {
+    std::cout << "past decl ident parse\n";
+
+    // func decl
+    if (tk.get_type() == token::op_leftparen) {
+
         // handle param list
-        // TODO: implement
-        //   param list vars have to be declared in function scope,
-        //   but currently scope is entered after this function returns....
+        //   1: ()
+        //   2: (ident)
+        //   3: (ident, ident, ... , ident)
+
+        std::vector<std::string const *> params;
+
+        // expect left paren
+        if (tk.get_type() != token::op_leftparen) {
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'('");
+            ErrorHandler::prog_exit();
+        }
+
+        // save left paren loc
+        SourceLocation lparen_loc = tk.get_src_loc();
+
+        // consume left paren
         consume();
+
+        bool go = tk.get_type() == token::op_rightparen ? false : true;
+        while (go) {
+
+            // expect identifier
+            if (tk.get_type() != token::identifier) {
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
+                ErrorHandler::prog_exit();
+            }
+
+            else {
+
+                // add param to list
+                params.push_back(tk.get_identifier_str());
+
+                // consume ident
+                consume();
+            }
+
+            // next action based on current token
+            switch (tk.get_type()) {
+
+                // another type in param list
+                case token::op_comma:
+                    // consume comma
+                    consume();
+                    break;
+
+                // end of param list
+                case token::op_rightparen:
+                    // consume right paren
+                    std::cout << "RIGHT PAREN" << std::endl;
+                    go = false;
+                    break;
+                
+                // error - something else
+                default:
+                    ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
+                    ErrorHandler::prog_exit();
+                    break;
+            }
+            std::cout << tk.get_print_str() << std::endl;
+        }
+
+        // save right paren loc
+        SourceLocation rparen_loc = tk.get_src_loc();
+
+        // consume right paren
         consume();
-    }
 
-    else {
-        // handle array length
-        // TODO: implement
-    }
-
-
-    // update semantic analyzer with decl
-    analyzer.act_on_declaration(
-        func ? symbol::func : symbol::var,
-        (std::string *)node->data,
-        type,
-        loc
-    );
-
-
-    return node;
-}
-
-ASTNode *Parser::parse_stmt() {
-    
-    ASTNode *node;
-    ASTNode *temp;
-    std::string ident_str;
-    token::token_type tk_type = tk.get_type();
-
-    if (tk_type == token::eof) {
-
-        // skip semicolon check
-        return nullptr;
-    }
-
-    // scoped statement block
-    else if (tk_type == token::op_leftbrace) {
-    
-        node = node_allocator.alloc();
-        node->set(
-            ast::node_type::stmt_block,
-            tk.get_type(),
-            (void *)tk.get_operator_str()
+        // analyze func decl
+        AnalyzerResult func_decl = analyzer.analyze_func_decl(
+            type,
+            ident,
+            params,
+            ident_loc,
+            lparen_loc,
+            rparen_loc
         );
 
-        // cache loc, we will only use start_*
-        node->loc = tk.get_src_loc();
+        // expect left brace for definition
+        if (tk.get_type() != token::op_leftbrace) {
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
+            ErrorHandler::prog_exit();
+        }
+
+        // handle func definition start
+        // this call enters new function scope
+        analyzer.start_func_define(func_decl, tk.get_src_loc());
 
         // consume left brace
         consume();
 
-        // enter new scope
-        analyzer.enter_scope();
+        // parse func body
+        while (tk.get_type() != token::op_rightbrace) {
+            if (tk.get_type() == token::eof) {
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
+                ErrorHandler::prog_exit();
+            }
+            parse_stmt();
+        }
+
+        // handle func definition end
+        // this call exits function scope
+        analyzer.end_func_define(tk.get_src_loc());
+
+        // consume right brace
+        consume();
+
+        std::cout << "finished func define parse\n";
+    }
+
+    // var decl
+    else {
+        // TODO: handle arrays (length and/or definition)
+        
+        // handle definition
+        if (tk.get_type() == token::op_equal) {
+
+            // cache loc of '='
+            SourceLocation eqloc = tk.get_src_loc();
+
+            // consume equal
+            consume();
+
+            // parse expr
+            AnalyzerResult rhs = parse_expr();
+
+            // analyze var decl
+            analyzer.analyze_var_decl(
+                type,
+                ident,
+                ident_loc,
+                rhs,
+                eqloc
+            );
+        }
+
+        // just declaration
+        else {
+            // analyze var decl
+            analyzer.analyze_var_decl(
+                type,
+                ident,
+                ident_loc
+            );
+        }
+    }
+}
+
+bool Parser::parse_stmt() {
+    
+    AnalyzerResult res;
+    SourceLocation loc_cache;
+    AnalyzerResult temp;
+    token::token_type tk_type = tk.get_type();
+
+    std::cout << tk.get_print_str() << std::endl;
+
+    if (tk_type == token::eof) {
+
+        // skip semicolon check
+        return true;
+    }
+
+    // scoped statement block
+    else if (tk_type == token::op_leftbrace) {
+
+        // cache start loc
+        loc_cache = tk.get_src_loc();
+
+        // consume left brace
+        consume();
+
+        // start scoped block
+        analyzer.start_scoped_block(prev_tk_loc);
 
         // parse stmts
         while (true) {
@@ -846,33 +883,26 @@ ASTNode *Parser::parse_stmt() {
                 break;
             }
 
-            // reached eof without encountering end brace
-            else if (tk.get_type() == token::eof) {
+            // parse stmt
+            if (parse_stmt()) {
+                // reached eof without end brace
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
-                return recovery();
+                ErrorHandler::prog_exit();
             }
-
-            // statement
-            node->list.push_back(parse_stmt());
         }
-
-        // get loc end_*
-        node->loc.copy_end(tk.get_src_loc());
 
         // consume right brace
         consume();
 
-        // exit scope
-        analyzer.exit_scope();
+        // end scoped block
+        analyzer.end_scoped_block(prev_tk_loc);
 
         // this is to skip the semicolon check
-        return node;
+        return false;
     }
 
     // using
     else if (tk_type == token::kw_using) {
-
-        node = node_allocator.alloc();
 
         // consume keyword
         consume();
@@ -880,17 +910,13 @@ ASTNode *Parser::parse_stmt() {
         // expecting identifier
         if (tk.get_type() != token::identifier) {
             ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-            skip_to(token::op_semicolon);
-            consume();
-            return recovery();
+            ErrorHandler::prog_exit();
         }
 
-        node->set(
-            ast::typedef_stmt,
-            tk.get_type(),
-            (void *)tk.get_identifier_str()
-        );
-        node->loc = tk.get_src_loc();
+        // cache ident loc
+        loc_cache = tk.get_src_loc();
+
+        std::string const *ident = tk.get_identifier_str();
 
         // consume identifier
         consume();
@@ -898,149 +924,60 @@ ASTNode *Parser::parse_stmt() {
         // expecting '='
         if (tk.get_type() != token::op_equal) {
             ErrorHandler::handle(error::missing, tk.get_src_loc(), "'='");
-            return recovery();
+            ErrorHandler::prog_exit();
         }
 
         // consume '='
         consume();
 
-        // cache type loc
-        SourceLocation tloc = tk.get_src_loc();
-
         // parse type
-        Type *t = parse_type();
-
-        // expecting type
-        if (t == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-            return recovery();
-        }
-
-        // append "type" node to node
-        temp = node_allocator.alloc();
-        temp->set(
-            ast::type,
-            tk.get_type(),
-            (void *)t->str
-        );
-        tloc.copy_end(prev_tk_loc);
-        temp->loc = tloc;
-        temp->token_type = token::identifier;
-        node->list.push_back(temp);
+        temp = parse_type();
 
         // notify analyzer
-        analyzer.act_on_type_alias((std::string *)node->data, t, node->loc);
+        analyzer.analyze_type_alias(
+            temp,
+            ident,
+            loc_cache
+        );
     }
 
     // return statement
     else if (tk_type == token::kw_return) {
-
-        node = node_allocator.alloc();
-        node->set(
-            ast::ret_stmt,
-            tk.get_type(),
-            (void *)tk.get_keyword_str()
-        );
         
-        // cache loc, we will only use start_*
-        node->loc = tk.get_src_loc();
+        // cache start loc
+        loc_cache = tk.get_src_loc();
 
         // make curr token the start of expr
         consume();
 
-        // parse expr until semi
+        // parse expr
         temp = parse_expr();
 
-        // check if there was an expr
-        if (temp == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            return recovery();
-        }
-
-        // get loc end_*
-        node->loc.copy_end(prev_tk_loc);
-
-        // add expr to ret stmt
-        node->list.push_back(temp);
+        // analyze return stmt
+        analyzer.analyze_return_stmt(temp);
     }
 
     // decl
     else if (tk_type == token::kw_decl) {
 
-        // consume decl keyword
-        consume();
-
-        // parse the decl stmt
-        node = parse_decl();
-
-        // handle post-decl for func
-        if (node->type == ast::func_decl) {
-
-            // handle definition
-            if (tk.get_type() == token::op_leftbrace) {
-
-                // parse compound stmt and append to node
-                node->list.push_back(parse_stmt());
-
-                // skip semicolon check
-                return node;
-            }
-
-            // just declaration
-            // TODO: make this allowed
-            else if (tk.get_type() == token::op_semicolon) {
-                ErrorHandler::handle(error::nyi, tk.get_src_loc(), "function prototyping");
-                return recovery();
-            }
-
-            // other
-            else {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
-                return recovery();
-            }
-        }
-
-        // handle post-decl for var
-        else {
-
-            // handle potential definition
-            if (tk.get_type() == token::op_equal) {
-                
-                // consume '='
-                consume();
-
-                // parse expr
-                temp = parse_expr();
-
-                // ensure expr was parsed
-                if (temp == nullptr) {
-                    ErrorHandler::handle(error::missing, tk.get_src_loc(), "expr");
-                    return recovery();
-                }
-                
-                // add expr to decl node
-                node->list.push_back(temp);
-            }
-        }
+        // parse the declaration
+        parse_decl();
     }
 
     // func (DEPRECATED for now)
     else if  (tk_type == token::kw_func) {
         ErrorHandler::handle(error::deprecated, tk.get_src_loc(), tk.get_keyword_str());
-        node = recovery();
-        skip_to(token::op_semicolon);
+        ErrorHandler::prog_exit();
     }
 
     // assume that it is an expr by default
     else {
 
         // parse expr
-        node = parse_expr();
+        temp = parse_expr();
 
-        if (node == nullptr) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            node = recovery();
-        }
+        // add to current scope
+        analyzer.add_expr_as_stmt(temp);
     }
 
     // require semicolon at end of stmt
@@ -1051,51 +988,20 @@ ASTNode *Parser::parse_stmt() {
     }
     else {
         ErrorHandler::handle(error::missing, tk.get_src_loc(), "';'");
-
-        // known token
-        if (tk.get_type() != token::unknown) {
-            // do not consume
-        }
-
-        // unknown token
-        else {
-            consume();
-        }
+        ErrorHandler::prog_exit();
     }
 
-    return node;
+    return tk.get_type() == token::eof;
 }
 
 /** ------------------- PUBLIC ------------------- */
 
-Parser::Parser(Lexer &lexer,
-    SemanticAnalyzer &analyzer,
-    Allocator<ASTNode> &node_allocator,
-    Allocator<Type> &type_allocator,
-    Allocator<std::string> &str_allocator,
-    Allocator<std::vector<Type *>> &type_vec_allocator,
-    std::vector<token::token_type> &primitives
+Parser::Parser(
+    Lexer &lexer,
+    SemanticAnalyzer &analyzer
 ) :
     lexer(lexer),
-    analyzer(analyzer),
-    node_allocator(node_allocator),
-    type_allocator(type_allocator),
-    str_allocator(str_allocator),
-    type_vec_allocator(type_vec_allocator) {
-
-    // add all primitive types
-    Type *type;
-    std::string *str;
-    std::vector<token::token_type>::const_iterator start = primitives.begin();
-    while (start != primitives.end()) {
-        str = str_allocator.alloc();
-        *str = std::string(token::get_keyword_string(*start));
-        type = type_allocator.alloc();
-        type->str = str;
-        type->type = type::primitive_type;
-        analyzer.add_type(str, type);
-        start++;
-    }
+    analyzer(analyzer) {
 
     // initial lex so that tk contains the first token
     consume();
@@ -1107,19 +1013,8 @@ Parser::~Parser() {
 #endif
 }
 
-ASTNode *Parser::parse() {
+void Parser::parse() {
     //std::cout << "parse:START\n";
-    ASTNode *n;
-    ASTNode *tree = node_allocator.alloc();
-    // TODO: translation unit IDs
-    tree->data = (void *)"tu1";
-    tree->token_type = token::unknown;
-    tree->type = ast::translation_unit;
-    // the translation unit gets the default (invalid) src loc
-    tree->loc = SourceLocation();
-    while ((n = parse_stmt()) != nullptr) {
-        tree->list.push_back(n);
-    }
+    while (!parse_stmt()) { }
     //std::cout << "  parse:DONE\n";
-    return tree;
 }

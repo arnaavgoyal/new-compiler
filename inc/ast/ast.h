@@ -5,6 +5,7 @@
 #include <string>
 #include "source/source.h"
 #include "lexer/token.h"
+#include "analyzer/type.h"
 
 namespace ast {
 
@@ -27,6 +28,9 @@ namespace ast {
 
         // variable declaration
         var_decl,
+
+        // function parameter declaration
+        param_decl,
 
         // function declaration
         func_decl,
@@ -64,16 +68,16 @@ namespace ast {
         // error recovery
         recovery,
 
-        // unknown (for debugging purposes)
-        unknown
+        // error (for debugging purposes)
+        error
     };
 
 }
 
 class ASTNode {
 
-    // Parser edits these nodes directly when creating them
-    friend class Parser;
+    // SemanticAnalyzer edits these nodes directly when creating them
+    friend class SemanticAnalyzer;
 
 private:
 
@@ -98,6 +102,9 @@ private:
     */
     void *data;
 
+    /** pointer to the type of the node */
+    Type const *type_ptr;
+
     /**
      * Internal overload for print_ast().
     */
@@ -109,7 +116,7 @@ public:
      * Constructs an ast node with type unknown.
     */
     ASTNode() {
-        set(ast::unknown, token::unknown, nullptr);
+        set(ast::error, token::unknown, nullptr);
     }
 
     void set(ast::node_type type, token::token_type token_type, void *data);

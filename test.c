@@ -13,9 +13,11 @@ int main(int argc, char *argv[]) {
 
     typedef double i32;
 
-    xd double urmom
+    int argc = 0;
 
     int i32 = 0;
+
+    char i32 = '0';
 
     return 0;
 }

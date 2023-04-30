@@ -1,4 +1,4 @@
-#include "parser/ast.h"
+#include "ast/ast.h"
 #include <iostream>
 #include <iomanip>
 #include "lexer/tokentypes.h"
@@ -81,6 +81,9 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
                 break;
             case ast::type:
                 type_str = "type";
+                break;
+            case ast::param_decl:
+                type_str = "param decl";
                 break;
             default:
                 type_str = "?";

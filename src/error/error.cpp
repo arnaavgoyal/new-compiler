@@ -3,6 +3,16 @@
 #include <iostream>
 #include <iomanip>
 
+#define BLK "\e[0;90m"
+#define RED "\e[0;91m"
+#define GRN "\e[0;92m"
+#define YLW "\e[0;93m"
+#define BLU "\e[0;94m"
+#define PRP "\e[0;95m"
+#define CYA "\e[0;96m"
+#define WHT "\e[0;97m"
+#define RST "\e[0m"
+
 std::vector<ErrorHandler::Error> ErrorHandler::list = std::vector<Error>();
 
 void ErrorHandler::print_error_preamble(SourceLocation &loc) {
@@ -93,24 +103,22 @@ void ErrorHandler::print_error(Error &err) {
 
     // print error
     switch (err.type) {
+
         case error::missing:
             std::cout << "expected " << GRN << err.str << RST;
             break;
-        case error::redeclared:
-            std::cout << "redeclared " << YLW << err.str << RST;
+
+        case error::ident_is_not_a_typename:
+            std::cout << GRN << err.str << RST << " is not a typename";
             break;
-        case error::undeclared:
-            std::cout << CYA << err.str << RST << " is not declared";
-            break;
-        case error::unknown:
-            std::cout << "unknown " << WHT << err.str << RST;
-            break;
+
         case error::deprecated:
-            std::cout << PRP << err.str << RST << " is deprecated";
+            std::cout << CYA << err.str << RST << " is deprecated";
             break;
         case error::nyi:
-            std::cout << PRP << err.str << RST << " is not yet implemented";
+            std::cout << CYA << err.str << RST << " are not yet implemented";
             break;
+
         default:
             std::cout << WHT << err.str << RST;
             break;

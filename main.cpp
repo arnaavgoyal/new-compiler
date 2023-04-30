@@ -5,14 +5,14 @@
 #include "lexer/token.h"
 #include "lexer/tokentypes.h"
 #include "source/source.h"
-#include "parser/ast.h"
+#include "ast/ast.h"
 #include "parser/parser.h"
 #include "memory/allocator.h"
 #include "error/error.h"
 #include "analyzer/analyzer.h"
-#include "parser/type.h"
+#include "analyzer/type.h"
 
-//#define DEBUG
+#define DEBUG
 
 int main() {
     
@@ -26,17 +26,10 @@ int main() {
     SourceID src_id = SourceManager::add_source("input.c");
 
     // Make lexer
-    Lexer lexer(src_id, str_alloc, false);
+    Lexer lexer(src_id, str_alloc, /** save comments = */ false);
 
 #ifdef DEBUG
     std::cout << "Lexer made\n";
-#endif
-
-    // Make symbol table
-    SymbolTable symtable;
-
-#ifdef DEBUG
-    std::cout << "Symbol table made\n";
 #endif
 
     // Get list of primitive types
@@ -47,7 +40,10 @@ int main() {
 #endif
 
     // Make semantic analyzer
-    SemanticAnalyzer analyzer(symtable);
+    SemanticAnalyzer analyzer(
+        str_alloc,
+        primitives
+    );
 
 #ifdef DEBUG
     std::cout << "Analyzer made\n";
@@ -56,23 +52,15 @@ int main() {
     // Make parser
     Parser parser(
         lexer,
-        analyzer,
-        node_alloc,
-        type_alloc,
-        str_alloc,
-        vec_alloc,
-        primitives
+        analyzer
     );
 
 #ifdef DEBUG
     std::cout << "Parser made\n";
 #endif
 
-    // Get ast
-    ASTNode *tree = parser.parse();
-
-    // print ast
-    tree->print();
+    // parse
+    parser.parse();
 
     // dump errors
     ErrorHandler::dump();
