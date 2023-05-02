@@ -8,7 +8,7 @@
 static void print_err_loc_preamble(SourceLocation loc) {
 #define LOC_NUM_WIDTH 2
     std::cout
-        << std::setfill('0')        << " @ "
+        << std::setfill('0')
         << std::setw(LOC_NUM_WIDTH) << loc.start_row  << ":"
         << std::setw(LOC_NUM_WIDTH) << loc.start_col  << "::"
         << std::setw(LOC_NUM_WIDTH) << loc.end_row    << ":"
@@ -19,18 +19,28 @@ static void print_err_loc_preamble(SourceLocation loc) {
 
 /** ------------------- ASTNode ------------------- */
 
-void ASTNode::set(ast::node_type type, token::token_type token_type, void *data) {
+void ASTNode::set(
+    ast::node_type kind,
+    Type const *type,
+    std::string const *str,
+    SourceLocation loc,
+    token::token_type tok,
+    bool has_error
+) {
+    this->kind = kind;
     this->type = type;
-    this->token_type = token_type;
-    this->data = data;
+    this->str = str;
+    this->loc = loc;
+    this->tok = tok;
+    this->has_error = has_error;
 }
 
-void ASTNode::print_ast(ASTNode *tree, std::string str) {
+void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
 
     if (tree != nullptr) {
 
         std::string type_str;
-        switch (tree->type) {
+        switch (tree->kind) {
             case ast::translation_unit:
                 type_str = "translation unit";
                 break;
@@ -85,36 +95,45 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
             case ast::param_decl:
                 type_str = "param decl";
                 break;
+            case ast::error:
+                type_str = "error";
+                break;
             default:
                 type_str = "?";
                 break;
         }
 
-        if (tree->type != ast::recovery) {
+        if (tree->kind != ast::recovery) {
 
-            std::cout << str << "`" << type_str << " '";
-
-            if (token::is_keyword(tree->token_type) || token::is_operator(tree->token_type)) {
-                std::cout << (char const *)tree->data;
+            std::cout << str << "`" << "\e[0;97m" << type_str
+                << "\e[0;93m" << " '";
+            if (tree->str == nullptr){
+                std::cout << token::get_token_string(tree->tok);
             }
-            else if (token::is_literal(tree->token_type) || tree->token_type == token::identifier) {
-                std::cout << *(std::string *)tree->data;
+            else {
+                std::cout << *tree->str;
             }
 
-            std::cout << "' ";
-            fflush(stdout);
+            std::cout << "' "
+                << "\e[0;92m" << *tree->type->str
+                << "\e[0;95m" << " <";
             print_err_loc_preamble(tree->loc);
-            std::cout << std::endl;
+            std::cout << ">";
+            if (tree->has_error) {
+                std::cout << "\e[0;91m" << " {contains errors}";
+            }
+            std::cout << "\e[0m" << std::endl;
 
             str.push_back(' ');
             str.push_back('|');
-            int size = tree->list.size();
+            int size = tree->children.size();
+            //std::cout << "size: " << size << std::endl;
             for (int i = 0; i < size; i++) {
                 if (i == size - 1) {
                     str.pop_back();
                     str.push_back(' ');
                 }
-                print_ast(tree->list[i], str);
+                print_ast(tree->children[i], str);
             }
         }
 
@@ -129,7 +148,7 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
     }
 }
 
-void ASTNode::print() {
+void ASTNode::print() const {
     std::cout << "root" << std::endl;
     std::string s(" ");
     print_ast(this, s);

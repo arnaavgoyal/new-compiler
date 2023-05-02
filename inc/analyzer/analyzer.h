@@ -10,29 +10,37 @@
 #include "memory/allocator.h"
 #include <string>
 
-class AnalyzerResult {
+template <typename T>
+class AnalyzedGeneric {
 
     friend class SemanticAnalyzer;
 
 private:
-
-    union {
-        ASTNode const *node;
-        Type const *type;
-    };
-    bool has_error;
-
-    AnalyzerResult(Type const *ty, bool err = false)
-        { type = ty; has_error = err; }
-
-    AnalyzerResult(ASTNode const *nd, bool err = false)
-        { node = nd; has_error = err; }
-
 public:
+    T contents;
 
-    AnalyzerResult() { }
+    AnalyzedGeneric(T t, bool err = false)
+        { contents = t; }
+
+
+
+    AnalyzedGeneric() { }
+
+    AnalyzedGeneric(AnalyzedGeneric const &other) {
+        contents = other.contents;
+    }
+
+    AnalyzedGeneric const &operator=(AnalyzedGeneric const &other) {
+        contents = other.contents;
+        return *this;
+    }
 
 };
+
+typedef AnalyzedGeneric<ASTNode const *> AnalyzerResult;
+typedef AnalyzedGeneric<ASTNode const *> AnalyzedStmt;
+typedef AnalyzedGeneric<ASTNode const *> AnalyzedExpr;
+typedef AnalyzedGeneric<Type const *> AnalyzedType;
 
 class SemanticAnalyzer {
 private:
@@ -124,99 +132,98 @@ public:
         std::vector<token::token_type> const &primitives
     );
 
-    AnalyzerResult analyze_function_type(
-        std::vector<AnalyzerResult> param_types,
-        AnalyzerResult return_type,
+    AnalyzedType analyze_function_type(
+        std::vector<AnalyzedType> param_types,
+        AnalyzedType return_type,
         SourceLocation start_loc,
         SourceLocation end_loc
     );
 
-    AnalyzerResult analyze_typename(
+    AnalyzedType analyze_typename(
         std::string const *ident,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_pointer_type(
-        AnalyzerResult pointee,
+    AnalyzedType analyze_pointer_type(
+        AnalyzedType pointee,
         SourceLocation pointer_modifier_loc
     );
 
-    AnalyzerResult analyze_array_type(
-        AnalyzerResult array_of,
+    AnalyzedType analyze_array_type(
+        AnalyzedType array_of,
         SourceLocation array_modifier_loc
     );
 
-    AnalyzerResult analyze_primitive_type(
+    AnalyzedType analyze_primitive_type(
         token::token_type prim,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_binary_op_expr(
+    AnalyzedExpr analyze_binary_op_expr(
         token::token_type op,
-        AnalyzerResult lhs,
-        AnalyzerResult rhs,
+        AnalyzedExpr lhs,
+        AnalyzedExpr rhs,
         SourceLocation op_loc
     );
 
-    AnalyzerResult analyze_postfix_op_expr(
+    AnalyzedExpr analyze_postfix_op_expr(
         token::token_type op,
-        AnalyzerResult expr,
+        AnalyzedExpr expr,
         SourceLocation op_loc
     );
 
-    AnalyzerResult analyze_call_expr(
-        AnalyzerResult expr,
-        std::vector<AnalyzerResult> args,
+    AnalyzedExpr analyze_call_expr(
+        AnalyzedExpr expr,
+        std::vector<AnalyzedExpr> args,
         SourceLocation call_start_loc,
         SourceLocation call_end_loc
     );
 
-    AnalyzerResult analyze_subscript_expr(
-        AnalyzerResult expr,
-        AnalyzerResult subscript,
+    AnalyzedExpr analyze_subscript_expr(
+        AnalyzedExpr expr,
+        AnalyzedExpr subscript,
         SourceLocation subscript_start_loc,
         SourceLocation subscript_end_loc
     );
 
-    AnalyzerResult analyze_paren_expr(
-        AnalyzerResult inside,
+    AnalyzedExpr analyze_paren_expr(
+        AnalyzedExpr inside,
         SourceLocation left_paren_loc,
         SourceLocation right_paren_loc
     );
 
-    AnalyzerResult analyze_ref_expr(
+    AnalyzedExpr analyze_ref_expr(
         std::string const *ident,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_character_literal(
+    AnalyzedExpr analyze_character_literal(
         std::string const *char_lit,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_numeric_literal(
+    AnalyzedExpr analyze_numeric_literal(
         std::string const *num_lit,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_string_literal(
+    AnalyzedExpr analyze_string_literal(
         std::string const *str_lit,
         SourceLocation loc
     );
 
-    AnalyzerResult analyze_prefix_op_expr(
+    AnalyzedExpr analyze_prefix_op_expr(
         token::token_type op,
-        AnalyzerResult expr,
+        AnalyzedExpr expr,
         SourceLocation op_loc
     );
 
-    AnalyzerResult analyze_func_decl(
-        AnalyzerResult type,
+    AnalyzedStmt analyze_func_decl(
+        AnalyzedType type,
         std::string const *ident,
         std::vector<std::string const *> params,
         SourceLocation ident_loc,
-        SourceLocation lparen_loc,
-        SourceLocation rparen_loc
+        SourceLocation param_list_loc
     );
 
     void start_func_define(
@@ -229,13 +236,13 @@ public:
     );
 
     void analyze_var_decl(
-        AnalyzerResult type,
+        AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc
     );
 
     void analyze_var_decl(
-        AnalyzerResult type,
+        AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc,
         AnalyzerResult rhs,
@@ -243,7 +250,7 @@ public:
     );
 
     void analyze_type_alias(
-        AnalyzerResult type,
+        AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc
     );

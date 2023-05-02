@@ -60,15 +60,15 @@ void Parser::consume() {
 //     }
 // }
 
-AnalyzerResult Parser::left_assoc_bin_op(
-    AnalyzerResult (Parser::*higher_prec)(),
+AnalyzedExpr Parser::left_assoc_bin_op(
+    AnalyzedExpr (Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
     // get result of left side
-    AnalyzerResult lhs = (this->*higher_prec)();
+    AnalyzedExpr lhs = (this->*higher_prec)();
 
-    AnalyzerResult rhs;
-    AnalyzerResult binop;
+    AnalyzedExpr rhs;
+    AnalyzedExpr binop = lhs;
     SourceLocation op_loc;
     token::token_type op_type;
     bool go = true;
@@ -85,8 +85,16 @@ AnalyzerResult Parser::left_assoc_bin_op(
             // get result of right side (higher prec)
             rhs = (this->*higher_prec)();
 
+            // std::cout << "l_a_b_o lhs\n";
+            // lhs.contents->print();
+            // std::cout << "l_a_b_o rhs: " << rhs.contents->str << std::endl;
+            // rhs.contents->print();
+
             // get result of binary op
             binop = analyzer.analyze_binary_op_expr(op_type, lhs, rhs, op_loc);
+
+            // std::cout << "l_a_b_o final\n";
+            // binop.contents->print();
         }
         else {
             go = false;
@@ -95,15 +103,15 @@ AnalyzerResult Parser::left_assoc_bin_op(
     return binop;
 }
 
-AnalyzerResult Parser::right_assoc_bin_op(
-    AnalyzerResult (Parser::*higher_prec)(),
+AnalyzedExpr Parser::right_assoc_bin_op(
+    AnalyzedExpr (Parser::*higher_prec)(),
     std::vector<token::token_type> const &types
 ) {
     // get lhs result
-    AnalyzerResult lhs = (this->*higher_prec)();
+    AnalyzedExpr lhs = (this->*higher_prec)();
     
-    AnalyzerResult rhs;
-    AnalyzerResult binop;
+    AnalyzedExpr rhs;
+    AnalyzedExpr binop = lhs;
     SourceLocation op_loc;
     token::token_type op_type;
     if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
@@ -149,12 +157,12 @@ AnalyzerResult Parser::right_assoc_bin_op(
 //     return;
 // }
 
-AnalyzerResult Parser::parse_postfix(AnalyzerResult pre) {
+AnalyzedExpr Parser::parse_postfix(AnalyzedExpr pre) {
 
     // Iterate over every postfix operator (if any)
-    AnalyzerResult res = pre;
+    AnalyzedExpr res = pre;
     SourceLocation op_loc;
-    std::vector<AnalyzerResult> args;
+    std::vector<AnalyzedExpr> args;
     while (true) {
         switch (tk.get_type()) {
 
@@ -222,11 +230,11 @@ AnalyzerResult Parser::parse_postfix(AnalyzerResult pre) {
     }
 }
 
-AnalyzerResult Parser::parse_prefix() {
+AnalyzedExpr Parser::parse_prefix() {
 
     token::token_type type = tk.get_type();
 
-    AnalyzerResult res;
+    AnalyzedExpr res;
     SourceLocation op_loc;
     token::token_type op_type;
     switch (type) {
@@ -342,7 +350,7 @@ AnalyzerResult Parser::parse_prefix() {
     return res;
 }
 
-AnalyzerResult Parser::parse_multiplicative() {
+AnalyzedExpr Parser::parse_multiplicative() {
     static std::vector<token::token_type> types {
         token::op_asterisk,
         token::op_slash,
@@ -351,7 +359,7 @@ AnalyzerResult Parser::parse_multiplicative() {
     return left_assoc_bin_op(parse_prefix, types);
 }
 
-AnalyzerResult Parser::parse_additive() {
+AnalyzedExpr Parser::parse_additive() {
     static std::vector<token::token_type> types {
         token::op_plus,
         token::op_minus
@@ -359,7 +367,7 @@ AnalyzerResult Parser::parse_additive() {
     return left_assoc_bin_op(parse_multiplicative, types);
 }
 
-AnalyzerResult Parser::parse_gl_relational() {
+AnalyzedExpr Parser::parse_gl_relational() {
     static std::vector<token::token_type> types {
         token::op_greater,
         token::op_greaterequal,
@@ -369,7 +377,7 @@ AnalyzerResult Parser::parse_gl_relational() {
     return left_assoc_bin_op(parse_additive, types);
 }
 
-AnalyzerResult Parser::parse_eq_relational() {
+AnalyzedExpr Parser::parse_eq_relational() {
     static std::vector<token::token_type> types {
         token::op_equalequal,
         token::op_exclamationequal
@@ -377,42 +385,42 @@ AnalyzerResult Parser::parse_eq_relational() {
     return left_assoc_bin_op(parse_gl_relational, types);
 }
 
-AnalyzerResult Parser::parse_logical_and() {
+AnalyzedExpr Parser::parse_logical_and() {
     static std::vector<token::token_type> types {
         token::op_ampamp
     };
     return left_assoc_bin_op(parse_eq_relational, types);
 }
 
-AnalyzerResult Parser::parse_logical_or() {
+AnalyzedExpr Parser::parse_logical_or() {
     static std::vector<token::token_type> types {
         token::op_pipepipe
     };
     return left_assoc_bin_op(parse_logical_and, types);
 }
 
-AnalyzerResult Parser::parse_assignment() {
+AnalyzedExpr Parser::parse_assignment() {
     static std::vector<token::token_type> types {
         token::op_equal
     };
     return right_assoc_bin_op(parse_logical_or, types);
 }
 
-AnalyzerResult Parser::parse_comma() {
+AnalyzedExpr Parser::parse_comma() {
     static std::vector<token::token_type> types {
         token::op_comma
     };
     return left_assoc_bin_op(parse_assignment, types);
 }
 
-AnalyzerResult Parser::parse_expr() {
-    AnalyzerResult node = parse_comma();
+AnalyzedExpr Parser::parse_expr() {
+    AnalyzedExpr node = parse_comma();
     return node;
 }
 
-std::vector<AnalyzerResult> Parser::parse_call_args() {
+std::vector<AnalyzedExpr> Parser::parse_call_args() {
 
-    std::vector<AnalyzerResult> args;
+    std::vector<AnalyzedExpr> args;
 
     // consume left paren
     consume();
@@ -425,7 +433,7 @@ std::vector<AnalyzerResult> Parser::parse_call_args() {
         return args;
     }
 
-    AnalyzerResult arg;
+    AnalyzedExpr arg;
     bool go = true;
     while (go) {
 
@@ -463,11 +471,11 @@ std::vector<AnalyzerResult> Parser::parse_call_args() {
     return args;
 }
 
-AnalyzerResult Parser::parse_type() {
+AnalyzedType Parser::parse_type() {
 
-    AnalyzerResult type;
-    AnalyzerResult temp;
-    std::vector<AnalyzerResult> param_list;
+    AnalyzedType type;
+    AnalyzedType temp;
+    std::vector<AnalyzedType> param_list;
     SourceLocation loc_cache;
     bool go;
 
@@ -663,7 +671,7 @@ AnalyzerResult Parser::parse_type() {
 
 void Parser::parse_decl() {
 
-    AnalyzerResult type;
+    AnalyzedType type;
     SourceLocation loc;
 
     // consume decl keyword
@@ -763,19 +771,18 @@ void Parser::parse_decl() {
         }
 
         // save right paren loc
-        SourceLocation rparen_loc = tk.get_src_loc();
+        lparen_loc.copy_end(tk.get_src_loc());
 
         // consume right paren
         consume();
 
         // analyze func decl
-        AnalyzerResult func_decl = analyzer.analyze_func_decl(
+        AnalyzedStmt func_decl = analyzer.analyze_func_decl(
             type,
             ident,
             params,
             ident_loc,
-            lparen_loc,
-            rparen_loc
+            lparen_loc
         );
 
         // expect left brace for definition
@@ -813,9 +820,10 @@ void Parser::parse_decl() {
     // var decl
     else {
         // TODO: handle arrays (length and/or definition)
-        
+
         // handle definition
         if (tk.get_type() == token::op_equal) {
+            std::cout << "starting var define parse\n";
 
             // cache loc of '='
             SourceLocation eqloc = tk.get_src_loc();
@@ -824,7 +832,7 @@ void Parser::parse_decl() {
             consume();
 
             // parse expr
-            AnalyzerResult rhs = parse_expr();
+            AnalyzedExpr rhs = parse_expr();
 
             // analyze var decl
             analyzer.analyze_var_decl(
@@ -834,6 +842,7 @@ void Parser::parse_decl() {
                 rhs,
                 eqloc
             );
+            std::cout << "finished var define parse\n";
         }
 
         // just declaration
@@ -849,10 +858,8 @@ void Parser::parse_decl() {
 }
 
 bool Parser::parse_stmt() {
-    
-    AnalyzerResult res;
+
     SourceLocation loc_cache;
-    AnalyzerResult temp;
     token::token_type tk_type = tk.get_type();
 
     std::cout << tk.get_print_str() << std::endl;
@@ -931,7 +938,7 @@ bool Parser::parse_stmt() {
         consume();
 
         // parse type
-        temp = parse_type();
+        AnalyzedType temp = parse_type();
 
         // notify analyzer
         analyzer.analyze_type_alias(
@@ -951,7 +958,7 @@ bool Parser::parse_stmt() {
         consume();
 
         // parse expr
-        temp = parse_expr();
+        AnalyzedExpr temp = parse_expr();
 
         // analyze return stmt
         analyzer.analyze_return_stmt(temp);
@@ -974,7 +981,7 @@ bool Parser::parse_stmt() {
     else {
 
         // parse expr
-        temp = parse_expr();
+        AnalyzedExpr temp = parse_expr();
 
         // add to current scope
         analyzer.add_expr_as_stmt(temp);

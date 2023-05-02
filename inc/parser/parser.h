@@ -56,8 +56,8 @@ private:
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
     */
-    AnalyzerResult left_assoc_bin_op(
-        AnalyzerResult (Parser::*higher_prec)(),
+    AnalyzedExpr left_assoc_bin_op(
+        AnalyzedExpr (Parser::*higher_prec)(),
         std::vector<token::token_type> const &types
     );
 
@@ -69,8 +69,8 @@ private:
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
     */
-    AnalyzerResult right_assoc_bin_op(
-        AnalyzerResult (Parser::*higher_prec)(),
+    AnalyzedExpr right_assoc_bin_op(
+        AnalyzedExpr (Parser::*higher_prec)(),
         std::vector<token::token_type> const &types
     );
 
@@ -84,9 +84,9 @@ private:
      * @param node the existing node to add all parsed nodes to
     */
     void n_operand_op(
-        AnalyzerResult (Parser::*higher_prec)(),
+        AnalyzedExpr (Parser::*higher_prec)(),
         std::vector<token::token_type> const &types,
-        AnalyzerResult node
+        AnalyzedExpr node
     );
 
     /** ------------------- EXPRESSION PARSING ------------------- */
@@ -109,7 +109,7 @@ private:
      * @param node the unit node to apply to
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_postfix(AnalyzerResult node);
+    AnalyzedExpr parse_postfix(AnalyzedExpr node);
 
     /**
      * OPERATOR PRECEDENCE [1, 2].
@@ -123,7 +123,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_prefix();
+    AnalyzedExpr parse_prefix();
 
     /**
      * OPERATOR PRECEDENCE [1, 3].
@@ -137,7 +137,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_multiplicative();
+    AnalyzedExpr parse_multiplicative();
 
     /**
      * OPERATOR PRECEDENCE [1, 4].
@@ -151,7 +151,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_additive();
+    AnalyzedExpr parse_additive();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6].
@@ -165,7 +165,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_gl_relational();
+    AnalyzedExpr parse_gl_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7].
@@ -179,7 +179,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_eq_relational();
+    AnalyzedExpr parse_eq_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11].
@@ -193,7 +193,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_logical_and();
+    AnalyzedExpr parse_logical_and();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12].
@@ -207,7 +207,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_logical_or();
+    AnalyzedExpr parse_logical_or();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12], U [14].
@@ -221,7 +221,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_assignment();
+    AnalyzedExpr parse_assignment();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12] U [14, 15].
@@ -235,7 +235,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_comma();
+    AnalyzedExpr parse_comma();
 
     /**
      * This function serves as the entry point for parsing expressions. It
@@ -248,7 +248,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzerResult parse_expr();
+    AnalyzedExpr parse_expr();
 
     /** ------------------- STATEMENT PARSING ------------------- */
 
@@ -266,14 +266,14 @@ private:
      * 
      * @param node the node to add the arguments to
     */
-    std::vector<AnalyzerResult> parse_call_args();
+    std::vector<AnalyzedExpr> parse_call_args();
 
     /**
      * Parses a type given that the current token is the first token of the type.
      * 
      * @return pointer to the parsed type or nullptr if no type was found
     */
-    AnalyzerResult parse_type();
+    AnalyzedType parse_type();
 
     /**
      * Parses a var or func declaration given that the current token is the

@@ -54,7 +54,7 @@ public:
 public:
 
     Type();
-    ~Type() { };
+    ~Type() { }
 
     /**
      * Prevent copying.

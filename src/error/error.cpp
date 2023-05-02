@@ -116,7 +116,7 @@ void ErrorHandler::print_error(Error &err) {
             std::cout << CYA << err.str << RST << " is deprecated";
             break;
         case error::nyi:
-            std::cout << CYA << err.str << RST << " are not yet implemented";
+            std::cout << BLU << err.str << RST << " are not yet implemented";
             break;
 
         default:

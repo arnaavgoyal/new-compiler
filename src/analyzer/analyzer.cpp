@@ -141,11 +141,14 @@ SemanticAnalyzer::SemanticAnalyzer(
     error_type = type_allocator.alloc();
     error_type->type = type::error_type;
     error_type->str = str_allocator.alloc();
-    *error_type->str = "<error-type>";
+    *error_type->str = std::string("<error-type>");
 
     // create error node
     error_node = node_allocator.alloc();
-    error_node->type = ast::error;
+    error_node->kind = ast::error;
+    error_node->str = str_allocator.alloc();
+    *(std::string *)error_node->str = std::string("<error-node>");
+    error_node->type = error_type;
 
     // add all primitive types
     Type *type_ptr;
@@ -167,16 +170,16 @@ SemanticAnalyzer::SemanticAnalyzer(
     enter_new_scope();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_function_type(
-    std::vector<AnalyzerResult> param_types,
-    AnalyzerResult return_type,
+AnalyzedType SemanticAnalyzer::analyze_function_type(
+    std::vector<AnalyzedType> param_types,
+    AnalyzedType return_type,
     SourceLocation start_loc,
     SourceLocation end_loc
 ) {
 
     // make string representation
     std::string rep = "(";
-    std::vector<AnalyzerResult>::iterator
+    std::vector<AnalyzedType>::iterator
         i = param_types.begin(),
         end = param_types.end();
     bool start = true;
@@ -187,9 +190,9 @@ AnalyzerResult SemanticAnalyzer::analyze_function_type(
         else {
             start = false;
         }
-        rep += *i->type->str;
+        rep += *i->contents->str;
     }
-    rep += ")" + *return_type.type->str;
+    rep += ")" + *return_type.contents->str;
 
     std::cout << "  rep: " << rep << std::endl;
 
@@ -198,7 +201,7 @@ AnalyzerResult SemanticAnalyzer::analyze_function_type(
 
     // already exists
     if (type) {
-        return AnalyzerResult(type);
+        return AnalyzedType(type);
     }
 
     // does not exist yet
@@ -211,19 +214,20 @@ AnalyzerResult SemanticAnalyzer::analyze_function_type(
     type = type_allocator.alloc();
     type->type = type::function_type;
     for (
-        std::vector<AnalyzerResult>::iterator
+        std::vector<AnalyzedType>::iterator
             i = param_types.begin(),
             end = param_types.end();
         i != end;
         i++
     ) {
-        type->params.push_back(i->type);
+        std::cout << "pb\n";
+        type->params.push_back(i->contents);
     }
-    type->returns = return_type.type;
+    type->returns = return_type.contents;
     type->str = str;
     insert_type(str, type);
 
-    AnalyzerResult result = AnalyzerResult(type);
+    AnalyzedType result = AnalyzedType(type);
 
     std::cout << "finished func type analyze\n";
 
@@ -231,7 +235,7 @@ AnalyzerResult SemanticAnalyzer::analyze_function_type(
     return result;
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_typename(
+AnalyzedType SemanticAnalyzer::analyze_typename(
     std::string const *ident,
     SourceLocation loc
 ) {
@@ -241,27 +245,27 @@ AnalyzerResult SemanticAnalyzer::analyze_typename(
     // type does not exist
     if (type == nullptr) {
         ErrorHandler::handle(error::ident_is_not_a_typename, loc, ident->c_str());
-        return AnalyzerResult(error_type, /** has errors = */ true);
+        return AnalyzedType(error_type, /** has errors = */ true);
     }
 
     // type exists
-    return AnalyzerResult(type);
+    return AnalyzedType(type);
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_pointer_type(
-    AnalyzerResult pointee,
+AnalyzedType SemanticAnalyzer::analyze_pointer_type(
+    AnalyzedType pointee,
     SourceLocation pointer_modifier_loc
 ) {
 
     // make string representation
-    std::string rep = "*" + *pointee.type->str;
+    std::string rep = "*" + *pointee.contents->str;
 
     // find type
     Type *type = (Type *)find_type_in_any_active_scope(&rep);
 
     // already exists
     if (type) {
-        return AnalyzerResult(type);
+        return AnalyzedType(type);
     }
 
     // does not exist yet
@@ -273,16 +277,16 @@ AnalyzerResult SemanticAnalyzer::analyze_pointer_type(
     // create type
     type = type_allocator.alloc();
     type->type = type::pointer_type;
-    type->points_to = pointee.type;
+    type->points_to = pointee.contents;
     type->str = str;
     insert_type(str, type);
 
     // return result
-    return AnalyzerResult(type);
+    return AnalyzedType(type);
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_array_type(
-    AnalyzerResult array_of,
+AnalyzedType SemanticAnalyzer::analyze_array_type(
+    AnalyzedType array_of,
     SourceLocation array_modifier_loc
 ) {
     // TODO: implement
@@ -290,7 +294,7 @@ AnalyzerResult SemanticAnalyzer::analyze_array_type(
     ErrorHandler::prog_exit();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_primitive_type(
+AnalyzedType SemanticAnalyzer::analyze_primitive_type(
     token::token_type prim,
     SourceLocation loc
 ) {
@@ -309,18 +313,47 @@ AnalyzerResult SemanticAnalyzer::analyze_primitive_type(
         )
     );
 
-    return AnalyzerResult(primitive_types[idx]);
+    return AnalyzedType(primitive_types[idx]);
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_binary_op_expr(
+AnalyzedExpr SemanticAnalyzer::analyze_binary_op_expr(
     token::token_type op,
-    AnalyzerResult lhs,
-    AnalyzerResult rhs,
+    AnalyzedExpr lhs,
+    AnalyzedExpr rhs,
     SourceLocation op_loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, op_loc, "binary operations");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, op_loc, "binary operations");
+    // ErrorHandler::prog_exit();
+
+    // lhs.contents->print();
+    // rhs.contents->print();
+
+    Type const *op_type;
+
+    bool err = lhs.contents->has_error || rhs.contents->has_error;
+
+    if (lhs.contents->type != rhs.contents->type) {
+        op_type = error_type;
+        err = true;
+    }
+    else {
+        op_type = lhs.contents->type;
+    }
+
+
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::binary_op,
+        op_type,
+        nullptr,
+        op_loc,
+        op,
+        err
+    );
+    node->children.push_back(lhs.contents);
+    node->children.push_back(rhs.contents);
+
+    return AnalyzedExpr(node);
 }
 
 AnalyzerResult SemanticAnalyzer::analyze_postfix_op_expr(
@@ -365,13 +398,42 @@ AnalyzerResult SemanticAnalyzer::analyze_paren_expr(
     ErrorHandler::prog_exit();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_ref_expr(
+AnalyzedExpr SemanticAnalyzer::analyze_ref_expr(
     std::string const *ident,
     SourceLocation loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, loc, "reference expressions");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, loc, "reference expressions");
+    // ErrorHandler::prog_exit();
+
+    // TODO: allow for scope stack climbing to find shadowed symbols
+    //       if current scope's symbol is invalid
+
+    // find symbol
+    Symbol const *res = find_symbol_in_any_active_scope(ident);
+
+    Type const *sym_type;
+    bool err = false;
+
+    // no symbol
+    if (res == nullptr) {
+        sym_type = error_type;
+        err = true;
+    }
+    else {
+        sym_type = res->type_ptr;
+    }
+
+    ASTNode *expr = node_allocator.alloc();
+    expr->set(
+        ast::ref_expr,
+        sym_type,
+        ident,
+        loc,
+        token::identifier,
+        err
+    );
+
+    return AnalyzedExpr(expr);
 }
 
 AnalyzerResult SemanticAnalyzer::analyze_character_literal(
@@ -383,13 +445,27 @@ AnalyzerResult SemanticAnalyzer::analyze_character_literal(
     ErrorHandler::prog_exit();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_numeric_literal(
+AnalyzedExpr SemanticAnalyzer::analyze_numeric_literal(
     std::string const *num_lit,
     SourceLocation loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, loc, "numeric literals");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, loc, "numeric literals");
+    // ErrorHandler::prog_exit();
+
+    // assume no overflow and default size i32 for now
+    // TODO: size check and dynamic type assignment
+    std::cout << *num_lit << std::endl;
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::int_lit,
+        analyze_primitive_type(token::kw_i32, loc).contents, // SPAGHETTI CODE AT ITS FINEST
+        num_lit,
+        loc,
+        token::numeric_literal,
+        false
+    );
+
+    return AnalyzedExpr(node);
 }
 
 AnalyzerResult SemanticAnalyzer::analyze_string_literal(
@@ -411,17 +487,46 @@ AnalyzerResult SemanticAnalyzer::analyze_prefix_op_expr(
     ErrorHandler::prog_exit();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_func_decl(
-    AnalyzerResult type,
+AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
+    AnalyzedType type,
     std::string const *ident,
     std::vector<std::string const *> params,
     SourceLocation ident_loc,
-    SourceLocation lparen_loc,
-    SourceLocation rparen_loc
+    SourceLocation param_list_loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, ident_loc, "function declarations");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, ident_loc, "function declarations");
+    // ErrorHandler::prog_exit();
+
+    // param num mismatch
+    if (type.contents->params.size() != params.size()) {
+        ErrorHandler::handle(
+            error::mismatch_between_func_type_and_param_list,
+            param_list_loc,
+            "wrong number of parameters"
+        );
+    }
+
+    // redeclaration in current scope
+    if (find_symbol_in_current_scope(ident)) {
+        ErrorHandler::handle(
+            error::redeclaration_of_symbol_in_same_scope,
+            ident_loc,
+            "redeclared symbol"
+        );
+    }
+
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::func_decl,
+        type.contents,
+        ident,
+        ident_loc,
+        token::unknown,
+        false
+    );
+    node->print();
+
+    return AnalyzedStmt(node);
 }
 
 void SemanticAnalyzer::start_func_define(
@@ -438,7 +543,7 @@ void SemanticAnalyzer::end_func_define(
 }
 
 void SemanticAnalyzer::analyze_var_decl(
-    AnalyzerResult type,
+    AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc
 ) {
@@ -446,7 +551,7 @@ void SemanticAnalyzer::analyze_var_decl(
 }
 
 void SemanticAnalyzer::analyze_var_decl(
-    AnalyzerResult type,
+    AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc,
     AnalyzerResult rhs,
@@ -456,7 +561,7 @@ void SemanticAnalyzer::analyze_var_decl(
 }
 
 void SemanticAnalyzer::analyze_type_alias(
-    AnalyzerResult type,
+    AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc
 ) {
