@@ -87,7 +87,7 @@ lex(tk);
 ```
 
 ## Parsing
-The `Parser` class implements a fully featured LR(1) parser.
+The `Parser` class implements a fully featured LL(1) parser.
 It is declared in [parser/parser.h][12] and defined in [parser/parser.cpp][13].
 
 The expression parsing is done via recursive descent, with a hierarchy of functions that are called in order of operation precedence.
