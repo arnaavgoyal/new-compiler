@@ -188,8 +188,7 @@ public:
 
     AnalyzedExpr analyze_paren_expr(
         AnalyzedExpr inside,
-        SourceLocation left_paren_loc,
-        SourceLocation right_paren_loc
+        SourceLocation loc
     );
 
     AnalyzedExpr analyze_ref_expr(
@@ -221,7 +220,7 @@ public:
     AnalyzedStmt analyze_func_decl(
         AnalyzedType type,
         std::string const *ident,
-        std::vector<std::string const *> params,
+        std::vector<std::pair<std::string const *, SourceLocation>> params,
         SourceLocation ident_loc,
         SourceLocation param_list_loc
     );

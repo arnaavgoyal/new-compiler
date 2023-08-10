@@ -115,7 +115,7 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
             }
 
             std::cout << "' "
-                << "\e[0;92m" << *tree->type->str
+                << "\e[0;92m" << *(tree->type->get_str())
                 << "\e[0;95m" << " <";
             print_err_loc_preamble(tree->loc);
             std::cout << ">";

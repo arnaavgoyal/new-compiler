@@ -251,8 +251,11 @@ AnalyzedExpr Parser::parse_prefix() {
             // parse expr
             res = parse_expr();
 
+            // copy end loc
+            op_loc.copy_end(tk.get_src_loc());
+
             // get result
-            res = analyzer.analyze_paren_expr(res, op_loc, tk.get_src_loc());
+            res = analyzer.analyze_paren_expr(res, op_loc);
 
             // consume right paren
             consume();
@@ -713,7 +716,7 @@ void Parser::parse_decl() {
         //   2: (ident)
         //   3: (ident, ident, ... , ident)
 
-        std::vector<std::string const *> params;
+        std::vector<std::pair<std::string const *, SourceLocation>> params;
 
         // expect left paren
         if (tk.get_type() != token::op_leftparen) {
@@ -739,7 +742,7 @@ void Parser::parse_decl() {
             else {
 
                 // add param to list
-                params.push_back(tk.get_identifier_str());
+                params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
 
                 // consume ident
                 consume();

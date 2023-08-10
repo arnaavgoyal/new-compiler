@@ -51,7 +51,9 @@ Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(std::string cons
     std::vector<std::pair<scope_id_t, Symbol const *>>::reverse_iterator
         end = result.rend();
 
+    std::cout << "looking for symbol " << *ident << " in any active scope\n";
     while (start != end) {
+        std::cout << "   found " << start->second->name << std::endl;
         if (status(start->first) == open) {
             return start->second;
         }
@@ -72,9 +74,10 @@ void SemanticAnalyzer::insert_symbol(
     Symbol *sym = sym_allocator.alloc();
     sym->name = name;
     sym->type_ptr = type_ptr;
-    std::vector<std::pair<scope_id_t, Symbol const *>>
-        result = symbol_table.lookup(*key);
-    result.push_back(std::make_pair(curr_scope_id, sym));
+    symbol_table.insert(*key, std::make_pair(curr_scope_id, sym));
+    std::cout << "inserted " << name
+        << " of type " << *type_ptr->str
+        << " into symtable\n";
 }
 
 Type const *SemanticAnalyzer::find_type_in_current_scope(std::string const *ident) {
@@ -120,10 +123,7 @@ Type const *SemanticAnalyzer::find_type_in_any_active_scope(std::string const *i
 }
 
 void SemanticAnalyzer::insert_type(std::string const *key, Type const *value) {
-
-    std::vector<std::pair<scope_id_t, Type const *>>
-        result = type_table.lookup(*key);
-    result.push_back(std::make_pair(curr_scope_id, value));
+    type_table.insert(*key, std::make_pair(curr_scope_id, value));
 }
 
 SemanticAnalyzer::SemanticAnalyzer(
@@ -137,11 +137,15 @@ SemanticAnalyzer::SemanticAnalyzer(
     scope_id_gen = 0;
     curr_scope_id = 0;
 
+    std::string *str;
+
     // create error type
     error_type = type_allocator.alloc();
     error_type->type = type::error_type;
-    error_type->str = str_allocator.alloc();
-    *error_type->str = std::string("<error-type>");
+    str = str_allocator.alloc();
+    *str = std::string("<error-type>");
+    error_type->str = str;
+    error_type->contains_error = true;
 
     // create error node
     error_node = node_allocator.alloc();
@@ -161,8 +165,10 @@ SemanticAnalyzer::SemanticAnalyzer(
     ) {
         type_ptr = type_allocator.alloc();
         type_ptr->type = type::primitive_type;
-        type_ptr->str = str_allocator.alloc();
-        type_ptr->str->assign(token::get_keyword_string(*i));
+        str = str_allocator.alloc();
+        str->assign(token::get_keyword_string(*i));
+        type_ptr->str = str;
+        type_ptr->contains_error = false;
         primitive_types.push_back(type_ptr);
     }
 
@@ -221,9 +227,9 @@ AnalyzedType SemanticAnalyzer::analyze_function_type(
         i++
     ) {
         std::cout << "pb\n";
-        type->params.push_back(i->contents);
+        type->add_param(i->contents);
     }
-    type->returns = return_type.contents;
+    type->set_inner_type(return_type.contents);
     type->str = str;
     insert_type(str, type);
 
@@ -276,9 +282,13 @@ AnalyzedType SemanticAnalyzer::analyze_pointer_type(
 
     // create type
     type = type_allocator.alloc();
-    type->type = type::pointer_type;
-    type->points_to = pointee.contents;
-    type->str = str;
+    type->set(
+        str,
+        pointee.contents->type == type::function_type
+            ? type::pointer_to_function_type
+            : type::pointer_type,
+        pointee.contents
+    );
     insert_type(str, type);
 
     // return result
@@ -356,25 +366,129 @@ AnalyzedExpr SemanticAnalyzer::analyze_binary_op_expr(
     return AnalyzedExpr(node);
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_postfix_op_expr(
+AnalyzedExpr SemanticAnalyzer::analyze_postfix_op_expr(
     token::token_type op,
-    AnalyzerResult expr,
+    AnalyzedExpr expr,
     SourceLocation op_loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, op_loc, "postfix operations");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, op_loc, "postfix operations");
+    // ErrorHandler::prog_exit();
+
+    op_loc.copy_start(expr.contents->loc);
+
+    // TODO: typecheck for these ops
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::unary_op,
+        expr.contents->type,
+        nullptr,
+        op_loc,
+        op,
+        expr.contents->has_error
+    );
+    node->children.push_back(expr.contents);
+    node->print();
+
+    return AnalyzedExpr(node);
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_call_expr(
-    AnalyzerResult expr,
+AnalyzedExpr SemanticAnalyzer::analyze_call_expr(
+    AnalyzedExpr expr,
     std::vector<AnalyzerResult> args,
     SourceLocation call_start_loc,
     SourceLocation call_end_loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, call_start_loc, "call expressions");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, call_start_loc, "call expressions");
+    // ErrorHandler::prog_exit();
+
+    expr.contents->print();
+
+    Type const *callable = expr.contents->type;
+    bool error = expr.contents->has_error;
+    ASTNode *node = node_allocator.alloc();
+    node->children.push_back(expr.contents);
+
+    // verify func type
+    if (callable->type == type::pointer_to_function_type) {
+        callable = callable->points_to;
+    }
+    else if (callable->type != type::function_type) {
+        ErrorHandler::handle(
+            error::type_is_not_callable,
+            expr.contents->loc,
+            "does not have type that is callable"
+        );
+        node->set(
+            ast::call_expr,
+            error_type,
+            nullptr,
+            call_start_loc,
+            token::op_leftparen,
+            true
+        );
+
+        return AnalyzedExpr(node);
+    }
+
+    int num_args = callable->params.size();
+
+    // verify args
+    if (args.size() != num_args) {
+        error = true;
+
+        ErrorHandler::handle(
+            error::mismatch_between_func_type_and_param_list,
+            call_end_loc,
+            "wrong number of args"
+        );
+
+        node->set(
+            ast::call_expr,
+            error_type,
+            nullptr,
+            call_start_loc,
+            token::op_leftparen,
+            true
+        );
+
+        for (int i = 0; i < args.size(); i++) {
+            node->children.push_back(args[i].contents);
+        }
+        return AnalyzedExpr(node);
+    }
+
+    // verify arg types
+    ASTNode const *arg;
+    std::vector<Type const *> const paramtypes = expr.contents->type->params;
+    for (int i = 0; i < num_args; i++) {
+        arg = args[i].contents;
+        if (arg->type == error_type) {
+            error = true;
+        }
+        else if (arg->type != paramtypes[i]) {
+            error = true;
+
+            ErrorHandler::handle(
+                error::argument_type_mismatch,
+                arg->loc,
+                "argument has wrong type"
+            );
+        }
+        node->children.push_back(args[i].contents);
+    }
+
+    node->set(
+        ast::call_expr,
+        expr.contents->type->returns,
+        nullptr,
+        call_start_loc,
+        token::op_leftparen,
+        error
+    );
+
+    node->print();
+
+    return AnalyzedExpr(node);
 }
 
 AnalyzerResult SemanticAnalyzer::analyze_subscript_expr(
@@ -388,14 +502,23 @@ AnalyzerResult SemanticAnalyzer::analyze_subscript_expr(
     ErrorHandler::prog_exit();
 }
 
-AnalyzerResult SemanticAnalyzer::analyze_paren_expr(
-    AnalyzerResult inside,
-    SourceLocation left_paren_loc,
-    SourceLocation right_paren_loc
+AnalyzedExpr SemanticAnalyzer::analyze_paren_expr(
+    AnalyzedExpr inside,
+    SourceLocation loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, left_paren_loc, "parenthesized expressions");
-    ErrorHandler::prog_exit();
+    ASTNode *pexpr = node_allocator.alloc();
+    pexpr->set(
+        ast::paren_expr,
+        inside.contents->type,
+        nullptr,
+        loc,
+        token::op_leftparen,
+        inside.contents->has_error
+    );
+    pexpr->children.push_back(inside.contents);
+    pexpr->print();
+
+    return AnalyzedExpr(pexpr);
 }
 
 AnalyzedExpr SemanticAnalyzer::analyze_ref_expr(
@@ -418,6 +541,11 @@ AnalyzedExpr SemanticAnalyzer::analyze_ref_expr(
     if (res == nullptr) {
         sym_type = error_type;
         err = true;
+        ErrorHandler::handle(
+            error::referenced_ident_is_undefined,
+            loc,
+            "identifier is undefined"
+        );
     }
     else {
         sym_type = res->type_ptr;
@@ -490,7 +618,7 @@ AnalyzerResult SemanticAnalyzer::analyze_prefix_op_expr(
 AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
     AnalyzedType type,
     std::string const *ident,
-    std::vector<std::string const *> params,
+    std::vector<std::pair<std::string const *, SourceLocation>> params,
     SourceLocation ident_loc,
     SourceLocation param_list_loc
 ) {
@@ -515,6 +643,9 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
         );
     }
 
+    // add to symbol table
+    insert_symbol(ident, *ident, type.contents);
+
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::func_decl,
@@ -522,24 +653,56 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
         ident,
         ident_loc,
         token::unknown,
-        false
+        type.contents->contains_error
     );
+
+    // enter new scope
+    enter_new_scope();
+
+    // add params
+    ASTNode *param;
+    for (int i = 0; i < params.size(); i++) {
+
+        // add to symbol table
+        insert_symbol(
+            params[i].first,
+            *params[i].first,
+            type.contents->params[i]
+        );
+
+        // make node
+        param = node_allocator.alloc();
+        param->set(
+            ast::param_decl,
+            type.contents->params[i],
+            params[i].first,
+            params[i].second,
+            token::identifier,
+            type.contents->params[i]->contains_error
+        );
+
+        // add to decl node
+        node->children.push_back(param);
+    }
+
     node->print();
 
     return AnalyzedStmt(node);
 }
 
 void SemanticAnalyzer::start_func_define(
-    AnalyzerResult decl,
+    AnalyzedStmt decl,
     SourceLocation define_start_loc
 ) {
-    // TODO: implement
+    // scope should already have been entered
+    // do nothing i guess
 }
 
 void SemanticAnalyzer::end_func_define(
     SourceLocation define_end_loc
 ) {
-    // TODO: implement
+    // exit scope
+    exit_current_scope();
 }
 
 void SemanticAnalyzer::analyze_var_decl(
@@ -547,7 +710,27 @@ void SemanticAnalyzer::analyze_var_decl(
     std::string const *ident,
     SourceLocation ident_loc
 ) {
-    // TODO: implement
+    ASTNode *decl = node_allocator.alloc();
+    decl->set(
+        ast::var_decl,
+        type.contents,
+        ident,
+        ident_loc,
+        token::identifier,
+        type.contents->contains_error
+    );
+
+    // ensure no redeclaration
+    if (find_symbol_in_current_scope(ident)) {
+        ErrorHandler::handle(
+            error::redeclaration_of_symbol_in_same_scope,
+            ident_loc,
+            ident->c_str()
+        );
+        decl->has_error = true;
+    }
+
+    decl->print();
 }
 
 void SemanticAnalyzer::analyze_var_decl(
@@ -565,25 +748,68 @@ void SemanticAnalyzer::analyze_type_alias(
     std::string const *ident,
     SourceLocation ident_loc
 ) {
-    // TODO: implement
+    bool err = false;
+    Type *alias;
+
+    // ensure no redeclaration
+    if (find_type_in_current_scope(ident)) {
+        ErrorHandler::handle(
+            error::redeclaration_of_symbol_in_same_scope,
+            ident_loc,
+            ident->c_str()
+        );
+        err = true;
+        alias = error_type;
+    }
+    else {
+
+        // add alias to type table
+        alias = type_allocator.alloc();
+        alias->set_inner_type(type.contents);
+        alias->str = ident;
+        alias->type = type::alias_type;
+        insert_type(ident, alias);
+    }
+
+    ASTNode *stmt = node_allocator.alloc();
+    stmt->set(
+        ast::typedef_stmt,
+        type.contents,
+        ident,
+        ident_loc,
+        token::identifier,
+        err
+    );
+
+    stmt->print();
 }
 
 void SemanticAnalyzer::start_scoped_block(
     SourceLocation block_start_loc
 ) {
-    // TODO: implement
+    enter_new_scope();
 }
 
 void SemanticAnalyzer::end_scoped_block(
     SourceLocation block_end_loc
 ) {
-    // TODO: implement
+    exit_current_scope();
 }
 
 void SemanticAnalyzer::analyze_return_stmt(
-    AnalyzerResult expr
+    AnalyzedExpr expr
 ) {
-    // TODO: implement
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::ret_stmt,
+        expr.contents->type,
+        nullptr,
+        expr.contents->loc,
+        token::kw_return,
+        expr.contents->has_error
+    );
+
+    // TODO: finish
 }
 
 void SemanticAnalyzer::add_expr_as_stmt(

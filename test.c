@@ -3,7 +3,9 @@
 
 int nerd = 0;
 
-int *foo(int i);
+int *foo(int i) {
+    int i = 0;
+}
 
 int k = 0;
 

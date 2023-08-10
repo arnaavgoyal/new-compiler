@@ -16,6 +16,9 @@ namespace error {
         redeclaration_of_symbol_in_same_scope,
         ident_is_not_a_typename,
         mismatch_between_func_type_and_param_list,
+        type_is_not_callable,
+        argument_type_mismatch,
+        referenced_ident_is_undefined,
 
         // dev errors
         deprecated,

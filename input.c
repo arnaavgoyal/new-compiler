@@ -1,6 +1,16 @@
+using i3 = i32;
+
 decl (i3, i32) *() i32
-foo (i, j) {
-    return i * j;
+foo (first, second) {
+    decl i32 i;
+    decl i64 no = (0);
+    foo(first, second);
+    //return i * j;
+};
+
+decl () *i3
+bar () {
+    return first;
 };
 
 // decl (i64, f64) i64

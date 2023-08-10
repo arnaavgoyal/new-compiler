@@ -10,6 +10,7 @@ namespace type {
         primitive_type,
 
         pointer_type,
+        pointer_to_function_type,
         array_type,
         alias_type,
         function_type,
@@ -22,10 +23,10 @@ class Type {
 
     friend class SemanticAnalyzer;
 
-public:
+private:
 
     /** string representation of this type */
-    std::string *str;
+    std::string const *str;
 
     /** the type of this type */
     type::type type;
@@ -51,7 +52,32 @@ public:
         std::vector<Type const *> params;
     };
 
+    bool contains_error : 1;
+
 public:
+
+    void set(
+        std::string *str,
+        type::type type,
+        Type const *inner_type
+    ) {
+        this->str = str;
+        this->type = type;
+        this->points_to = inner_type;
+        this->contains_error = this->contains_error || inner_type->contains_error;
+    }
+
+    void set_inner_type(Type const *inner) {
+        points_to = inner;
+        contains_error = this->contains_error || inner->contains_error;
+    }
+
+    void add_param(Type const *param) {
+        params.push_back(param);
+        contains_error = this->contains_error || param->contains_error;
+    }
+
+    std::string const *get_str() const { return str; }
 
     Type();
     ~Type() { }
