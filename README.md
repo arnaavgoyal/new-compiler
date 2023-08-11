@@ -50,7 +50,7 @@ The main attraction of the class is the `handle` function. Given an error type, 
 It has all the bells and whistles of a production compiler: line numbers, context, underlining, and color highlighting.
 This is what an error printed using this function looks like:
 
-![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/4bbd7565-e870-4b21-ac71-16ae647bf976)
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/56b52473-191c-4205-8258-646e7f95c43f)
 
 Pretty awesome, right?
 
