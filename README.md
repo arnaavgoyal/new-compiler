@@ -178,7 +178,24 @@ This seemed to be cumbersome, and in the interest of future-proofing my symbol t
 During this change, I moved the broad scoping logic back to the parser, as it made no sense to keep it in the analyzer any longer since it now closely mirrored the AST logic.
 However, the scope objects are still mostly opaque so as to keep the analyzer in charge of maintaining the symbol tables.
 
-Currently, the parser and analyzer are in a transition state as I refactor them using my new strategy.
+This is what a statement parsing flow currently looks like (this is for parsing return):
+
+```cpp
+// cache start loc
+loc_cache = tk.get_src_loc();
+
+// make curr token the start of expr
+consume();
+
+// parse expr
+AnalyzedExpr temp = parse_expr();
+
+// analyze return stmt
+res = (ASTNode *)analyzer.analyze_return_stmt(temp).contents;
+```
+
+As you can see, there are still result objects being used.
+This is because the parser and analyzer are in a transition state as I refactor them using my new strategy.
 I am also in the process of making new additions to the language such as loops and if-else.
 
 As an example of the current capabilities, this code:
