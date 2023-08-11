@@ -9,6 +9,7 @@
 #include "ast/ast.h"
 #include "memory/allocator.h"
 #include <string>
+#include "analyzer/scope.h"
 
 template <typename T>
 class AnalyzedGeneric {
@@ -37,34 +38,13 @@ public:
 
 };
 
-typedef AnalyzedGeneric<ASTNode const *> AnalyzerResult;
-typedef AnalyzedGeneric<ASTNode const *> AnalyzedStmt;
-typedef AnalyzedGeneric<ASTNode const *> AnalyzedExpr;
+typedef AnalyzedGeneric<ASTNode *> AnalyzerResult;
+typedef AnalyzedGeneric<ASTNode *> AnalyzedStmt;
+typedef AnalyzedGeneric<ASTNode *> AnalyzedExpr;
 typedef AnalyzedGeneric<Type const *> AnalyzedType;
 
 class SemanticAnalyzer {
 private:
-
-    enum scope_status { open, closed };
-    using scope_id_t = unsigned long int;
-
-    /** symbol (vars and funcs) table */
-    HashTable<std::pair<scope_id_t, Symbol const *>> symbol_table;
-
-    /** type table */
-    HashTable<std::pair<scope_id_t, Type const *>> type_table;
-
-    /** scope stack */
-    std::stack<scope_id_t> scope_stack;
-
-    /** list of all scopes and their status */
-    std::vector<scope_status> scope_history;
-
-    /** the current scope's id */
-    scope_id_t curr_scope_id;
-
-    /** the id generator for new scopes */
-    scope_id_t scope_id_gen;
 
     /**  */
     Allocator<std::string> &str_allocator;
@@ -79,6 +59,9 @@ private:
     Allocator<ASTNode> node_allocator;
 
     /**  */
+    Allocator<Scope> scope_allocator;
+
+    /**  */
     Type *error_type;
 
     /**  */
@@ -90,39 +73,40 @@ private:
     /**  */
     std::vector<Type const *> primitive_types;
 
-    /**
-     * Determines the status of the scope with given scope id.
-     * 
-     * @param id the scope id
-     * @return the status
-    */
-    scope_status status(scope_id_t id);
+    Scope *gscope;
+
+public:
+
+    Scope *global_scope();
+
+private:
 
     /**
      * Generates a new scope id, pushes it onto the scope stack,
      * and set it as the current scope.
     */
-    void enter_new_scope();
+    void enter_new_scope(Scope **curr);
 
     /**
      * Pops the current scope off the stack and sets the new top of
      * the stack as the current scope.
     */
-    void exit_current_scope();
+    void exit_current_scope(Scope **curr);
     
-    Symbol const *find_symbol_in_current_scope(std::string const *ident);
-    Symbol const *find_symbol_in_any_active_scope(std::string const *ident);
+    Symbol const *find_symbol_in_current_scope(std::string const *ident, Scope **scope);
+    Symbol const *find_symbol_in_any_active_scope(std::string const *ident, Scope **scope);
     void insert_symbol(
-        std::string const *key,
+        Scope **scope,
         std::string const &name,
         Type const *type_ptr
     );
 
-    Type const *find_type_in_current_scope(std::string const *ident);
-    Type const *find_type_in_any_active_scope(std::string const *ident);
+    Type const *find_type_in_current_scope(std::string const *ident, Scope **scope);
+    Type const *find_type_in_any_active_scope(std::string const *ident, Scope **scope);
     void insert_type(
-        std::string const *key,
-        Type const *value
+        Scope **scope,
+        std::string const &key,
+        Type *value
     );
 
 public:
@@ -133,6 +117,7 @@ public:
     );
 
     AnalyzedType analyze_function_type(
+        Scope **scope,
         std::vector<AnalyzedType> param_types,
         AnalyzedType return_type,
         SourceLocation start_loc,
@@ -140,16 +125,19 @@ public:
     );
 
     AnalyzedType analyze_typename(
+        Scope **scope,
         std::string const *ident,
         SourceLocation loc
     );
 
     AnalyzedType analyze_pointer_type(
+        Scope **scope,
         AnalyzedType pointee,
         SourceLocation pointer_modifier_loc
     );
 
     AnalyzedType analyze_array_type(
+        Scope **scope,
         AnalyzedType array_of,
         SourceLocation array_modifier_loc
     );
@@ -192,6 +180,7 @@ public:
     );
 
     AnalyzedExpr analyze_ref_expr(
+        Scope **scope,
         std::string const *ident,
         SourceLocation loc
     );
@@ -218,6 +207,7 @@ public:
     );
 
     AnalyzedStmt analyze_func_decl(
+        Scope **scope,
         AnalyzedType type,
         std::string const *ident,
         std::vector<std::pair<std::string const *, SourceLocation>> params,
@@ -231,16 +221,19 @@ public:
     );
 
     void end_func_define(
+        Scope **scope,
         SourceLocation define_end_loc
     );
 
-    void analyze_var_decl(
+    AnalyzedStmt analyze_var_decl(
+        Scope **scope,
         AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc
     );
 
-    void analyze_var_decl(
+    AnalyzedStmt analyze_var_decl(
+        Scope **scope,
         AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc,
@@ -248,21 +241,24 @@ public:
         SourceLocation eqloc
     );
 
-    void analyze_type_alias(
+    AnalyzedStmt analyze_type_alias(
+        Scope **scope,
         AnalyzedType type,
         std::string const *ident,
         SourceLocation ident_loc
     );
 
     void start_scoped_block(
+        Scope **scope,
         SourceLocation block_start_loc
     );
 
     void end_scoped_block(
+        Scope **scope,
         SourceLocation block_end_loc
     );
 
-    void analyze_return_stmt(
+    AnalyzedStmt analyze_return_stmt(
         AnalyzerResult expr
     );
 

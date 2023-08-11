@@ -4,62 +4,52 @@
 #include <algorithm>
 #include "memory/allocator.h"
 #include "error/error.h"
-#include "analyzer/hashtable.h"
+#include "analyzer/scope.h"
 
-SemanticAnalyzer::scope_status SemanticAnalyzer::status(scope_id_t id) {
-    return scope_history[id];
+Scope *SemanticAnalyzer::global_scope() {
+    return gscope;
 }
 
-void SemanticAnalyzer::enter_new_scope() {
-    curr_scope_id = scope_id_gen;
-    scope_id_gen++;
-    scope_history.push_back(open);
-    scope_stack.push(curr_scope_id);
+void SemanticAnalyzer::enter_new_scope(Scope **curr) {
+    Scope *sc = scope_allocator.alloc();
+    sc->parent = *curr;
+    *curr = sc;
 }
-void SemanticAnalyzer::exit_current_scope() {
-    scope_history[curr_scope_id] = closed;
-    scope_stack.pop();
-    curr_scope_id = scope_stack.top();
+void SemanticAnalyzer::exit_current_scope(Scope **curr) {
+    *curr = (*curr)->parent;
 }
 
-Symbol const *SemanticAnalyzer::find_symbol_in_current_scope(std::string const *ident) {
-    
-    std::vector<std::pair<scope_id_t, Symbol const *>> const &
-        result = symbol_table.lookup(*ident);
-    std::vector<std::pair<scope_id_t, Symbol const *>>::const_reverse_iterator
-        start = result.rbegin();
-    std::vector<std::pair<scope_id_t, Symbol const *>>::const_reverse_iterator
-        end = result.rend();
+Symbol const *SemanticAnalyzer::find_symbol_in_current_scope(
+    std::string const *ident,
+    Scope **scope
+) {
+    std::map<std::string, Symbol *>::iterator
+        iter = (*scope)->sym_table.find(*ident),
+        end = (*scope)->sym_table.end();
 
-    if (start == end) {
+    if (iter == end) {
         return nullptr;
     }
 
-    if (start->first != curr_scope_id) {
-        return nullptr;
-    }
-
-    return start->second;
+    return iter->second;
 }
 
-Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(std::string const *ident) {
+Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(
+    std::string const *ident,
+    Scope **scope
+) {
 
-    std::vector<std::pair<scope_id_t, Symbol const *>>
-        result = symbol_table.lookup(*ident);
-    std::vector<std::pair<scope_id_t, Symbol const *>>::reverse_iterator
-        start = result.rbegin();
-    std::vector<std::pair<scope_id_t, Symbol const *>>::reverse_iterator
-        end = result.rend();
+    Scope *curr = *scope;
+    while (curr) {
+        std::map<std::string, Symbol *>::iterator
+            iter = curr->sym_table.find(*ident),
+            end = curr->sym_table.end();
 
-    std::cout << "looking for symbol " << *ident << " in any active scope\n";
-    while (start != end) {
-        std::cout << "   found " << start->second->name << std::endl;
-        if (status(start->first) == open) {
-            return start->second;
+        if (iter != end) {
+            return iter->second;
         }
-        else {
-            start++;
-        }
+
+        curr = curr->parent;
     }
 
     // not found
@@ -67,63 +57,61 @@ Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(std::string cons
 }
 
 void SemanticAnalyzer::insert_symbol(
-    std::string const *key,
+    Scope **scope,
     std::string const &name,
     Type const *type_ptr
 ) {
     Symbol *sym = sym_allocator.alloc();
     sym->name = name;
     sym->type_ptr = type_ptr;
-    symbol_table.insert(*key, std::make_pair(curr_scope_id, sym));
+    (*scope)->sym_table.insert(std::make_pair(name, sym));
     std::cout << "inserted " << name
         << " of type " << *type_ptr->str
         << " into symtable\n";
 }
 
-Type const *SemanticAnalyzer::find_type_in_current_scope(std::string const *ident) {
+Type const *SemanticAnalyzer::find_type_in_current_scope(
+    std::string const *ident,
+    Scope **scope
+) {
+    std::map<std::string, Type *>::iterator
+        iter = (*scope)->type_table.find(*ident),
+        end = (*scope)->type_table.end();
 
-    std::vector<std::pair<scope_id_t, Type const *>>
-        result = type_table.lookup(*ident);
-    std::vector<std::pair<scope_id_t, Type const *>>::reverse_iterator
-        start = result.rbegin();
-    std::vector<std::pair<scope_id_t, Type const *>>::reverse_iterator
-        end = result.rend();
-
-    if (start == end) {
+    if (iter == end) {
         return nullptr;
     }
 
-    if (start->first != curr_scope_id) {
-        return nullptr;
-    }
-
-    return start->second;
+    return iter->second;
 }
 
-Type const *SemanticAnalyzer::find_type_in_any_active_scope(std::string const *ident) {
+Type const *SemanticAnalyzer::find_type_in_any_active_scope(
+    std::string const *ident,
+    Scope **scope
+) {
+    Scope *curr = *scope;
+    while (curr) {
+        std::map<std::string, Type *>::iterator
+            iter = curr->type_table.find(*ident),
+            end = curr->type_table.end();
 
-    std::vector<std::pair<scope_id_t, Type const *>>
-        result = type_table.lookup(*ident);
-    std::vector<std::pair<scope_id_t, Type const *>>::reverse_iterator
-        start = result.rbegin();
-    std::vector<std::pair<scope_id_t, Type const *>>::reverse_iterator
-        end = result.rend();
+        if (iter != end) {
+            return iter->second;
+        }
 
-    while (start != end) {
-        if (status(start->first) == open) {
-            return start->second;
-        }
-        else {
-            start++;
-        }
+        curr = curr->parent;
     }
 
     // not found
-    return nullptr; 
+    return nullptr;  
 }
 
-void SemanticAnalyzer::insert_type(std::string const *key, Type const *value) {
-    type_table.insert(*key, std::make_pair(curr_scope_id, value));
+void SemanticAnalyzer::insert_type(
+    Scope **scope,
+    std::string const &key,
+    Type *value
+) {
+    (*scope)->type_table.insert(std::make_pair(key, value));
 }
 
 SemanticAnalyzer::SemanticAnalyzer(
@@ -132,10 +120,6 @@ SemanticAnalyzer::SemanticAnalyzer(
 ) :
     str_allocator(str_allocator),
     primitive_keywords(primitives) {
-    
-    // zero all scope id trackers
-    scope_id_gen = 0;
-    curr_scope_id = 0;
 
     std::string *str;
 
@@ -172,11 +156,12 @@ SemanticAnalyzer::SemanticAnalyzer(
         primitive_types.push_back(type_ptr);
     }
 
-    // enter global scope
-    enter_new_scope();
+    // create global scope
+    gscope = scope_allocator.alloc();
 }
 
 AnalyzedType SemanticAnalyzer::analyze_function_type(
+    Scope **scope,
     std::vector<AnalyzedType> param_types,
     AnalyzedType return_type,
     SourceLocation start_loc,
@@ -203,7 +188,7 @@ AnalyzedType SemanticAnalyzer::analyze_function_type(
     std::cout << "  rep: " << rep << std::endl;
 
     // find type
-    Type *type = (Type *)find_type_in_any_active_scope(&rep);
+    Type *type = (Type *)find_type_in_any_active_scope(&rep, scope);
 
     // already exists
     if (type) {
@@ -231,7 +216,7 @@ AnalyzedType SemanticAnalyzer::analyze_function_type(
     }
     type->set_inner_type(return_type.contents);
     type->str = str;
-    insert_type(str, type);
+    insert_type(scope, *str, type);
 
     AnalyzedType result = AnalyzedType(type);
 
@@ -242,11 +227,12 @@ AnalyzedType SemanticAnalyzer::analyze_function_type(
 }
 
 AnalyzedType SemanticAnalyzer::analyze_typename(
+    Scope **scope,
     std::string const *ident,
     SourceLocation loc
 ) {
     // get type
-    Type const *type = find_type_in_any_active_scope(ident);
+    Type const *type = find_type_in_any_active_scope(ident, scope);
 
     // type does not exist
     if (type == nullptr) {
@@ -259,6 +245,7 @@ AnalyzedType SemanticAnalyzer::analyze_typename(
 }
 
 AnalyzedType SemanticAnalyzer::analyze_pointer_type(
+    Scope **scope,
     AnalyzedType pointee,
     SourceLocation pointer_modifier_loc
 ) {
@@ -267,7 +254,7 @@ AnalyzedType SemanticAnalyzer::analyze_pointer_type(
     std::string rep = "*" + *pointee.contents->str;
 
     // find type
-    Type *type = (Type *)find_type_in_any_active_scope(&rep);
+    Type *type = (Type *)find_type_in_any_active_scope(&rep, scope);
 
     // already exists
     if (type) {
@@ -289,13 +276,14 @@ AnalyzedType SemanticAnalyzer::analyze_pointer_type(
             : type::pointer_type,
         pointee.contents
     );
-    insert_type(str, type);
+    insert_type(scope, *str, type);
 
     // return result
     return AnalyzedType(type);
 }
 
 AnalyzedType SemanticAnalyzer::analyze_array_type(
+    Scope **scope,
     AnalyzedType array_of,
     SourceLocation array_modifier_loc
 ) {
@@ -522,6 +510,7 @@ AnalyzedExpr SemanticAnalyzer::analyze_paren_expr(
 }
 
 AnalyzedExpr SemanticAnalyzer::analyze_ref_expr(
+    Scope **scope,
     std::string const *ident,
     SourceLocation loc
 ) {
@@ -532,7 +521,7 @@ AnalyzedExpr SemanticAnalyzer::analyze_ref_expr(
     //       if current scope's symbol is invalid
 
     // find symbol
-    Symbol const *res = find_symbol_in_any_active_scope(ident);
+    Symbol const *res = find_symbol_in_any_active_scope(ident, scope);
 
     Type const *sym_type;
     bool err = false;
@@ -616,6 +605,7 @@ AnalyzerResult SemanticAnalyzer::analyze_prefix_op_expr(
 }
 
 AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
+    Scope **scope,
     AnalyzedType type,
     std::string const *ident,
     std::vector<std::pair<std::string const *, SourceLocation>> params,
@@ -635,7 +625,7 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
     }
 
     // redeclaration in current scope
-    if (find_symbol_in_current_scope(ident)) {
+    if (find_symbol_in_current_scope(ident, scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -644,7 +634,7 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
     }
 
     // add to symbol table
-    insert_symbol(ident, *ident, type.contents);
+    insert_symbol(scope, *ident, type.contents);
 
     ASTNode *node = node_allocator.alloc();
     node->set(
@@ -657,7 +647,7 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
     );
 
     // enter new scope
-    enter_new_scope();
+    enter_new_scope(scope);
 
     // add params
     ASTNode *param;
@@ -665,7 +655,7 @@ AnalyzedStmt SemanticAnalyzer::analyze_func_decl(
 
         // add to symbol table
         insert_symbol(
-            params[i].first,
+            scope,
             *params[i].first,
             type.contents->params[i]
         );
@@ -699,13 +689,15 @@ void SemanticAnalyzer::start_func_define(
 }
 
 void SemanticAnalyzer::end_func_define(
+    Scope **scope,
     SourceLocation define_end_loc
 ) {
     // exit scope
-    exit_current_scope();
+    exit_current_scope(scope);
 }
 
-void SemanticAnalyzer::analyze_var_decl(
+AnalyzedStmt SemanticAnalyzer::analyze_var_decl(
+    Scope **scope,
     AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc
@@ -721,7 +713,7 @@ void SemanticAnalyzer::analyze_var_decl(
     );
 
     // ensure no redeclaration
-    if (find_symbol_in_current_scope(ident)) {
+    if (find_symbol_in_current_scope(ident, scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -730,20 +722,26 @@ void SemanticAnalyzer::analyze_var_decl(
         decl->has_error = true;
     }
 
-    decl->print();
+    insert_symbol(scope, *ident, type.contents);
+
+    AnalyzedStmt res(decl, decl->has_error);
+    return res;
 }
 
-void SemanticAnalyzer::analyze_var_decl(
+AnalyzedStmt SemanticAnalyzer::analyze_var_decl(
+    Scope **scope,
     AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc,
     AnalyzerResult rhs,
     SourceLocation eqloc
 ) {
-    // TODO: implement
+    ErrorHandler::handle(error::nyi, ident_loc, "var decl w/ define");
+    ErrorHandler::prog_exit();
 }
 
-void SemanticAnalyzer::analyze_type_alias(
+AnalyzedStmt SemanticAnalyzer::analyze_type_alias(
+    Scope **scope,
     AnalyzedType type,
     std::string const *ident,
     SourceLocation ident_loc
@@ -752,7 +750,7 @@ void SemanticAnalyzer::analyze_type_alias(
     Type *alias;
 
     // ensure no redeclaration
-    if (find_type_in_current_scope(ident)) {
+    if (find_type_in_current_scope(ident, scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -768,7 +766,9 @@ void SemanticAnalyzer::analyze_type_alias(
         alias->set_inner_type(type.contents);
         alias->str = ident;
         alias->type = type::alias_type;
-        insert_type(ident, alias);
+        std::cout << "before!\n";
+        insert_type(scope, *ident, alias);
+        std::cout << "after!\n";
     }
 
     ASTNode *stmt = node_allocator.alloc();
@@ -781,22 +781,24 @@ void SemanticAnalyzer::analyze_type_alias(
         err
     );
 
-    stmt->print();
+    return AnalyzedStmt(stmt, stmt->has_error);
 }
 
 void SemanticAnalyzer::start_scoped_block(
+    Scope **scope,
     SourceLocation block_start_loc
 ) {
-    enter_new_scope();
+    enter_new_scope(scope);
 }
 
 void SemanticAnalyzer::end_scoped_block(
+    Scope **scope,
     SourceLocation block_end_loc
 ) {
-    exit_current_scope();
+    exit_current_scope(scope);
 }
 
-void SemanticAnalyzer::analyze_return_stmt(
+AnalyzedStmt SemanticAnalyzer::analyze_return_stmt(
     AnalyzedExpr expr
 ) {
     ASTNode *node = node_allocator.alloc();
@@ -808,8 +810,9 @@ void SemanticAnalyzer::analyze_return_stmt(
         token::kw_return,
         expr.contents->has_error
     );
+    node->children.push_back(expr.contents);
 
-    // TODO: finish
+    return AnalyzedStmt(node, node->has_error);
 }
 
 void SemanticAnalyzer::add_expr_as_stmt(

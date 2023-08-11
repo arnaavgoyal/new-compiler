@@ -106,7 +106,7 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
         if (tree->kind != ast::recovery) {
 
             std::cout << str << "`" << "\e[0;97m" << type_str
-                << "\e[0;93m" << " '";
+                << "\e[0;93m" << " ";
             if (tree->str == nullptr){
                 std::cout << token::get_token_string(tree->tok);
             }
@@ -114,9 +114,14 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
                 std::cout << *tree->str;
             }
 
-            std::cout << "' "
-                << "\e[0;92m" << *(tree->type->get_str())
-                << "\e[0;95m" << " <";
+            std::cout << " ";
+
+            if (tree->type != nullptr) {
+                std::cout << "\e[0;92m"
+                    << *(tree->type->get_str());
+            }
+
+            std::cout << "\e[0;95m" << " <";
             print_err_loc_preamble(tree->loc);
             std::cout << ">";
             if (tree->has_error) {

@@ -1,12 +1,14 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include <stack>
 #include "lexer/tokentypes.h"
 #include "lexer/token.h"
 #include "lexer/lexer.h"
 #include "source/source.h"
 #include "memory/allocator.h"
 #include "analyzer/analyzer.h"
+#include "analyzer/scope.h"
 
 class Parser {
 private:
@@ -25,6 +27,12 @@ private:
     /** The previous token's loc */
     SourceLocation prev_tk_loc;
 
+    /** The allocator for AST nodes */
+    Allocator<ASTNode> node_allocator;
+
+    /** The current scope */
+    Scope *curr_scope;
+
     /** ------------------- UTILS ------------------- */
 
     /**
@@ -32,6 +40,13 @@ private:
      * token and advances to the next token.
     */
     void consume();
+
+    ASTNode *make_node(
+        ast::node_type kind,
+        std::string const *str,
+        SourceLocation loc,
+        token::token_type tok
+    );
 
     /**
      * Matches the current token with the expected token type. If they do
@@ -279,7 +294,7 @@ private:
      * Parses a var or func declaration given that the current token is the
      * first token of the declaration statement (the decl keyword).
     */
-    void parse_decl();
+    ASTNode *parse_decl();
 
     /**
      * Parses a statement given that the current token is the start of the
@@ -287,7 +302,7 @@ private:
      * 
      * @return true if found eof, false if not
     */
-    bool parse_stmt();
+    ASTNode *parse_stmt();
 
 public:
 

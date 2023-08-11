@@ -11,7 +11,7 @@ class HashTable {
 private:
 
     enum scope_status { open, closed };
-    using hash_table = std::map<std::string, std::vector<T>>;
+    using hash_table = std::map<std::string, T>;
 
     hash_table table;
 

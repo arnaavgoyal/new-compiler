@@ -5,6 +5,7 @@
 #include "memory/allocator.h"
 #include "error/error.h"
 #include <iostream>
+#include <stack>
 #include <iomanip>
 #include <algorithm>
 #include "analyzer/analyzer.h"
@@ -16,24 +17,36 @@ void Parser::consume() {
     lexer.lex(tk);
 }
 
-// void Parser::match(token::token_type expected) {
-//     bool kw = false;
+ASTNode *Parser::make_node(
+    ast::node_type kind,
+    std::string const *str,
+    SourceLocation loc,
+    token::token_type tok
+) {
+    ASTNode *node = node_allocator.alloc();
+    node->set(kind, nullptr, str, loc, tok, false);
+    return node;
+}
 
-//     if (!(kw = token::is_keyword(expected)) && !token::is_operator(expected)) {
-//         std::cout << "Parser::match() called with !op && !kw token type\n";
-//         return;
-//     }
+void Parser::match(token::token_type expected) {
+    bool kw = false;
 
-//     if (tk.get_type() == expected) {
-//         return;
-//     }
+    if (!(kw = token::is_keyword(expected)) && !token::is_operator(expected)) {
+        std::cout << "Parser::match() called with !op && !kw token type\n";
+        return;
+    }
 
-//     std::string *msg = str_allocator.alloc();
-//     *msg += '\'';
-//     *msg += kw ? token::get_keyword_string(expected) : token::get_operator_string(expected);
-//     *msg += '\'';
-//     ErrorHandler::handle(error::missing, tk.get_src_loc(), msg->c_str());
-// }
+    if (tk.get_type() == expected) {
+        return;
+    }
+
+    ErrorHandler::handle(
+        error::missing,
+        tk.get_src_loc(),
+        kw ? token::get_keyword_string(expected) : token::get_operator_string(expected)
+    );
+    ErrorHandler::prog_exit();
+}
 
 // void Parser::skip_to(token::token_type type) {
 
@@ -269,6 +282,7 @@ AnalyzedExpr Parser::parse_prefix() {
 
             // get result for reference
             res = analyzer.analyze_ref_expr(
+                &curr_scope,
                 tk.get_identifier_str(),
                 tk.get_src_loc()
             );
@@ -560,6 +574,7 @@ AnalyzedType Parser::parse_type() {
 
             // analyze func type
             type = analyzer.analyze_function_type(
+                &curr_scope,
                 param_list,
                 temp,
                 loc_cache,
@@ -575,6 +590,7 @@ AnalyzedType Parser::parse_type() {
 
             // get corresponding type
             type = analyzer.analyze_typename(
+                &curr_scope,
                 tk.get_identifier_str(),
                 tk.get_src_loc()
             );
@@ -600,6 +616,7 @@ AnalyzedType Parser::parse_type() {
 
             // analyze
             type = analyzer.analyze_pointer_type(
+                &curr_scope,
                 temp,
                 loc_cache
             );
@@ -634,6 +651,7 @@ AnalyzedType Parser::parse_type() {
 
             // analyze
             type = analyzer.analyze_array_type(
+                &curr_scope,
                 temp,
                 loc_cache
             );
@@ -672,7 +690,7 @@ AnalyzedType Parser::parse_type() {
     return type;
 }
 
-void Parser::parse_decl() {
+ASTNode *Parser::parse_decl() {
 
     AnalyzedType type;
     SourceLocation loc;
@@ -781,12 +799,15 @@ void Parser::parse_decl() {
 
         // analyze func decl
         AnalyzedStmt func_decl = analyzer.analyze_func_decl(
+            &curr_scope,
             type,
             ident,
             params,
             ident_loc,
             lparen_loc
         );
+
+        func_decl.contents->print();
 
         // expect left brace for definition
         if (tk.get_type() != token::op_leftbrace) {
@@ -798,26 +819,17 @@ void Parser::parse_decl() {
         // this call enters new function scope
         analyzer.start_func_define(func_decl, tk.get_src_loc());
 
-        // consume left brace
-        consume();
-
         // parse func body
-        while (tk.get_type() != token::op_rightbrace) {
-            if (tk.get_type() == token::eof) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
-                ErrorHandler::prog_exit();
-            }
-            parse_stmt();
-        }
+        ASTNode *func_body = parse_stmt();
+        func_body->print();
+        func_decl.contents->children.push_back(func_body);
 
         // handle func definition end
         // this call exits function scope
-        analyzer.end_func_define(tk.get_src_loc());
-
-        // consume right brace
-        consume();
+        analyzer.end_func_define(&curr_scope, tk.get_src_loc());
 
         std::cout << "finished func define parse\n";
+        return func_decl.contents;
     }
 
     // var decl
@@ -838,39 +850,44 @@ void Parser::parse_decl() {
             AnalyzedExpr rhs = parse_expr();
 
             // analyze var decl
-            analyzer.analyze_var_decl(
+            ASTNode *res = analyzer.analyze_var_decl(
+                &curr_scope,
                 type,
                 ident,
                 ident_loc,
                 rhs,
                 eqloc
-            );
+            ).contents;
             std::cout << "finished var define parse\n";
+            return res;
         }
 
         // just declaration
         else {
             // analyze var decl
-            analyzer.analyze_var_decl(
+            return analyzer.analyze_var_decl(
+                &curr_scope,
                 type,
                 ident,
                 ident_loc
-            );
+            ).contents;
         }
     }
 }
 
-bool Parser::parse_stmt() {
+ASTNode *Parser::parse_stmt() {
 
     SourceLocation loc_cache;
     token::token_type tk_type = tk.get_type();
+    ASTNode *res = nullptr;
+    bool req_semi = true;
 
     std::cout << tk.get_print_str() << std::endl;
 
     if (tk_type == token::eof) {
 
         // skip semicolon check
-        return true;
+        req_semi = false;
     }
 
     // scoped statement block
@@ -879,13 +896,22 @@ bool Parser::parse_stmt() {
         // cache start loc
         loc_cache = tk.get_src_loc();
 
+        // create node
+        res = make_node(
+            ast::stmt_block,
+            nullptr,
+            loc_cache,
+            tk_type
+        );
+
         // consume left brace
         consume();
 
-        // start scoped block
-        analyzer.start_scoped_block(prev_tk_loc);
+        analyzer.start_scoped_block(&curr_scope, loc_cache);
 
         // parse stmts
+        ASTNode *parsed = nullptr;
+        std::cout << "PARSING BLOCK STMT\n";
         while (true) {
 
             // found end brace
@@ -894,21 +920,27 @@ bool Parser::parse_stmt() {
             }
 
             // parse stmt
-            if (parse_stmt()) {
+            parsed = parse_stmt();
+            if (parsed) {
+                parsed->print();
+                res->children.push_back(parsed);
+            }
+            else {
                 // reached eof without end brace
                 ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
                 ErrorHandler::prog_exit();
             }
         }
 
+        analyzer.end_scoped_block(&curr_scope, tk.get_src_loc());
+
         // consume right brace
         consume();
 
-        // end scoped block
-        analyzer.end_scoped_block(prev_tk_loc);
+        res->print();
 
         // this is to skip the semicolon check
-        return false;
+        req_semi = false;
     }
 
     // using
@@ -943,12 +975,16 @@ bool Parser::parse_stmt() {
         // parse type
         AnalyzedType temp = parse_type();
 
+        std::cout << "HI!\n";
+
         // notify analyzer
-        analyzer.analyze_type_alias(
+        res = (ASTNode *)analyzer.analyze_type_alias(
+            &curr_scope,
             temp,
             ident,
             loc_cache
-        );
+        ).contents;
+        std::cout << "BYE!\n";
     }
 
     // return statement
@@ -964,14 +1000,40 @@ bool Parser::parse_stmt() {
         AnalyzedExpr temp = parse_expr();
 
         // analyze return stmt
-        analyzer.analyze_return_stmt(temp);
+        res = (ASTNode *)analyzer.analyze_return_stmt(temp).contents;
     }
 
     // decl
     else if (tk_type == token::kw_decl) {
 
         // parse the declaration
-        parse_decl();
+        std::cout << "PARSING DECL\n";
+        res = parse_decl();
+        res->print();
+        std::cout << "FINISHED PARSING DECL\n";
+    }
+
+    // while loop
+    else if (tk_type == token::kw_while) {
+
+        // cache src loc
+        loc_cache = tk.get_src_loc();
+        consume();
+
+        match(token::op_leftparen);
+        consume();
+
+        // expecting cond
+        // TODO
+
+        match(token::op_rightparen);
+        consume();
+
+        match(token::op_leftbrace);
+        ASTNode *stmts = parse_stmt();
+        stmts->print();
+        res = stmts;
+
     }
 
     // func (DEPRECATED for now)
@@ -984,24 +1046,16 @@ bool Parser::parse_stmt() {
     else {
 
         // parse expr
-        AnalyzedExpr temp = parse_expr();
-
-        // add to current scope
-        analyzer.add_expr_as_stmt(temp);
+        res = (ASTNode *)parse_expr().contents;
     }
 
     // require semicolon at end of stmt
-    if (tk.get_type() == token::op_semicolon) {
-
-        // consume semi
+    if (req_semi) {
+        match(token::op_semicolon);
         consume();
     }
-    else {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "';'");
-        ErrorHandler::prog_exit();
-    }
 
-    return tk.get_type() == token::eof;
+    return res;
 }
 
 /** ------------------- PUBLIC ------------------- */
@@ -1015,6 +1069,9 @@ Parser::Parser(
 
     // initial lex so that tk contains the first token
     consume();
+
+    // init global scope
+    curr_scope = analyzer.global_scope();
 }
 
 Parser::~Parser() {
@@ -1024,7 +1081,18 @@ Parser::~Parser() {
 }
 
 void Parser::parse() {
-    //std::cout << "parse:START\n";
-    while (!parse_stmt()) { }
-    //std::cout << "  parse:DONE\n";
+    ASTNode *root = node_allocator.alloc();
+    root->set(
+        ast::translation_unit,
+        nullptr,
+        nullptr,
+        SourceLocation(),
+        token::unknown,
+        false
+    );
+    ASTNode *temp;
+    while (temp = parse_stmt()) {
+        root->children.push_back(temp);
+    }
+    root->print();
 }

@@ -1,11 +1,21 @@
+while () {
+    make = hahha * hd;
+};
+
 using i3 = i32;
 
-decl (i3, i32) *() i32
+decl (i3, i32) *()i32
 foo (first, second) {
     decl i32 i;
-    decl i64 no = (0);
+    decl i64 j;
+    decl i64 first; // should give redecl error
+    //decl i64 no = (0);
     foo(first, second);
-    //return i * j;
+    decl (i3)i3 food (first) {
+        decl i32 bar;
+        foo(first, bar);
+    };
+    return i * j + bar;
 };
 
 decl () *i3
