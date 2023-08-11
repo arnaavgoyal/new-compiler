@@ -116,8 +116,9 @@ For example, since `+` is a left associative binary operation, it is implemented
 All language statements such as keyword statements, function declarations, and expressions are determined in the top level `parse_stmt` function,
 and then delegated to specific helper functions like `parse_decl` and `parse_expr`.
 
-Following this, the SemanticAnalyzer takes parsed statements and performs all required semantic checks upon them.
+The `SemanticAnalyzer` class takes parsed statements and performs all required semantic checks upon them.
 Type checking, use before declaration, redeclaration, parameter mismatch, etc etc are all checked here.
+It is declared in [analyzer/analyzer.h][14] and defined in [analyzer/analyzer.cpp][15]
 
 All of this so far has been consistent since the conception of these modules.
 However, due to philosophy changes and design constraints, the rest has been changed too many times to count.
@@ -226,3 +227,5 @@ with these semantic errors:
 [11]: ../main/src/lexer/token.cpp
 [12]: ../main/inc/parser/parser.h
 [13]: ../main/src/parser/parser.cpp
+[14]: ../main/inc/analyzer/analyzer.h
+[15]: ../main/src/analyzer/analyzer.cpp
