@@ -50,13 +50,15 @@ The main attraction of the class is the `handle` function. Given an error type, 
 It has all the bells and whistles of a production compiler: line numbers, context, underlining, and color highlighting.
 This is what an error printed using this function looks like:
 
-![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/56b52473-191c-4205-8258-646e7f95c43f)
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/8a1c493b-22b6-4efb-aa61-2fb4f3aea3b7)
 
 Pretty awesome, right?
 
 At this point, I have set myself up with a solid base of utility classes. Time to start with the actual compiler.
 
 ## Lexing
+
+### Tokens
 The `Token` class is a hugely upgraded version of the `token` struct from my last compiler. It contains its source location, string representation, and type.
 C++ `std::string` is so much easier to work with than C `char *`, and source locations fix my token location woes.
 It is declared in [lexer/token.h][7] and defined in [lexer/token.cpp][8].
@@ -68,7 +70,7 @@ I also used a trick from llvm, factoring all token definitions out into a separa
 This trick also allows for language construct token strings to be common. This can lead to big memory savings with big programs.
 For example, if the source code has 400 "+" tokens, I can have just one "+" string in memory, rather than 400 different strings that are all "+".
 
-Finally, there's the lexer itself.
+### The Lexer
 The `Lexer` class encapsulates all lexing logic, and outputs lexed tokens to the rest of the program.
 It is declared in [lexer/lexer.h][10] and defined in [lexer/lexer.cpp][11].
 
@@ -86,7 +88,23 @@ lex(tk);
 // use lexed token
 ```
 
-## Parsing
+The lexer was pretty quick this time. The parser and analyzer, however, is a different story.
+
+## Syntactic and Semantic Analyzation
+
+### The AST
+The ultimate goal of my parser and analyzer is to produce a semantically correct AST, which I can use later in code generation.
+To this end, I created the ast module to house all of the ast definitions and utilities.
+
+It contains the `ASTNode` class, which contains all of the information I could ever need about the statements it represents, as well as a list of children nodes.
+This class is what the parser and analyzer use to construct the AST.
+
+It also contains `ASTNode::print()`, which is by far the most important function in the module, and my favorite.
+The `print()` function pretty-prints the AST, which is absolutely invaluable when it comes to debugging the parser and analyzer.
+All of the AST representations on this page were printed using this function.
+
+### The Parser and Semantic Analyzer
+
 The `Parser` class implements a fully featured LL(1) parser.
 It is declared in [parser/parser.h][12] and defined in [parser/parser.cpp][13].
 
@@ -98,9 +116,101 @@ For example, since `+` is a left associative binary operation, it is implemented
 All language statements such as keyword statements, function declarations, and expressions are determined in the top level `parse_stmt` function,
 and then delegated to specific helper functions like `parse_decl` and `parse_expr`.
 
-The `Parser` works hand-in-hand with the `SemanticAnalyzer` class.
-Whenever a new statement is parsed and determined to be syntactically correct, the statement is passed along to be semantically checked.
-From the parser's point of view, it receives opaque result objects that it passes back to the analyzer as it ascends up the recursive call stack.
+Following this, the SemanticAnalyzer takes parsed statements and performs all required semantic checks upon them.
+Type checking, use before declaration, redeclaration, parameter mismatch, etc etc are all checked here.
+
+All of this so far has been consistent since the conception of these modules.
+However, due to philosophy changes and design constraints, the rest has been changed too many times to count.
+
+First, I wanted the parser to be wholly independent of the analyzer, so I could fulfill my idealistic dream of perfect encapsulation.
+Unfortunately, this was impossible.
+A pillar of this project is and always has been that I want OOP and type aliasing.
+The existence of these features means two things:
+1. There must be a flow of semantic information back to the parser as typenames are declared to ensure correct parsing of types, and
+2. As a direct result, semantic analysis must (at least partially) occur alongside parsing to create that semantic information.
+So, no encapsulation, and no separate parsing and analysis passes. They must occur simultaneously and share information.
+
+With these constraints in mind, I came up with another system.
+This time, the parser hands parsed information to the analyzer at every step.
+This way, the analyzer is able to keep all of the semantic information up to date at all times.
+For example, this is how `return y && z * 3` is parsed:
+1. `z * 3` is parsed by `Parser::parse_multiplicative()`, then analyzed by `SemanticAnalyzer::analyze_binary_op()`
+2. next, `y + (z * 3)` is parsed by `Parser::parse_additive()`, and analyzed via `SemanticAnalyzer::analyze_binary_op()`
+3. finally, `return (y + (z * 3))` is parsed by `Parser::parse_stmt()` and analyzed by `SemanticAnalyzer::analyze_return_stmt()`
+
+This worked much better than the original idea.
+
+However, I still wanted encapsulation.
+To me, AST construction, scope stack maintenance, and symbol tables are semantic logic, so I tried to put all of that inside the `SemanticAnalyzer` class.
+Doing this turned out to be a massive headache.
+Since the parser uses recursive descent to parse input tokens, it very nicely models the AST, and it has all necessary context about current declaration state and scope.
+The analyzer, on the other hand, knows about nothing other than the information passed to it by the parser.
+This makes it impossible to keep AST construction and scope logic solely in the analyzer.
+
+One workaround I attempted was opaque objects.
+Every analyzer function would return an `AnalyzerResult` object, which contained constructed AST nodes:
+
+```cpp
+template <typename T>
+class AnalyzedGeneric {
+    friend class SemanticAnalyzer;
+private:
+    T contents;
+    ...
+};
+typedef AnalyzedGeneric<ASTNode *> AnalyzerResult;
+typedef AnalyzedGeneric<ASTNode *> AnalyzedStmt;
+typedef AnalyzedGeneric<ASTNode *> AnalyzedExpr;
+typedef AnalyzedGeneric<Type const *> AnalyzedType;
+```
+
+To the parser, these objects were opaque, and it would simply pass them to other analyzer functions.
+This allowed for elegant AST construction, as the analyzer would receive the `AnalyzerResult` objects in line with the AST construction (because the parser would pass them in accordance with it's ascent up the recursion stack).
+Unfortunately, at global scope, the opaque objects are left to the parser, which has no idea what to do with them (due to encapsulation).
+This makes the final AST impossible to construct.
+
+After all of this going nowhere, I decided I would rather have results over beautiful code, so I moved AST construction back to the parser.
+
+It was at this point that I also changed my symbol table.
+Previously, I was using a LeBlanc-Cook symbol table, which is essentially one massive symbol table that handles scoping with supplemental scope information.
+This seemed to be cumbersome, and in the interest of future-proofing my symbol table design, I swapped to per-scope symbol tables.
+During this change, I moved the broad scoping logic back to the parser, as it made no sense to keep it in the analyzer any longer since it now closely mirrored the AST logic.
+However, the scope objects are still mostly opaque so as to keep the analyzer in charge of maintaining the symbol tables.
+
+Currently, the parser and analyzer are in a transition state as I refactor them using my new strategy.
+I am also in the process of making new additions to the language such as loops and if-else.
+
+As an example of the current capabilities, this code:
+
+```cpp
+using i3 = i32;
+
+decl (i3, i32) *()i32
+foo (first, second) {
+    decl i32 i;
+    decl i64 j;
+    decl i64 first;
+    foo(first, second);
+    decl (i3)i3 food (first) {
+        decl i32 bar;
+        foo(first, bar);
+    };
+    return i * j + bar;
+};
+
+decl () *i3
+bar () {
+    return first;
+};
+```
+
+is synthesized into this AST:
+
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/c93e6507-fdf3-45f7-b1a6-2cf66ee4f912)
+
+with these semantic errors:
+
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/28194a16-3ce8-4e11-82a1-c8bcd24601fa)
 
 
 [1]:  https://github.com/arnaavgoyal/compiler
