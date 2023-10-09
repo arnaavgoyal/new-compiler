@@ -116,99 +116,114 @@ public:
         std::vector<token::token_type> const &primitives
     );
 
-    AnalyzedType analyze_function_type(
+    ASTNode *analyze_add_op_expr(
+        ASTNode *lhs,
+        ASTNode *rhs,
+        token::token_type tok,
+        SourceLocation op_loc
+    );
+
+    ASTNode *analyze_sub_op_expr(
+        ASTNode *lhs,
+        ASTNode *rhs,
+        token::token_type tok,
+        SourceLocation op_loc
+    );
+
+    ASTNode *analyze_binary_op_expr(
+        op::kind op,
+        ASTNode *lhs,
+        ASTNode *rhs,
+        token::token_type tok,
+        SourceLocation op_loc
+    );
+
+    Type *analyze_function_type(
         Scope **scope,
-        std::vector<AnalyzedType> param_types,
-        AnalyzedType return_type,
+        std::vector<Type *> param_types,
+        Type *return_type,
         SourceLocation start_loc,
         SourceLocation end_loc
     );
 
-    AnalyzedType analyze_typename(
+    Type *analyze_typename(
         Scope **scope,
         std::string const *ident,
         SourceLocation loc
     );
 
-    AnalyzedType analyze_pointer_type(
+    Type *analyze_pointer_type(
         Scope **scope,
-        AnalyzedType pointee,
+        Type *pointee,
         SourceLocation pointer_modifier_loc
     );
 
-    AnalyzedType analyze_array_type(
+    Type *analyze_array_type(
         Scope **scope,
-        AnalyzedType array_of,
+        Type *array_of,
         SourceLocation array_modifier_loc
     );
 
-    AnalyzedType analyze_primitive_type(
+    Type *analyze_primitive_type(
         token::token_type prim,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_binary_op_expr(
+    ASTNode *analyze_postfix_op_expr(
         token::token_type op,
-        AnalyzedExpr lhs,
-        AnalyzedExpr rhs,
+        ASTNode *expr,
         SourceLocation op_loc
     );
 
-    AnalyzedExpr analyze_postfix_op_expr(
-        token::token_type op,
-        AnalyzedExpr expr,
-        SourceLocation op_loc
-    );
-
-    AnalyzedExpr analyze_call_expr(
-        AnalyzedExpr expr,
-        std::vector<AnalyzedExpr> args,
+    ASTNode *analyze_call_expr(
+        ASTNode *expr,
+        std::vector<ASTNode *> args,
         SourceLocation call_start_loc,
         SourceLocation call_end_loc
     );
 
-    AnalyzedExpr analyze_subscript_expr(
-        AnalyzedExpr expr,
-        AnalyzedExpr subscript,
+    ASTNode *analyze_subscript_expr(
+        ASTNode *expr,
+        ASTNode *subscript,
         SourceLocation subscript_start_loc,
         SourceLocation subscript_end_loc
     );
 
-    AnalyzedExpr analyze_paren_expr(
-        AnalyzedExpr inside,
+    ASTNode *analyze_paren_expr(
+        ASTNode *inside,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_ref_expr(
+    ASTNode *analyze_ref_expr(
         Scope **scope,
         std::string const *ident,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_character_literal(
+    ASTNode *analyze_character_literal(
         std::string const *char_lit,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_numeric_literal(
+    ASTNode *analyze_numeric_literal(
         std::string const *num_lit,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_string_literal(
+    ASTNode *analyze_string_literal(
         std::string const *str_lit,
         SourceLocation loc
     );
 
-    AnalyzedExpr analyze_prefix_op_expr(
+    ASTNode *analyze_prefix_op_expr(
         token::token_type op,
-        AnalyzedExpr expr,
+        ASTNode *expr,
         SourceLocation op_loc
     );
 
-    AnalyzedStmt analyze_func_decl(
+    ASTNode *analyze_func_decl(
         Scope **scope,
-        AnalyzedType type,
+        Type *type,
         std::string const *ident,
         std::vector<std::pair<std::string const *, SourceLocation>> params,
         SourceLocation ident_loc,
@@ -216,7 +231,7 @@ public:
     );
 
     void start_func_define(
-        AnalyzerResult decl,
+        ASTNode *decl,
         SourceLocation define_start_loc
     );
 
@@ -225,25 +240,25 @@ public:
         SourceLocation define_end_loc
     );
 
-    AnalyzedStmt analyze_var_decl(
+    ASTNode *analyze_var_decl(
         Scope **scope,
-        AnalyzedType type,
+        Type *type,
         std::string const *ident,
         SourceLocation ident_loc
     );
 
-    AnalyzedStmt analyze_var_decl(
+    ASTNode *analyze_var_decl(
         Scope **scope,
-        AnalyzedType type,
+        Type *type,
         std::string const *ident,
         SourceLocation ident_loc,
-        AnalyzerResult rhs,
+        ASTNode *rhs,
         SourceLocation eqloc
     );
 
-    AnalyzedStmt analyze_type_alias(
+    ASTNode *analyze_type_alias(
         Scope **scope,
-        AnalyzedType type,
+        Type *type,
         std::string const *ident,
         SourceLocation ident_loc
     );
@@ -258,12 +273,16 @@ public:
         SourceLocation block_end_loc
     );
 
-    AnalyzedStmt analyze_return_stmt(
-        AnalyzerResult expr
+    ASTNode *analyze_return_stmt(
+        ASTNode *expr
+    );
+
+    ASTNode *analyze_loop_stmt(
+        ASTNode *cond
     );
 
     void add_expr_as_stmt(
-        AnalyzerResult expr
+        ASTNode *expr
     );
 
 };

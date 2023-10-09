@@ -168,6 +168,16 @@ lex_start:
         // reads the identifier into it. However, if it is classified as a keyword
         // afterwards, the alloced string will never be used.
         // TODO: fix this error
+        case 'a':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_as)) == 0) {
+                type = token::kw_as;
+            }
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'b':
             src->unget();
             lex_identifier(tk);
@@ -191,8 +201,8 @@ lex_start:
         case 'd':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_decl)) == 0) {
-                type = token::kw_decl;
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_def)) == 0) {
+                type = token::kw_def;
             }
             else {
                 type = token::identifier;
@@ -219,9 +229,6 @@ lex_start:
             }
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f64)) == 0) {
                 type = token::kw_f64;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_func)) == 0) {
-                type = token::kw_func;
             }
             else {
                 type = token::identifier;
@@ -293,6 +300,16 @@ lex_start:
                 type = token::identifier;
             }
             break;
+        case 'v':
+            src->unget();
+            lex_identifier(tk);
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_var)) == 0) {
+                type = token::kw_var;
+            }
+            else {
+                type = token::identifier;
+            }
+            break;
         case 'w':
             src->unget();
             lex_identifier(tk);
@@ -312,10 +329,10 @@ lex_start:
         case 'Q': case 'R': case 'S': case 'T':
         case 'U': case 'V': case 'W': case 'X':
         case 'Y': case 'Z':
-        case 'a': case 'g': case 'h':
+        case 'g': case 'h':
         case 'j': case 'k': case 'm':
         case 'n': case 'o': case 'p': case 'q':
-        case 'v': case 'x':
+        case 'x':
         case 'y': case 'z': case '_':
             src->unget();
             lex_identifier(tk);

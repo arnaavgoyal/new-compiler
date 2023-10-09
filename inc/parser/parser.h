@@ -71,9 +71,10 @@ private:
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
     */
-    AnalyzedExpr left_assoc_bin_op(
-        AnalyzedExpr (Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types
+    ASTNode *left_assoc_bin_op(
+        ASTNode *(Parser::*higher_prec)(),
+        std::vector<token::token_type> const &types,
+        std::vector<op::kind> const &ops
     );
 
     /**
@@ -84,9 +85,10 @@ private:
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
     */
-    AnalyzedExpr right_assoc_bin_op(
-        AnalyzedExpr (Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types
+    ASTNode *right_assoc_bin_op(
+        ASTNode *(Parser::*higher_prec)(),
+        std::vector<token::token_type> const &types,
+        std::vector<op::kind> const &ops
     );
 
     /**
@@ -99,9 +101,9 @@ private:
      * @param node the existing node to add all parsed nodes to
     */
     void n_operand_op(
-        AnalyzedExpr (Parser::*higher_prec)(),
+        ASTNode *(Parser::*higher_prec)(),
         std::vector<token::token_type> const &types,
-        AnalyzedExpr node
+        ASTNode *node
     );
 
     /** ------------------- EXPRESSION PARSING ------------------- */
@@ -124,7 +126,7 @@ private:
      * @param node the unit node to apply to
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_postfix(AnalyzedExpr node);
+    ASTNode *parse_postfix(ASTNode *node);
 
     /**
      * OPERATOR PRECEDENCE [1, 2].
@@ -138,7 +140,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_prefix();
+    ASTNode *parse_prefix();
 
     /**
      * OPERATOR PRECEDENCE [1, 3].
@@ -152,7 +154,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_multiplicative();
+    ASTNode *parse_multiplicative();
 
     /**
      * OPERATOR PRECEDENCE [1, 4].
@@ -166,7 +168,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_additive();
+    ASTNode *parse_additive();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6].
@@ -180,7 +182,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_gl_relational();
+    ASTNode *parse_gl_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7].
@@ -194,7 +196,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_eq_relational();
+    ASTNode *parse_eq_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11].
@@ -208,7 +210,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_logical_and();
+    ASTNode *parse_logical_and();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12].
@@ -222,7 +224,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_logical_or();
+    ASTNode *parse_logical_or();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12], U [14].
@@ -236,7 +238,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_assignment();
+    ASTNode *parse_assignment();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12] U [14, 15].
@@ -250,7 +252,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_comma();
+    ASTNode *parse_comma();
 
     /**
      * This function serves as the entry point for parsing expressions. It
@@ -263,7 +265,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    AnalyzedExpr parse_expr();
+    ASTNode *parse_expr();
 
     /** ------------------- STATEMENT PARSING ------------------- */
 
@@ -281,20 +283,26 @@ private:
      * 
      * @param node the node to add the arguments to
     */
-    std::vector<AnalyzedExpr> parse_call_args();
+    std::vector<ASTNode *> parse_call_args();
 
     /**
      * Parses a type given that the current token is the first token of the type.
      * 
      * @return pointer to the parsed type or nullptr if no type was found
     */
-    AnalyzedType parse_type();
+    Type *parse_type();
 
     /**
-     * Parses a var or func declaration given that the current token is the
-     * first token of the declaration statement (the decl keyword).
+     * Parses a var declaration given that the current token is the
+     * first token of the declaration statement (the var keyword).
     */
-    ASTNode *parse_decl();
+    ASTNode *parse_var_decl();
+
+    /**
+     * Parses a func declaration given that the current token is the
+     * first token of the declaration statement (the def keyword).
+    */
+    ASTNode *parse_func_decl();
 
     /**
      * Parses a statement given that the current token is the start of the

@@ -41,9 +41,10 @@ KEYWORD(continue)
 KEYWORD(break)
 KEYWORD(return)
 
-KEYWORD(func)
-KEYWORD(decl)
+KEYWORD(var)
+KEYWORD(def)
 KEYWORD(using)
+KEYWORD(as)
 
 // type keywords
 
@@ -67,32 +68,27 @@ OPERATOR(leftbracket, "[")
 OPERATOR(rightbracket, "]")
 OPERATOR(leftbrace, "{")
 OPERATOR(rightbrace, "}")
-OPERATOR(equalgreater, "=>")
-
 OPERATOR(plusplus, "++")
 OPERATOR(minusminus, "--")
+OPERATOR(equal, "=")
+OPERATOR(amp, "&")
+OPERATOR(exclamation, "!")
+OPERATOR(ampamp, "&&")
+OPERATOR(pipepipe, "||")
 OPERATOR(plus, "+")
 OPERATOR(minus, "-")
 OPERATOR(asterisk, "*")
 OPERATOR(slash, "/")
 OPERATOR(percent, "%")
-OPERATOR(amp, "&")
-
-OPERATOR(exclamation, "!")
-OPERATOR(ampamp, "&&")
-OPERATOR(pipepipe, "||")
-
 OPERATOR(greater, ">")
 OPERATOR(less, "<")
 OPERATOR(greaterequal, ">=")
 OPERATOR(lessequal, "<=")
 OPERATOR(equalequal, "==")
 OPERATOR(exclamationequal, "!=")
-
-OPERATOR(equal, "=")
-
 OPERATOR(comma, ",")
 OPERATOR(semicolon, ";")
+OPERATOR(equalgreater, "=>")
 
 #undef OPERATOR
 #undef TYPE

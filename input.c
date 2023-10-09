@@ -1,41 +1,47 @@
-while () {
-    make = hahha * hd;
-};
+{
+    var i32 i;
+}
 
-using i3 = i32;
+// while (i < 10) {
+//     // e
+// };
 
-decl (i3, i32) *()i32
+using MYTYPE = u32;
+
+def (MYTYPE, i32) ()i32
 foo (first, second) {
-    decl i32 i;
-    decl i64 j;
-    decl i64 first; // should give redecl error
-    //decl i64 no = (0);
-    foo(first, second);
-    decl (i3)i3 food (first) {
-        decl i32 bar;
+    var i32 i;
+    var i64 j;
+    var MYTYPE first; // should give redecl error
+    var i64 no = (0);
+    foo(first as i32, second);
+    def (MYTYPE)MYTYPE food (first) {
+        var i32 bar;
         foo(first, bar);
     };
-    return i * j + bar;
+    return i * j;
 };
 
-decl () *i3
+def () *MYTYPE
 bar () {
-    return first;
+    return 1;
 };
 
-// decl (i64, f64) i64
+// var (i64, f64) i64
 // bar (x,,z) {
-//     decl i32 l = 0;
-//     decl i32 m = helper;
+//     var i32 l = 0;
+//     var i32 m = helper;
 //     return 40;
 // };
 
-// decl () i32
-// main () {
-//     using = []*i32;
-//     decl *() i32 myvar1 = (foo());
-//     decl []*i32 myvar2 = (1 - *&myvar1[7]++)() * 3 / (4, (myvar1, 6 - 7, 8));
-//     func hehe myvar3 = myvar2;
-//     mimi = myvar4 = ;
-//     return myvar1();
-// };
+def () i32
+main () {
+    using MYTYPE2 = ()**MYTYPE;
+    var MYTYPE2 myvar1;
+    var i32 myvar2 = 0;
+    //var *() i32 myvar1 = (foo());
+    //var MYTYPE2 myvar2 = (1 - *&myvar1[7]++)() * 3 / (4, (myvar1, 6 - 7, 8));
+    //func hehe myvar3 = myvar2;
+    //mimi = myvar4 = ;
+    return myvar1();
+};

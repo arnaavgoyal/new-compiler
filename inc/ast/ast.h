@@ -6,6 +6,7 @@
 #include "source/source.h"
 #include "lexer/token.h"
 #include "analyzer/type.h"
+#include "analyzer/op.h"
 
 namespace ast {
 
@@ -43,6 +44,9 @@ namespace ast {
 
         // typedef statement
         typedef_stmt,
+
+        // a loop statement
+        loop_stmt,
 
         // a scoped block of statements (func def, loop body, etc)
         stmt_block,
@@ -89,6 +93,8 @@ public:
     std::string const *str;
 
     SourceLocation loc;
+
+    op::kind op;
 
     token::token_type tok;
 

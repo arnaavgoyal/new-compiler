@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <algorithm>
 #include "analyzer/analyzer.h"
+#include "analyzer/op.h"
 
 //#define DEBUG
 
@@ -73,24 +74,29 @@ void Parser::match(token::token_type expected) {
 //     }
 // }
 
-AnalyzedExpr Parser::left_assoc_bin_op(
-    AnalyzedExpr (Parser::*higher_prec)(),
-    std::vector<token::token_type> const &types
+ASTNode *Parser::left_assoc_bin_op(
+    ASTNode *(Parser::*higher_prec)(),
+    std::vector<token::token_type> const &types,
+    std::vector<op::kind> const &ops
 ) {
     // get result of left side
-    AnalyzedExpr lhs = (this->*higher_prec)();
+    ASTNode *lhs = (this->*higher_prec)();
 
-    AnalyzedExpr rhs;
-    AnalyzedExpr binop = lhs;
+    ASTNode *rhs;
+    ASTNode *binop = lhs;
     SourceLocation op_loc;
     token::token_type op_type;
+    op::kind op_kind;
     bool go = true;
     while (go) {
-        if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
+        auto it = std::find(types.begin(), types.end(), tk.get_type());
+        if (it != types.end()) {
 
             // cache type and loc of op token
             op_type = tk.get_type();
             op_loc = tk.get_src_loc();
+
+            std::cout << "lassocbinop op: " << tk.get_print_str() << std::endl;
 
             // consume op token
             consume();
@@ -99,15 +105,16 @@ AnalyzedExpr Parser::left_assoc_bin_op(
             rhs = (this->*higher_prec)();
 
             // std::cout << "l_a_b_o lhs\n";
-            // lhs.contents->print();
-            // std::cout << "l_a_b_o rhs: " << rhs.contents->str << std::endl;
-            // rhs.contents->print();
+            // lhs->print();
+            // std::cout << "l_a_b_o rhs: " << rhs->str << std::endl;
+            // rhs->print();
+            op_kind = ops[it - types.begin()];
 
             // get result of binary op
-            binop = analyzer.analyze_binary_op_expr(op_type, lhs, rhs, op_loc);
+            binop = analyzer.analyze_binary_op_expr(op_kind, lhs, rhs, op_type, op_loc);
 
             // std::cout << "l_a_b_o final\n";
-            // binop.contents->print();
+            // binop->print();
         }
         else {
             go = false;
@@ -116,18 +123,21 @@ AnalyzedExpr Parser::left_assoc_bin_op(
     return binop;
 }
 
-AnalyzedExpr Parser::right_assoc_bin_op(
-    AnalyzedExpr (Parser::*higher_prec)(),
-    std::vector<token::token_type> const &types
+ASTNode *Parser::right_assoc_bin_op(
+    ASTNode *(Parser::*higher_prec)(),
+    std::vector<token::token_type> const &types,
+    std::vector<op::kind> const &ops
 ) {
     // get lhs result
-    AnalyzedExpr lhs = (this->*higher_prec)();
+    ASTNode *lhs = (this->*higher_prec)();
     
-    AnalyzedExpr rhs;
-    AnalyzedExpr binop = lhs;
+    ASTNode *rhs;
+    ASTNode *binop = lhs;
     SourceLocation op_loc;
     token::token_type op_type;
-    if (std::find(types.begin(), types.end(), tk.get_type()) != types.end()) {
+    op::kind op_kind;
+    auto it = std::find(types.begin(), types.end(), tk.get_type());
+    if (it != types.end()) {
 
         // cache type and loc of op token
         op_type = tk.get_type();
@@ -137,10 +147,13 @@ AnalyzedExpr Parser::right_assoc_bin_op(
         consume();
 
         // get result of rhs (same prec)
-        rhs = right_assoc_bin_op(higher_prec, types);
+        rhs = right_assoc_bin_op(higher_prec, types, ops);
+
+        // get corresponding op
+        op_kind = ops[it - types.begin()];
 
         // get result of binary op
-        binop = analyzer.analyze_binary_op_expr(op_type, lhs, rhs, op_loc);
+        binop = analyzer.analyze_binary_op_expr(op_kind, lhs, rhs, op_type, op_loc);
     }
     return binop;
 }
@@ -170,12 +183,13 @@ AnalyzedExpr Parser::right_assoc_bin_op(
 //     return;
 // }
 
-AnalyzedExpr Parser::parse_postfix(AnalyzedExpr pre) {
+ASTNode *Parser::parse_postfix(ASTNode *pre) {
 
     // Iterate over every postfix operator (if any)
-    AnalyzedExpr res = pre;
+    ASTNode *res = pre;
     SourceLocation op_loc;
-    std::vector<AnalyzedExpr> args;
+    std::vector<ASTNode *> args;
+    std::cout << "postfix: " << tk.get_print_str() << std::endl;
     while (true) {
         switch (tk.get_type()) {
 
@@ -186,7 +200,7 @@ AnalyzedExpr Parser::parse_postfix(AnalyzedExpr pre) {
                 // get result for postfix op
                 res = analyzer.analyze_postfix_op_expr(
                     tk.get_type(),
-                    pre,
+                    res,
                     tk.get_src_loc()
                 );
 
@@ -205,7 +219,7 @@ AnalyzedExpr Parser::parse_postfix(AnalyzedExpr pre) {
 
                 // get result of call expr
                 res = analyzer.analyze_call_expr(
-                    pre,
+                    res,
                     args,
                     op_loc,
                     prev_tk_loc
@@ -238,18 +252,20 @@ AnalyzedExpr Parser::parse_postfix(AnalyzedExpr pre) {
 
             // no postfix operators left
             default:
+                std::cout << "postfix end: " << tk.get_print_str() << std::endl;
                 return res;
         }
     }
 }
 
-AnalyzedExpr Parser::parse_prefix() {
+ASTNode *Parser::parse_prefix() {
 
     token::token_type type = tk.get_type();
 
-    AnalyzedExpr res;
+    ASTNode *res;
     SourceLocation op_loc;
     token::token_type op_type;
+    std::cout << "prefix start: " << tk.get_print_str() << std::endl;
     switch (type) {
 
         // parenthesized expr
@@ -286,12 +302,15 @@ AnalyzedExpr Parser::parse_prefix() {
                 tk.get_identifier_str(),
                 tk.get_src_loc()
             );
+            std::cout << "parsed: " << tk.get_identifier_str() << std::endl;
 
             // consume identifier
             consume();
+            std::cout << "after ident: " << tk.get_print_str() << std::endl;
 
             // parse postfix operators
             res = parse_postfix(res);
+            std::cout << "after postfix parse: " << tk.get_print_str() << std::endl;
             break;
 
         // char literal
@@ -359,85 +378,119 @@ AnalyzedExpr Parser::parse_prefix() {
         default:
             
             // error -- no expr
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expressionlol");
             ErrorHandler::prog_exit();
             break;
     }
 
+    std::cout << "after prefix: " << tk.get_print_str() << std::endl;
+
     return res;
 }
 
-AnalyzedExpr Parser::parse_multiplicative() {
+ASTNode *Parser::parse_multiplicative() {
     static std::vector<token::token_type> types {
         token::op_asterisk,
         token::op_slash,
         token::op_percent
     };
-    return left_assoc_bin_op(parse_prefix, types);
+    static std::vector<op::kind> ops {
+        op::mult,
+        op::div,
+        op::mod
+    };
+    return left_assoc_bin_op(parse_prefix, types, ops);
 }
 
-AnalyzedExpr Parser::parse_additive() {
+ASTNode *Parser::parse_additive() {
     static std::vector<token::token_type> types {
         token::op_plus,
         token::op_minus
     };
-    return left_assoc_bin_op(parse_multiplicative, types);
+    static std::vector<op::kind> ops {
+        op::add,
+        op::sub
+    };
+    return left_assoc_bin_op(parse_multiplicative, types, ops);
 }
 
-AnalyzedExpr Parser::parse_gl_relational() {
+ASTNode *Parser::parse_gl_relational() {
     static std::vector<token::token_type> types {
         token::op_greater,
         token::op_greaterequal,
         token::op_less,
         token::op_lessequal
     };
-    return left_assoc_bin_op(parse_additive, types);
+    static std::vector<op::kind> ops {
+        op::gt,
+        op::gte,
+        op::lt,
+        op::lte
+    };
+    return left_assoc_bin_op(parse_additive, types, ops);
 }
 
-AnalyzedExpr Parser::parse_eq_relational() {
+ASTNode *Parser::parse_eq_relational() {
     static std::vector<token::token_type> types {
         token::op_equalequal,
         token::op_exclamationequal
     };
-    return left_assoc_bin_op(parse_gl_relational, types);
+    static std::vector<op::kind> ops {
+        op::eq,
+        op::neq
+    };
+    return left_assoc_bin_op(parse_gl_relational, types, ops);
 }
 
-AnalyzedExpr Parser::parse_logical_and() {
+ASTNode *Parser::parse_logical_and() {
     static std::vector<token::token_type> types {
         token::op_ampamp
     };
-    return left_assoc_bin_op(parse_eq_relational, types);
+    static std::vector<op::kind> ops {
+        op::land
+    };
+    return left_assoc_bin_op(parse_eq_relational, types, ops);
 }
 
-AnalyzedExpr Parser::parse_logical_or() {
+ASTNode *Parser::parse_logical_or() {
     static std::vector<token::token_type> types {
         token::op_pipepipe
     };
-    return left_assoc_bin_op(parse_logical_and, types);
+    static std::vector<op::kind> ops {
+        op::lor
+    };
+    return left_assoc_bin_op(parse_logical_and, types, ops);
 }
 
-AnalyzedExpr Parser::parse_assignment() {
+ASTNode *Parser::parse_assignment() {
     static std::vector<token::token_type> types {
         token::op_equal
     };
-    return right_assoc_bin_op(parse_logical_or, types);
+    static std::vector<op::kind> ops {
+        op::assign
+    };
+    return right_assoc_bin_op(parse_logical_or, types, ops);
 }
 
-AnalyzedExpr Parser::parse_comma() {
+ASTNode *Parser::parse_comma() {
     static std::vector<token::token_type> types {
         token::op_comma
     };
-    return left_assoc_bin_op(parse_assignment, types);
+    static std::vector<op::kind> ops {
+        op::group
+    };
+    return left_assoc_bin_op(parse_assignment, types, ops);
 }
 
-AnalyzedExpr Parser::parse_expr() {
-    AnalyzedExpr node = parse_comma();
+ASTNode *Parser::parse_expr() {
+    ASTNode *node = parse_comma();
+    std::cout << "after parse expr: " << tk.get_print_str() << std::endl;
     return node;
 }
 
-std::vector<AnalyzedExpr> Parser::parse_call_args() {
+std::vector<ASTNode *> Parser::parse_call_args() {
 
-    std::vector<AnalyzedExpr> args;
+    std::vector<ASTNode *> args;
 
     // consume left paren
     consume();
@@ -450,7 +503,7 @@ std::vector<AnalyzedExpr> Parser::parse_call_args() {
         return args;
     }
 
-    AnalyzedExpr arg;
+    ASTNode *arg;
     bool go = true;
     while (go) {
 
@@ -488,11 +541,11 @@ std::vector<AnalyzedExpr> Parser::parse_call_args() {
     return args;
 }
 
-AnalyzedType Parser::parse_type() {
+Type *Parser::parse_type() {
 
-    AnalyzedType type;
-    AnalyzedType temp;
-    std::vector<AnalyzedType> param_list;
+    Type *type;
+    Type *temp;
+    std::vector<Type *> param_list;
     SourceLocation loc_cache;
     bool go;
 
@@ -690,12 +743,12 @@ AnalyzedType Parser::parse_type() {
     return type;
 }
 
-ASTNode *Parser::parse_decl() {
+ASTNode *Parser::parse_var_decl() {
 
-    AnalyzedType type;
+    Type *type;
     SourceLocation loc;
 
-    // consume decl keyword
+    // consume var keyword
     consume();
 
     // cache start loc
@@ -724,155 +777,188 @@ ASTNode *Parser::parse_decl() {
     // consume identifier
     consume();
 
-    std::cout << "past decl ident parse\n";
+    // TODO: handle arrays (length and/or definition)
+    // handle definition
+    if (tk.get_type() == token::op_equal) {
 
-    // func decl
-    if (tk.get_type() == token::op_leftparen) {
+        std::cout << "starting var define parse\n";
 
-        // handle param list
-        //   1: ()
-        //   2: (ident)
-        //   3: (ident, ident, ... , ident)
+        // cache loc of '='
+        SourceLocation eqloc = tk.get_src_loc();
 
-        std::vector<std::pair<std::string const *, SourceLocation>> params;
-
-        // expect left paren
-        if (tk.get_type() != token::op_leftparen) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'('");
-            ErrorHandler::prog_exit();
-        }
-
-        // save left paren loc
-        SourceLocation lparen_loc = tk.get_src_loc();
-
-        // consume left paren
+        // consume equal
         consume();
 
-        bool go = tk.get_type() == token::op_rightparen ? false : true;
-        while (go) {
+        // parse expr
+        ASTNode *rhs = parse_expr();
 
-            // expect identifier
-            if (tk.get_type() != token::identifier) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-                ErrorHandler::prog_exit();
-            }
-
-            else {
-
-                // add param to list
-                params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
-
-                // consume ident
-                consume();
-            }
-
-            // next action based on current token
-            switch (tk.get_type()) {
-
-                // another type in param list
-                case token::op_comma:
-                    // consume comma
-                    consume();
-                    break;
-
-                // end of param list
-                case token::op_rightparen:
-                    // consume right paren
-                    std::cout << "RIGHT PAREN" << std::endl;
-                    go = false;
-                    break;
-                
-                // error - something else
-                default:
-                    ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                    ErrorHandler::prog_exit();
-                    break;
-            }
-            std::cout << tk.get_print_str() << std::endl;
-        }
-
-        // save right paren loc
-        lparen_loc.copy_end(tk.get_src_loc());
-
-        // consume right paren
-        consume();
-
-        // analyze func decl
-        AnalyzedStmt func_decl = analyzer.analyze_func_decl(
+        // analyze var decl
+        ASTNode *res = analyzer.analyze_var_decl(
             &curr_scope,
             type,
             ident,
-            params,
             ident_loc,
-            lparen_loc
+            rhs,
+            eqloc
         );
 
-        func_decl.contents->print();
+        std::cout << "finished var define parse\n";
 
-        // expect left brace for definition
-        if (tk.get_type() != token::op_leftbrace) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
+        return res;
+    }
+
+    // just declaration
+    else {
+
+        // analyze var decl
+        return analyzer.analyze_var_decl(
+            &curr_scope,
+            type,
+            ident,
+            ident_loc
+        );
+    }
+}
+
+ASTNode *Parser::parse_func_decl() {
+
+    Type *type;
+    SourceLocation loc;
+
+    // consume def keyword
+    consume();
+
+    // cache start loc
+    loc = tk.get_src_loc();
+
+    std::cout << "before decl type parse\n";
+
+    // expects to be on type
+    // so parse type
+    type = parse_type();
+
+    std::cout << "after decl type parse\n";
+
+    // expects identifier
+    if (tk.get_type() != token::identifier) {
+        ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
+        ErrorHandler::prog_exit();
+    }
+
+    // save identifier
+    std::string const *ident = tk.get_identifier_str();
+
+    // save identifier loc
+    SourceLocation ident_loc = tk.get_src_loc();
+
+    // consume identifier
+    consume();
+
+    // handle param list
+    //   1: ()
+    //   2: (ident)
+    //   3: (ident, ident, ... , ident)
+
+    std::vector<std::pair<std::string const *, SourceLocation>> params;
+
+    // expect left paren
+    if (tk.get_type() != token::op_leftparen) {
+        ErrorHandler::handle(error::missing, tk.get_src_loc(), "'('");
+        ErrorHandler::prog_exit();
+    }
+
+    // save left paren loc
+    SourceLocation lparen_loc = tk.get_src_loc();
+
+    // consume left paren
+    consume();
+
+    bool go = tk.get_type() == token::op_rightparen ? false : true;
+    while (go) {
+
+        // expect identifier
+        if (tk.get_type() != token::identifier) {
+            ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
             ErrorHandler::prog_exit();
         }
 
-        // handle func definition start
-        // this call enters new function scope
-        analyzer.start_func_define(func_decl, tk.get_src_loc());
-
-        // parse func body
-        ASTNode *func_body = parse_stmt();
-        func_body->print();
-        func_decl.contents->children.push_back(func_body);
-
-        // handle func definition end
-        // this call exits function scope
-        analyzer.end_func_define(&curr_scope, tk.get_src_loc());
-
-        std::cout << "finished func define parse\n";
-        return func_decl.contents;
-    }
-
-    // var decl
-    else {
-        // TODO: handle arrays (length and/or definition)
-
-        // handle definition
-        if (tk.get_type() == token::op_equal) {
-            std::cout << "starting var define parse\n";
-
-            // cache loc of '='
-            SourceLocation eqloc = tk.get_src_loc();
-
-            // consume equal
-            consume();
-
-            // parse expr
-            AnalyzedExpr rhs = parse_expr();
-
-            // analyze var decl
-            ASTNode *res = analyzer.analyze_var_decl(
-                &curr_scope,
-                type,
-                ident,
-                ident_loc,
-                rhs,
-                eqloc
-            ).contents;
-            std::cout << "finished var define parse\n";
-            return res;
-        }
-
-        // just declaration
         else {
-            // analyze var decl
-            return analyzer.analyze_var_decl(
-                &curr_scope,
-                type,
-                ident,
-                ident_loc
-            ).contents;
+            // add param to list
+            params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
+            // consume ident
+            consume();
         }
+
+        // next action based on current token
+        switch (tk.get_type()) {
+
+            // another type in param list
+            case token::op_comma:
+
+                // consume comma
+                consume();
+                break;
+
+            // end of param list
+            case token::op_rightparen:
+
+                // consume right paren
+                std::cout << "RIGHT PAREN" << std::endl;
+                go = false;
+                break;
+            
+            // error - something else
+            default:
+
+                ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
+                ErrorHandler::prog_exit();
+                break;
+        }
+
+        std::cout << tk.get_print_str() << std::endl;
+
     }
+
+    // save right paren loc
+    lparen_loc.copy_end(tk.get_src_loc());
+
+    // consume right paren
+    consume();
+
+    // analyze func decl
+    ASTNode *func_decl = analyzer.analyze_func_decl(
+        &curr_scope,
+        type,
+        ident,
+        params,
+        ident_loc,
+        lparen_loc
+    );
+
+    func_decl->print();
+
+    // expect left brace for definition
+    if (tk.get_type() != token::op_leftbrace) {
+        ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
+        ErrorHandler::prog_exit();
+    }
+
+    // handle func definition start
+    // this call enters new function scope
+    analyzer.start_func_define(func_decl, tk.get_src_loc());
+
+    // parse func body
+    ASTNode *func_body = parse_stmt();
+    func_body->print();
+    func_decl->children.push_back(func_body);
+
+    // handle func definition end
+    // this call exits function scope
+    analyzer.end_func_define(&curr_scope, tk.get_src_loc());
+
+    std::cout << "finished func define parse\n";
+    
+    return func_decl;
 }
 
 ASTNode *Parser::parse_stmt() {
@@ -973,7 +1059,7 @@ ASTNode *Parser::parse_stmt() {
         consume();
 
         // parse type
-        AnalyzedType temp = parse_type();
+        Type *temp = parse_type();
 
         std::cout << "HI!\n";
 
@@ -983,7 +1069,7 @@ ASTNode *Parser::parse_stmt() {
             temp,
             ident,
             loc_cache
-        ).contents;
+        );
         std::cout << "BYE!\n";
     }
 
@@ -995,22 +1081,30 @@ ASTNode *Parser::parse_stmt() {
 
         // make curr token the start of expr
         consume();
+        std::cout << tk.get_print_str() << std::endl;
 
         // parse expr
-        AnalyzedExpr temp = parse_expr();
+        ASTNode *temp = parse_expr();
+        std::cout << tk.get_print_str() << std::endl;
 
         // analyze return stmt
-        res = (ASTNode *)analyzer.analyze_return_stmt(temp).contents;
+        res = (ASTNode *)analyzer.analyze_return_stmt(temp);
     }
 
-    // decl
-    else if (tk_type == token::kw_decl) {
+    // var decl
+    else if (tk_type == token::kw_var) {
 
         // parse the declaration
-        std::cout << "PARSING DECL\n";
-        res = parse_decl();
+        res = parse_var_decl();
         res->print();
-        std::cout << "FINISHED PARSING DECL\n";
+    }
+
+    // func decl
+    else if (tk_type == token::kw_def) {
+
+        // parse the declaration
+        res = parse_func_decl();
+        res->print();
     }
 
     // while loop
@@ -1024,7 +1118,11 @@ ASTNode *Parser::parse_stmt() {
         consume();
 
         // expecting cond
-        // TODO
+        ASTNode *cond = parse_expr();
+        cond->print();
+
+        // analyze
+        ASTNode *loop = analyzer.analyze_loop_stmt(cond);
 
         match(token::op_rightparen);
         consume();
@@ -1036,17 +1134,11 @@ ASTNode *Parser::parse_stmt() {
 
     }
 
-    // func (DEPRECATED for now)
-    else if  (tk_type == token::kw_func) {
-        ErrorHandler::handle(error::deprecated, tk.get_src_loc(), tk.get_keyword_str());
-        ErrorHandler::prog_exit();
-    }
-
     // assume that it is an expr by default
     else {
 
         // parse expr
-        res = (ASTNode *)parse_expr().contents;
+        res = (ASTNode *)parse_expr();
     }
 
     // require semicolon at end of stmt

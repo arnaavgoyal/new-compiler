@@ -5,12 +5,11 @@
 #include <vector>
 
 namespace type {
-    enum type {
+    enum kind {
 
         primitive_type,
 
         pointer_type,
-        pointer_to_function_type,
         array_type,
         alias_type,
         function_type,
@@ -23,13 +22,16 @@ class Type {
 
     friend class SemanticAnalyzer;
 
-private:
+public:
 
-    /** string representation of this type */
+    /** string representation (as-written) of this type */
     std::string const *str;
 
-    /** the type of this type */
-    type::type type;
+    /** the kind of this type */
+    type::kind kind;
+
+    /** the equivalent canonical type */
+    Type const *canonical;
 
     union {
 
@@ -54,15 +56,13 @@ private:
 
     bool contains_error : 1;
 
-public:
-
     void set(
         std::string *str,
-        type::type type,
+        type::kind kind,
         Type const *inner_type
     ) {
         this->str = str;
-        this->type = type;
+        this->kind = kind;
         this->points_to = inner_type;
         this->contains_error = this->contains_error || inner_type->contains_error;
     }

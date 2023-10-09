@@ -2,6 +2,7 @@
 
 Type::Type() {
     str = nullptr;
-    type = type::error_type;
+    kind = type::error_type;
     points_to = nullptr;
+    canonical = nullptr;
 }

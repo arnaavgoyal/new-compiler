@@ -107,18 +107,16 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
 
             std::cout << str << "`" << "\e[0;97m" << type_str
                 << "\e[0;93m" << " ";
-            if (tree->str == nullptr){
-                std::cout << token::get_token_string(tree->tok);
+            if (tree->str != nullptr) {
+                std::cout << *tree->str << " ";
             }
-            else {
-                std::cout << *tree->str;
-            }
-
-            std::cout << " ";
 
             if (tree->type != nullptr) {
-                std::cout << "\e[0;92m"
-                    << *(tree->type->get_str());
+                std::cout
+                    << "\e[0;92m"
+                    << *(tree->type->get_str())
+                    << "\e[1;34m" << " "
+                    << *(tree->type->canonical->get_str());
             }
 
             std::cout << "\e[0;95m" << " <";

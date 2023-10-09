@@ -19,6 +19,8 @@ namespace error {
         type_is_not_callable,
         argument_type_mismatch,
         referenced_ident_is_undefined,
+        incompatible_operand_type,
+        pointer_to_function_type,
 
         // dev errors
         deprecated,
