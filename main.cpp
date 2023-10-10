@@ -14,7 +14,9 @@
 
 #define DEBUG
 
-int main() {
+int main(int argc, char **argv) {
+
+    // ---------------- FRONTEND ------------------
     
     // Make all necessary allocators
     Allocator<std::string> str_alloc;
@@ -23,21 +25,13 @@ int main() {
     Allocator<std::vector<Type *>> vec_alloc;
 
     // Add source to source manager
-    SourceID src_id = SourceManager::add_source("input.a");
+    SourceID src_id = SourceManager::add_source(argv[1]);
 
     // Make lexer
     Lexer lexer(src_id, str_alloc, /** save comments = */ false);
 
-#ifdef DEBUG
-    std::cout << "Lexer made\n";
-#endif
-
     // Get list of primitive types
     std::vector<token::token_type> primitives = token::get_types_list();
-
-#ifdef DEBUG
-    std::cout << "Primitives made\n";
-#endif
 
     // Make semantic analyzer
     SemanticAnalyzer analyzer(
@@ -45,19 +39,11 @@ int main() {
         primitives
     );
 
-#ifdef DEBUG
-    std::cout << "Analyzer made\n";
-#endif
-
     // Make parser
     Parser parser(
         lexer,
         analyzer
     );
-
-#ifdef DEBUG
-    std::cout << "Parser made\n";
-#endif
 
     // parse
     ASTNode *ast = nullptr;
@@ -73,7 +59,13 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    // ---------------- BACKEND ------------------
+
     // codegen
+    std::ofstream outfile(argv[2]);
+    outfile << "x\n";
+    outfile.close();
+
 
     return 0;
 }

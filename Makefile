@@ -1,3 +1,6 @@
+CODEIN := input.a
+CODEOUT := output.asm
+
 INCDIR := inc
 SRCDIR := src
 PROJECT := compiler.exe
@@ -10,7 +13,7 @@ OBJECTS := $(SOURCES:%.cpp=%.o)
 DEPENDENCIES = $(OBJECTS:%.o=%.d)
 
 run: $(PROJECT)
-	./$(PROJECT)
+	./$(PROJECT) $(CODEIN) $(CODEOUT)
 
 $(PROJECT): $(OBJECTS)
 	$(CPP) -o $@ $^
