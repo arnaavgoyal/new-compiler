@@ -97,17 +97,22 @@ bool Lexer::lex_line_comment(Token &tk) {
     if (this->save_comments) {
         std::string *s = str_allocator.alloc();
         tk.str = s;
-        int c;
-        while ((c = src->get()) != '\n') {
+        int c = src->get();
+        while (c != '\n' && c != EOF) {
             col++;
             s->push_back(c);
+            c = src->get();
         }
         src->unget();
         col--;
         return true;
     }
     else {
-        while (src->get() != '\n') { col++; }
+        int c = src->get();
+        while (c != '\n' && c != EOF) {
+            col++;
+            c = src->get();
+        }
         src->unget();
         col--;
         return false;
@@ -221,10 +226,7 @@ lex_start:
         case 'f':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_for)) == 0) {
-                type = token::kw_for;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f32)) == 0) {
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f32)) == 0) {
                 type = token::kw_f32;
             }
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f64)) == 0) {

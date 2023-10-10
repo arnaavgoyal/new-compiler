@@ -63,6 +63,9 @@ namespace ast {
         // parenthesized expression
         paren_expr,
 
+        // typecast expression
+        cast_expr,
+
         // unary operation
         unary_op,
 

@@ -116,6 +116,8 @@ public:
         std::vector<token::token_type> const &primitives
     );
 
+    ~SemanticAnalyzer();
+
     ASTNode *analyze_add_op_expr(
         ASTNode *lhs,
         ASTNode *rhs,
@@ -136,6 +138,12 @@ public:
         ASTNode *rhs,
         token::token_type tok,
         SourceLocation op_loc
+    );
+
+    ASTNode *analyze_cast_expr(
+        ASTNode *casted_expr,
+        Type const *cast_type,
+        SourceLocation loc
     );
 
     Type *analyze_function_type(

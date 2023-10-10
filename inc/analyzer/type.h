@@ -33,6 +33,9 @@ public:
     /** the equivalent canonical type */
     Type const *canonical;
 
+    /** whether this type is integral or not */
+    bool is_integral;
+
     union {
 
         /** the type that this pointer type points to */

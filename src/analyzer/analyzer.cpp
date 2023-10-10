@@ -162,6 +162,13 @@ SemanticAnalyzer::SemanticAnalyzer(
     gscope = scope_allocator.alloc();
 }
 
+SemanticAnalyzer::~SemanticAnalyzer() {
+    // auto it = gscope->type_table.begin();
+    // for ( ; it != gscope->type_table.end(); it++) {
+    //     std::cout << (*it).first << std::endl;
+    // }
+}
+
 Type const *get_most_recent_non_alias(Type const *ty) {
     while (ty->kind == type::alias_type) {
         ty = ty->alias_of;
@@ -176,6 +183,9 @@ Type *SemanticAnalyzer::analyze_function_type(
     SourceLocation start_loc,
     SourceLocation end_loc
 ) {
+
+    // track if the func def is canonical
+    bool iscanon = true;
 
     // make string representations
     std::string rep = "(";
@@ -194,12 +204,15 @@ Type *SemanticAnalyzer::analyze_function_type(
         }
         rep += *(*i)->str;
         can_rep += *(*i)->canonical->str;
+        if ((*i)->canonical != (*i)) {
+            iscanon = false;
+        }
     }
     rep += ")" + *return_type->str;
     can_rep += ")" + *return_type->canonical->str;
-
-    std::cout << "  rrep: " << rep << std::endl;
-    std::cout << "  crep: " << can_rep << std::endl;
+    if (return_type != return_type->canonical) {
+        iscanon = false;
+    }
 
     // find type
     Type *type = (Type *)find_type_in_any_active_scope(&rep, scope);
@@ -211,42 +224,117 @@ Type *SemanticAnalyzer::analyze_function_type(
 
     // does not exist yet
 
-    // create str rep
-    std::string *str = str_allocator.alloc();
-    *str = rep;
-    std::string *can_str = str_allocator.alloc();
-    *can_str = can_rep;
+    // attempt to find canon type
+    Type *canon = (Type *)find_type_in_current_scope(&can_rep, &gscope);
 
-    // create type and canon type
-    type = type_allocator.alloc();
-    Type *canon = type_allocator.alloc();
-    type->kind = type::function_type;
-    canon->kind = type::function_type;
-    for (
-        std::vector<Type *>::iterator
-            i = param_types.begin(),
-            end = param_types.end();
-        i != end;
-        i++
-    ) {
-        std::cout << "pb\n";
-        type->add_param(*i);
-        canon->add_param((*i)->canonical);
+    // canon already exists
+    if (canon) {
+
+        // then the type itself is not canon
+
+        // create str rep for type
+        std::string *str = str_allocator.alloc();
+        *str = rep;
+
+        // create type
+        type = type_allocator.alloc();
+        type->set(
+            str,
+            type::function_type,
+            return_type
+        );
+
+        // add params
+        for (
+            std::vector<Type *>::iterator
+                i = param_types.begin(),
+                end = param_types.end();
+            i != end;
+            i++
+        ) {
+            type->add_param(*i);
+        }
+        
+        // set canon
+        type->canonical = canon;
+
+        // insert into curr scope
+        insert_type(scope, *str, type);
+
+        return type;
     }
-    type->returns = return_type;
-    canon->returns = return_type->canonical;
-    type->str = str;
-    canon->str = can_str;
-    canon->canonical = canon;
-    type->canonical = canon;
-    insert_type(scope, *str, type);
 
-    Type *result = type;
+    // canon does not already exist
+    else {
 
-    std::cout << "finished func type analyze\n";
+        // create str rep for canon
+        std::string *can_str = str_allocator.alloc();
+        *can_str = can_rep;
 
-    // return result
-    return result;
+        // create canon
+        canon = type_allocator.alloc();
+        canon->set(
+            can_str,
+            type::function_type,
+            return_type->canonical
+        );
+
+        // add params
+        for (
+            std::vector<Type *>::iterator
+                i = param_types.begin(),
+                end = param_types.end();
+            i != end;
+            i++
+        ) {
+            canon->params.push_back((*i)->canonical);
+        }
+
+        // set canon
+        canon->canonical = canon;
+
+        // insert into global scope
+        insert_type(&gscope, *can_str, canon);
+
+        // the type is not canon
+        if (!iscanon) {
+
+            // create str rep for type
+            std::string *str = str_allocator.alloc();
+            *str = rep;
+
+            // create type
+            type = type_allocator.alloc();
+            type->set(
+                str,
+                type::function_type,
+                return_type
+            );
+
+            // add params
+            for (
+                std::vector<Type *>::iterator
+                    i = param_types.begin(),
+                    end = param_types.end();
+                i != end;
+                i++
+            ) {
+                type->add_param(*i);
+            }
+
+            // set canon
+            type->canonical = canon;
+
+            // insert into curr scope
+            insert_type(scope, *str, type);
+
+            return type;
+        }
+
+        else {
+            return canon;
+        }
+    }
 }
 
 Type *SemanticAnalyzer::analyze_typename(
@@ -299,25 +387,61 @@ Type *SemanticAnalyzer::analyze_pointer_type(
     // create str rep
     std::string *str = str_allocator.alloc();
     *str = rep;
-    std::string *can_str = str_allocator.alloc();
-    *can_str = "*" + *pointee->canonical->str;
 
-    // create type
-    Type *canon = type_allocator.alloc();
-    type = type_allocator.alloc();
-    type->set(
-        str,
-        type::pointer_type,
-        pointee
-    );
-    canon->set(
-        can_str,
-        type->kind,
-        pointee->canonical
-    );
-    type->canonical = canon;
-    canon->canonical = canon;
-    insert_type(scope, *str, type);
+    // requires a separate canon
+    if (pointee->canonical != pointee) {
+
+        // make string rep for canon
+        std::string *can_str = str_allocator.alloc();
+        *can_str = "*" + *pointee->canonical->str;
+
+        // attempt to find canon (in global scope)
+        Type *canon = (Type *)find_type_in_any_active_scope(can_str, &gscope);
+
+        // not found
+        if (canon == nullptr) {
+            
+            // make new canon type
+            canon = type_allocator.alloc();
+            canon->set(
+                can_str,
+                type::pointer_type,
+                pointee->canonical
+            );
+            canon->canonical = canon;
+
+            // insert into global scope
+            insert_type(&gscope, *can_str, canon);
+        }
+
+        // make type
+        type = type_allocator.alloc();
+        type->set(
+            str,
+            type::pointer_type,
+            pointee
+        );
+        type->canonical = canon;
+
+        // insert into local scope (since it is a non-canonical type)
+        insert_type(scope, *str, type);
+    }
+
+    // is canon itself
+    else {
+
+        // then the new type will also be canon
+        type = type_allocator.alloc();
+        type->set(
+            str,
+            type::pointer_type,
+            pointee
+        );
+        type->canonical = type;
+
+        // insert into global scope (since it is a modified builtin)
+        insert_type(&gscope, *str, type);
+    }
 
     // return result
     return type;
@@ -331,6 +455,26 @@ Type *SemanticAnalyzer::analyze_array_type(
     // TODO: implement
     ErrorHandler::handle(error::nyi, array_modifier_loc, "array types");
     ErrorHandler::prog_exit();
+}
+
+ASTNode *SemanticAnalyzer::analyze_cast_expr(
+    ASTNode *casted_expr,
+    Type const *cast_type,
+    SourceLocation loc
+) {
+    // TODO: maybe check typecast compatibility
+
+    ASTNode *cast_node = node_allocator.alloc();
+    cast_node->set(
+        ast::cast_expr,
+        cast_type,
+        nullptr,
+        loc,
+        token::kw_as,
+        false
+    );
+    cast_node->children.push_back(casted_expr);
+    return cast_node;
 }
 
 Type *SemanticAnalyzer::analyze_primitive_type(
@@ -365,9 +509,6 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     // ErrorHandler::handle(error::nyi, op_loc, "binary operations");
     // ErrorHandler::prog_exit();
 
-    // lhs->print();
-    // rhs->print();
-
     Type const *op_type;
 
     // propagate potential error state
@@ -376,7 +517,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     if (op::is_val_op(op)) {
 
         // type compare
-        if (lhs->type != rhs->type) {
+        if (lhs->type->canonical != rhs->type->canonical) {
             op_type = error_type;
             err = true;
             ErrorHandler::handle(
@@ -393,7 +534,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     else if (op::is_rel_op(op)) {
 
         // type compare
-        if (lhs->type != rhs->type) {
+        if (lhs->type->canonical != rhs->type->canonical) {
             op_type = error_type;
             err = true;
             ErrorHandler::handle(
@@ -456,7 +597,6 @@ ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
         expr->has_error
     );
     node->children.push_back(expr);
-    node->print();
 
     return node;
 }
@@ -469,8 +609,6 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
 ) {
     // ErrorHandler::handle(error::nyi, call_start_loc, "call expressions");
     // ErrorHandler::prog_exit();
-
-    expr->print();
 
     Type const *callable = get_most_recent_non_alias(expr->type);
     bool error = expr->has_error;
@@ -554,8 +692,6 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
         error
     );
 
-    node->print();
-
     return node;
 }
 
@@ -584,7 +720,6 @@ ASTNode *SemanticAnalyzer::analyze_paren_expr(
         inside->has_error
     );
     pexpr->children.push_back(inside);
-    pexpr->print();
 
     return pexpr;
 }
@@ -651,7 +786,7 @@ ASTNode *SemanticAnalyzer::analyze_numeric_literal(
 
     // assume no overflow and default size i32 for now
     // TODO: size check and dynamic type assignment
-    std::cout << *num_lit << std::endl;
+
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::int_lit,
@@ -755,8 +890,6 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         node->children.push_back(param);
     }
 
-    node->print();
-
     return (node);
 }
 
@@ -849,9 +982,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
         alias->kind = type::alias_type;
         alias->canonical = type->canonical;
 
-        std::cout << "before!\n";
         insert_type(scope, *ident, alias);
-        std::cout << "after!\n";
     }
 
     ASTNode *stmt = node_allocator.alloc();

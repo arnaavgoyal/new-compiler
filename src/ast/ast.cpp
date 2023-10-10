@@ -95,6 +95,9 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
             case ast::param_decl:
                 type_str = "param decl";
                 break;
+            case ast::cast_expr:
+                type_str = "typecast";
+                break;
             case ast::error:
                 type_str = "error";
                 break;

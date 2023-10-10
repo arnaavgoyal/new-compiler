@@ -23,7 +23,7 @@ int main() {
     Allocator<std::vector<Type *>> vec_alloc;
 
     // Add source to source manager
-    SourceID src_id = SourceManager::add_source("input.c");
+    SourceID src_id = SourceManager::add_source("input.a");
 
     // Make lexer
     Lexer lexer(src_id, str_alloc, /** save comments = */ false);

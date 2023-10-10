@@ -142,6 +142,8 @@ private:
     */
     ASTNode *parse_prefix();
 
+    ASTNode *parse_cast();
+
     /**
      * OPERATOR PRECEDENCE [1, 3].
      * 
