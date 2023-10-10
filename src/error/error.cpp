@@ -139,10 +139,12 @@ void ErrorHandler::handle(error::error_type type, SourceLocation loc, char const
     //print_error(err);
 }
 
-void ErrorHandler::dump() {
+int ErrorHandler::dump() {
 
     // print all errors
     for (std::vector<Error>::iterator i = list.begin(); i != list.end(); i++) {
         print_error(*i);
     }
+
+    return list.size();
 }

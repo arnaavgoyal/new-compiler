@@ -9,6 +9,7 @@
 #include "memory/allocator.h"
 #include "analyzer/analyzer.h"
 #include "analyzer/scope.h"
+#include <setjmp.h>
 
 class Parser {
 private:
@@ -33,13 +34,10 @@ private:
     /** The current scope */
     Scope *curr_scope;
 
-    /** ------------------- UTILS ------------------- */
+    /** The env for longjmp back to runner on syntax error*/
+    jmp_buf env;
 
-    /**
-     * Caches the current token's source loc, then consumes the current
-     * token and advances to the next token.
-    */
-    void consume();
+    /** ------------------- UTILS ------------------- */
 
     ASTNode *make_node(
         ast::node_type kind,
@@ -47,6 +45,20 @@ private:
         SourceLocation loc,
         token::token_type tok
     );
+
+    /**
+     * Caches the current token's source loc, then consumes the current
+     * token and advances to the next token.
+    */
+    void consume();
+
+    /**
+     * Reports a syntax error and stops the parsing process.
+     * DOES NOT RETURN.
+     * 
+     * @param msg the expected syntax
+    */
+    void syntax_error(char const *msg);
 
     /**
      * Matches the current token with the expected token type. If they do
@@ -57,19 +69,14 @@ private:
     void match(token::token_type expected);
 
     /**
-     * Forwards to the next instance of token of given type.
-     * 
-     * @param type the type of token
-    */
-    void skip_to(token::token_type type);
-
-    /**
      * Generically implements the parsing of a left-associative binary operation
      * at a precedence level.
      * 
      * @param higher_prec the higher precedence function to call when parsing
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
+     * @param ops list of ops associated with the corresponding tokens
+     * @return the generated result or nullptr if no expression was found
     */
     ASTNode *left_assoc_bin_op(
         ASTNode *(Parser::*higher_prec)(),
@@ -84,26 +91,13 @@ private:
      * @param higher_prec the higher precedence function to call when parsing
      *                    operands
      * @param types list of tokens to consider equal precedence for the operation
+     * @param ops list of ops associated with the corresponding tokens
+     * @return the generated result or nullptr if no expression was found
     */
     ASTNode *right_assoc_bin_op(
         ASTNode *(Parser::*higher_prec)(),
         std::vector<token::token_type> const &types,
         std::vector<op::kind> const &ops
-    );
-
-    /**
-     * Generically implements the parsing of an N-operand operation at a
-     * precedence level.
-     * 
-     * @param higher_prec the higher precedence function to call when parsing
-     *                    operands
-     * @param types list of tokens to consider equal precedence for the operation
-     * @param node the existing node to add all parsed nodes to
-    */
-    void n_operand_op(
-        ASTNode *(Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types,
-        ASTNode *node
     );
 
     /** ------------------- EXPRESSION PARSING ------------------- */
@@ -142,6 +136,11 @@ private:
     */
     ASTNode *parse_prefix();
 
+    /**
+     * Parses a cast expression of the form '<unit expr> as <type>'.
+     * 
+     * @return the generated result or nullptr if no expression was found
+    */
     ASTNode *parse_cast();
 
     /**
@@ -290,19 +289,23 @@ private:
     /**
      * Parses a type given that the current token is the first token of the type.
      * 
-     * @return pointer to the parsed type or nullptr if no type was found
+     * @return the parsed type
     */
     Type *parse_type();
 
     /**
      * Parses a var declaration given that the current token is the
      * first token of the declaration statement (the var keyword).
+     * 
+     * @return the parsed var decl
     */
     ASTNode *parse_var_decl();
 
     /**
      * Parses a func declaration given that the current token is the
      * first token of the declaration statement (the def keyword).
+     * 
+     * @return the parsed function decl
     */
     ASTNode *parse_func_decl();
 
@@ -310,7 +313,7 @@ private:
      * Parses a statement given that the current token is the start of the
      * statement. Recursively descends into scoped statement blocks.
      * 
-     * @return true if found eof, false if not
+     * @return the parsed statement
     */
     ASTNode *parse_stmt();
 
@@ -333,12 +336,14 @@ public:
     ~Parser();
 
     /**
-     * Client-facing parse function. Parses until error or eof,
-     * and returns the generated tree.
+     * Client-facing parse function. Parses until syntax error
+     * or eof, and returns the generated tree.
      * 
-     * @return the tree
+     * @param ref writes pointer to the root of the generated
+     *            tree at ref
+     * @return true if (syntactically) successful, false if not
     */
-    void parse();
+    bool parse(ASTNode **ref);
     
 };
 

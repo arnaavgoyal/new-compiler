@@ -1030,12 +1030,21 @@ ASTNode *SemanticAnalyzer::analyze_return_stmt(
 }
 
 ASTNode *SemanticAnalyzer::analyze_loop_stmt(
-    ASTNode *cond
+    ASTNode *cond,
+    SourceLocation loc
 ) {
-    // ensure cond is int type
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, cond->loc, "loops");
-    ErrorHandler::prog_exit();
+    // TODO: ensure cond is integral type
+    ASTNode *loop = node_allocator.alloc();
+    loop->set(
+        ast::loop_stmt,
+        cond->type,
+        nullptr,
+        loc,
+        token::kw_while,
+        false
+    );
+    loop->children.push_back(cond);
+    return loop;
 }
 
 void SemanticAnalyzer::add_expr_as_stmt(

@@ -45,6 +45,9 @@ KEYWORD(def)
 KEYWORD(using)
 KEYWORD(as)
 
+KEYWORD(true)
+KEYWORD(false)
+
 // type keywords
 
 TYPE(void)

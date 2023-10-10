@@ -286,7 +286,8 @@ public:
     );
 
     ASTNode *analyze_loop_stmt(
-        ASTNode *cond
+        ASTNode *cond,
+        SourceLocation loc
     );
 
     void add_expr_as_stmt(

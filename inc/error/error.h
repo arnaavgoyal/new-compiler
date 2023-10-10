@@ -82,7 +82,7 @@ public:
     /**
      * Dumps all queued errors.
     */
-    static void dump();
+    static int dump();
 
     static void prog_exit() { dump(); exit(EXIT_FAILURE); }
 

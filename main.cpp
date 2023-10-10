@@ -60,14 +60,20 @@ int main() {
 #endif
 
     // parse
-    parser.parse();
+    ASTNode *ast = nullptr;
+    bool parse_success = parser.parse(&ast);
+    ast->print();
+    std::cout << parse_success << std::endl;
 
     // dump errors
-    ErrorHandler::dump();
+    int num_errors = ErrorHandler::dump();
 
-#ifdef DEBUG
-    std::cout << "Done testing." << std::endl;
-#endif
+    // fail if errors
+    if (num_errors) {
+        return EXIT_FAILURE;
+    }
+
+    // codegen
 
     return 0;
 }

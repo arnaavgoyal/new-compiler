@@ -10,13 +10,9 @@
 #include <algorithm>
 #include "analyzer/analyzer.h"
 #include "analyzer/op.h"
+#include <setjmp.h>
 
 //#define DEBUG
-
-void Parser::consume() {
-    prev_tk_loc = tk.get_src_loc();
-    lexer.lex(tk);
-}
 
 ASTNode *Parser::make_node(
     ast::node_type kind,
@@ -27,6 +23,20 @@ ASTNode *Parser::make_node(
     ASTNode *node = node_allocator.alloc();
     node->set(kind, nullptr, str, loc, tok, false);
     return node;
+}
+
+void Parser::consume() {
+    prev_tk_loc = tk.get_src_loc();
+    lexer.lex(tk);
+}
+
+void Parser::syntax_error(char const *msg) {
+    ErrorHandler::handle(
+        error::missing,
+        tk.get_src_loc(),
+        msg
+    );
+    longjmp(env, 1);
 }
 
 void Parser::match(token::token_type expected) {
@@ -41,12 +51,9 @@ void Parser::match(token::token_type expected) {
         return;
     }
 
-    ErrorHandler::handle(
-        error::missing,
-        tk.get_src_loc(),
+    syntax_error(
         kw ? token::get_keyword_string(expected) : token::get_operator_string(expected)
     );
-    ErrorHandler::prog_exit();
 }
 
 // void Parser::skip_to(token::token_type type) {
@@ -364,8 +371,7 @@ ASTNode *Parser::parse_prefix() {
         default:
             
             // error -- no expr
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "expression");
-            ErrorHandler::prog_exit();
+            syntax_error("expression");
             break;
     }
 
@@ -541,8 +547,7 @@ std::vector<ASTNode *> Parser::parse_call_args() {
             // error - something else
             default:
                 std::cout << "call arg, unknown\n";
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                ErrorHandler::prog_exit();
+                syntax_error("')'");
         }
     }
 
@@ -619,8 +624,7 @@ Type *Parser::parse_type() {
                         default:
                             
                             // parse error
-                            ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                            ErrorHandler::prog_exit();
+                            syntax_error("')'");
                             break;
                     }
                 }
@@ -690,8 +694,7 @@ Type *Parser::parse_type() {
 
             // expects right bracket
             if (tk.get_type() != token::op_rightbracket) {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "']'");
-                ErrorHandler::prog_exit();
+                syntax_error("']'");
             }
 
             // update bracket loc
@@ -730,8 +733,7 @@ Type *Parser::parse_type() {
 
             // error type
             else {
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "type");
-                ErrorHandler::prog_exit();
+                syntax_error("type");
             }
 
             break;
@@ -757,8 +759,7 @@ ASTNode *Parser::parse_var_decl() {
 
     // expects identifier
     if (tk.get_type() != token::identifier) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-        ErrorHandler::prog_exit();
+        syntax_error("identifier");
     }
 
     // save identifier
@@ -826,8 +827,7 @@ ASTNode *Parser::parse_func_decl() {
 
     // expects identifier
     if (tk.get_type() != token::identifier) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-        ErrorHandler::prog_exit();
+        syntax_error("identifier");
     }
 
     // save identifier
@@ -848,8 +848,7 @@ ASTNode *Parser::parse_func_decl() {
 
     // expect left paren
     if (tk.get_type() != token::op_leftparen) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "'('");
-        ErrorHandler::prog_exit();
+        syntax_error("'('");
     }
 
     // save left paren loc
@@ -863,8 +862,7 @@ ASTNode *Parser::parse_func_decl() {
 
         // expect identifier
         if (tk.get_type() != token::identifier) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-            ErrorHandler::prog_exit();
+            syntax_error("identifier");
         }
 
         else {
@@ -894,8 +892,7 @@ ASTNode *Parser::parse_func_decl() {
             // error - something else
             default:
 
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "')'");
-                ErrorHandler::prog_exit();
+                syntax_error("')'");
                 break;
         }
 
@@ -919,8 +916,7 @@ ASTNode *Parser::parse_func_decl() {
 
     // expect left brace for definition
     if (tk.get_type() != token::op_leftbrace) {
-        ErrorHandler::handle(error::missing, tk.get_src_loc(), "'{'");
-        ErrorHandler::prog_exit();
+        syntax_error("'{'");
     }
 
     // handle func definition start
@@ -986,8 +982,7 @@ ASTNode *Parser::parse_stmt() {
             }
             else {
                 // reached eof without end brace
-                ErrorHandler::handle(error::missing, tk.get_src_loc(), "'}'");
-                ErrorHandler::prog_exit();
+                syntax_error("'}'");
             }
         }
 
@@ -1010,8 +1005,7 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting identifier
         if (tk.get_type() != token::identifier) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "identifier");
-            ErrorHandler::prog_exit();
+            syntax_error("identifier");
         }
 
         // cache ident loc
@@ -1024,8 +1018,7 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting '='
         if (tk.get_type() != token::op_equal) {
-            ErrorHandler::handle(error::missing, tk.get_src_loc(), "'='");
-            ErrorHandler::prog_exit();
+            syntax_error("'='");
         }
 
         // consume '='
@@ -1085,18 +1078,27 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting cond
         ASTNode *cond = parse_expr();
-        cond->print();
 
-        // analyze
-        ASTNode *loop = analyzer.analyze_loop_stmt(cond);
-
+        // match and consume )
         match(token::op_rightparen);
         consume();
 
-        match(token::op_leftbrace);
-        ASTNode *stmts = parse_stmt();
-        res = stmts;
+        // get end loc of loop stmt
+        loc_cache.copy_end(prev_tk_loc);
 
+        // analyze
+        ASTNode *loop = analyzer.analyze_loop_stmt(cond, loc_cache);
+
+        // match {
+        match(token::op_leftbrace);
+
+        // parse stmt block
+        ASTNode *stmts = parse_stmt();
+
+        // add stmt block to loop node
+        loop->children.push_back(stmts);
+
+        res = loop;
     }
 
     // assume that it is an expr by default
@@ -1137,7 +1139,7 @@ Parser::~Parser() {
 #endif
 }
 
-void Parser::parse() {
+bool Parser::parse(ASTNode **ref) {
     ASTNode *root = node_allocator.alloc();
     root->set(
         ast::translation_unit,
@@ -1148,8 +1150,19 @@ void Parser::parse() {
         false
     );
     ASTNode *temp;
-    while (temp = parse_stmt()) {
-        root->children.push_back(temp);
+    *ref = root;
+
+    // syntax error
+    if (setjmp(env)) {
+        return false;
     }
-    root->print();
+
+    // normal
+    else {
+        while (temp = parse_stmt()) {
+            root->children.push_back(temp);
+        }
+    }
+
+    return true;
 }
