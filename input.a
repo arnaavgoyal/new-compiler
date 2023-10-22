@@ -2,7 +2,7 @@ def (i8, **i8) i32
 main (argc, argv) {
     while (1) {
 
-    };
+    }
     main(argc, argv);
     return argc;
-};
+}

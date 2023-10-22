@@ -1064,6 +1064,8 @@ ASTNode *Parser::parse_stmt() {
 
         // parse the declaration
         res = parse_func_decl();
+
+        req_semi = false;
     }
 
     // while loop
@@ -1099,6 +1101,8 @@ ASTNode *Parser::parse_stmt() {
         loop->children.push_back(stmts);
 
         res = loop;
+
+        req_semi = false;
     }
 
     // assume that it is an expr by default
