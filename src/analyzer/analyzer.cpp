@@ -139,24 +139,25 @@ SemanticAnalyzer::SemanticAnalyzer(
     *(std::string *)error_node->str = std::string("<error-node>");
     error_node->type = error_type;
 
-    // add all primitive types
-    Type *type_ptr;
-    for (
-        std::vector<token::token_type>::const_iterator
-            i = primitives.begin(),
-            end = primitives.end();
-        i != end;
-        i++
-    ) {
-        type_ptr = type_allocator.alloc();
-        type_ptr->kind = type::primitive_type;
-        str = str_allocator.alloc();
-        str->assign(token::get_keyword_string(*i));
-        type_ptr->str = str;
-        type_ptr->canonical = type_ptr;
-        type_ptr->contains_error = false;
-        primitive_types.push_back(type_ptr);
-    }
+    // ADDED TO Type AS STATIC FUNCTIONALITY
+    // // add all primitive types
+    // Type *type_ptr;
+    // for (
+    //     std::vector<token::token_type>::const_iterator
+    //         i = primitives.begin(),
+    //         end = primitives.end();
+    //     i != end;
+    //     i++
+    // ) {
+    //     type_ptr = type_allocator.alloc();
+    //     type_ptr->kind = type::primitive_type;
+    //     str = str_allocator.alloc();
+    //     str->assign(token::get_keyword_string(*i));
+    //     type_ptr->str = str;
+    //     type_ptr->canonical = type_ptr;
+    //     type_ptr->contains_error = false;
+    //     primitive_types.push_back(type_ptr);
+    // }
 
     // create global scope
     gscope = scope_allocator.alloc();
@@ -486,17 +487,17 @@ Type *SemanticAnalyzer::analyze_primitive_type(
         ErrorHandler::prog_exit();
     }
 
-    // this must be valid because the set of primitives is given
-    unsigned int idx = std::distance(
-        primitive_keywords.begin(),
-        std::find(
-            primitive_keywords.begin(),
-            primitive_keywords.end(),
-            prim
-        )
-    );
+    // // this must be valid because the set of primitives is given
+    // unsigned int idx = std::distance(
+    //     primitive_keywords.begin(),
+    //     std::find(
+    //         primitive_keywords.begin(),
+    //         primitive_keywords.end(),
+    //         prim
+    //     )
+    // );
 
-    return (Type *)primitive_types[idx];
+    return (Type *)Type::builtin(prim);
 }
 
 ASTNode *SemanticAnalyzer::analyze_binary_op_expr(

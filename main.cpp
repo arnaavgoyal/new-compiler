@@ -11,6 +11,7 @@
 #include "error/error.h"
 #include "analyzer/analyzer.h"
 #include "analyzer/type.h"
+#include "ir/ir.h"
 
 #define DEBUG
 
@@ -58,6 +59,10 @@ int main(int argc, char **argv) {
     if (num_errors) {
         return EXIT_FAILURE;
     }
+
+    Program binop = ast2ir(ast->children[0]);
+    //reinterpret_cast<BinaryOpInstr *>(binop)->dump();
+    //binop->dump();
 
     // ---------------- BACKEND ------------------
 

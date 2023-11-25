@@ -287,6 +287,10 @@ lex_start:
             if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_true)) == 0) {
                 type = token::kw_true;
             }
+            
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_type)) == 0) {
+                type = token::kw_type;
+            }
             else {
                 type = token::identifier;
             }
@@ -302,9 +306,6 @@ lex_start:
             }
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u64)) == 0) {
                 type = token::kw_u64;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_using)) == 0) {
-                type = token::kw_using;
             }
             else {
                 type = token::identifier;

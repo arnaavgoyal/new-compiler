@@ -1,9 +1,11 @@
 #include "ast/ast.h"
 #include <iostream>
 #include <iomanip>
+#include <cassert>
 #include "lexer/tokentypes.h"
 #include "lexer/token.h"
 #include "source/source.h"
+#include "ir/builder.h"
 
 static void print_err_loc_preamble(SourceLocation loc) {
 #define LOC_NUM_WIDTH 2
@@ -15,6 +17,44 @@ static void print_err_loc_preamble(SourceLocation loc) {
         << std::setw(LOC_NUM_WIDTH) << loc.end_col
         ;
 #undef LOC_NUM_WIDTH
+}
+
+GlobalVar *ast2ir_gvar(ASTNode const *gvar) {
+
+}
+
+Instr *ast2ir_instr(ASTNode const *node) {
+    if (node->kind == ast::call_expr) {
+        CallInstr *call = IRBuilder::make_call(IRBuilder::get_func(*node->children[0]->str));
+        for (int i = 1; i < node->children.size(); i++) {
+            
+        }
+    }
+}
+
+Function *ast2ir_func(ASTNode const *fdecl) {
+    assert(fdecl->kind == ast::func_decl);
+
+    Function *f = IRBuilder::make_function(*fdecl->str, fdecl->type, ir::linkage::external);
+    Block *b = IRBuilder::make_block();
+    for (ASTNode const *node : fdecl->children) {
+        b->add_instr(ast2ir_instr(node));
+    }
+}
+
+Program ast2ir(ASTNode const *ast) {
+    assert(ast->kind == ast::translation_unit);
+    Program p;
+    for (ASTNode const *node : ast->children) {
+        if (node->kind == ast::func_decl) {
+            p.funcs.push_back(ast2ir_func(node));
+        }
+        else {
+            p.globs.push_back(ast2ir_gvar(node));
+        }
+        // global scope typedef stmts are ignored
+    }
+    return p;
 }
 
 /** ------------------- ASTNode ------------------- */

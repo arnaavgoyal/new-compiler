@@ -7,6 +7,9 @@
 #include "lexer/token.h"
 #include "analyzer/type.h"
 #include "analyzer/op.h"
+#include "ir/ir.h"
+
+class ASTNode;
 
 namespace ast {
 
@@ -81,6 +84,8 @@ namespace ast {
 
 }
 
+Program ast2ir(ASTNode const *ast);
+
 class ASTNode {
 
     friend class SemanticAnalyzer;
@@ -130,6 +135,21 @@ public:
 
     void print() const;
 
+};
+
+class Decl : public ASTNode {
+private:
+    std::string *name;
+};
+
+class ParamDecl : public ASTNode {
+private:
+
+};
+
+class FuncDecl : public ASTNode {
+private:
+    std::vector<ParamDecl *> params;
 };
 
 #endif

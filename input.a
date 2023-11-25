@@ -1,8 +1,14 @@
+14 * 12;
+
 def (i8, **i8) i32
 main (argc, argv) {
     while (1) {
-
+        var i32 myint = 4;
+        type myi32 = i32;
+        var myi32 mytypeint = 4;
     }
     main(argc, argv);
     return argc;
 }
+
+// ------------------------------

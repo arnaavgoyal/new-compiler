@@ -988,6 +988,9 @@ ASTNode *Parser::parse_stmt() {
 
         res->loc.copy_end(tk.get_src_loc());
 
+        // std::cout << "Dumping scope tables:\n";
+        // curr_scope->dump(2);
+
         analyzer.end_scoped_block(&curr_scope, tk.get_src_loc());
 
         // consume right brace
@@ -997,8 +1000,8 @@ ASTNode *Parser::parse_stmt() {
         req_semi = false;
     }
 
-    // using
-    else if (tk_type == token::kw_using) {
+    // typedef
+    else if (tk_type == token::kw_type) {
 
         // consume keyword
         consume();

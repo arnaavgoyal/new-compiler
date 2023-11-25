@@ -42,7 +42,7 @@ KEYWORD(return)
 
 KEYWORD(var)
 KEYWORD(def)
-KEYWORD(using)
+KEYWORD(type)
 KEYWORD(as)
 
 KEYWORD(true)
