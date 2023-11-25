@@ -60,7 +60,22 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    Program binop = ast2ir(ast->children[0]);
+    // ---------------- MIDEND ------------------
+
+    ir::Program p;
+    std::cout << "made p" << std::endl;
+    ir::Function f(
+        new ir::FunctionType(
+            ir::get_void(),
+            std::vector<ir::Type const *>()
+        ),
+        ir::linkage::external, &p
+    );
+    std::cout << "made f" << std::endl;
+    ir::Block b(&f);
+    std::cout << "made b" << std::endl;
+
+    ir::Program binop = ast2ir(ast);
     //reinterpret_cast<BinaryOpInstr *>(binop)->dump();
     //binop->dump();
 

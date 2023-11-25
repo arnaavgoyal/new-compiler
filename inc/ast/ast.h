@@ -84,7 +84,7 @@ namespace ast {
 
 }
 
-Program ast2ir(ASTNode const *ast);
+ir::Program ast2ir(ASTNode const *ast);
 
 class ASTNode {
 

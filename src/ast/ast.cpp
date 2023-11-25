@@ -19,29 +19,29 @@ static void print_err_loc_preamble(SourceLocation loc) {
 #undef LOC_NUM_WIDTH
 }
 
-GlobalVar *ast2ir_gvar(ASTNode const *gvar) {
+ir::GlobalVar *ast2ir_gvar(ASTNode const *gvar) {
     return nullptr;
 }
 
-Instr *ast2ir_instr(ASTNode const *node) {
+ir::Instr *ast2ir_instr(ASTNode const *node) {
     return nullptr;
 }
 
-Function *ast2ir_func(ASTNode const *fdecl) {
+ir::Function *ast2ir_func(ASTNode const *fdecl) {
     return nullptr;
 }
 
-Program ast2ir(ASTNode const *ast) {
+ir::Program ast2ir(ASTNode const *ast) {
     assert(ast->kind == ast::translation_unit);
-    Program p;
+    ir::Program p;
     for (ASTNode const *node : ast->children) {
         if (node->kind == ast::func_decl) {
-            p.funcs.push_back(ast2ir_func(node));
+            //p.funcs.push_back(ast2ir_func(node));
         }
         else {
-            p.globs.push_back(ast2ir_gvar(node));
+            //p.globs.push_back(ast2ir_gvar(node));
         }
-        // global scope typedef stmts are ignored
+        // TODO: global scope typedef stmts are ignored
     }
     return p;
 }

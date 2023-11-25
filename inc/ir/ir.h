@@ -2,8 +2,12 @@
 #define IR_H
 
 #include <map>
-#include "analyzer/type.h"
-#include "utils/ll.h"
+#include <type_traits>
+#include "ir/type.h"
+#include "utils/ilist.h"
+#include "ir/symtable.h"
+
+namespace ir {
 
 class Def;
 class Use;
@@ -16,60 +20,56 @@ class Global;
 class Function;
 class Program;
 
-namespace ir {
-
-    enum class linkage {
-        internal,
-        external,
-    };
-
-    enum class instr {
-
-    // control flow
-
-        // return
-        ret,
-        // branch
-        branch,
-
-    // memory
-
-        // stack mem alloc
-        salloc,
-        // get mem
-        get,
-        // store mem
-        store,
-        // index a ptr
-        ptridx,
-
-    // typecasting
-
-        // upcast (smaller -> bigger)
-        upcast,
-
-        // downcast (bigger -> smaller)
-        downcast,
-
-    // binary operations
-
-        __binop_start,
-        iadd,
-        isub,
-        imul,
-        idiv,
-        __binop_end,
-
-    // other
-
-        // compare integral types
-        icmp,
-        // call a function
-        call,
-    };
+enum class linkage {
+    internal,
+    external,
 };
 
-class Use : public ilist_node<Use> {
+enum class instr {
+
+// control flow
+
+    // return
+    ret,
+    // branch
+    branch,
+
+// memory
+
+    // stack mem alloc
+    salloc,
+    // get mem
+    get,
+    // store mem
+    store,
+    // index a ptr
+    ptridx,
+
+// typecasting
+
+    // upcast (smaller -> bigger)
+    upcast,
+    // downcast (bigger -> smaller)
+    downcast,
+
+// binary operations
+
+    __binop_start,
+    iadd,
+    isub,
+    imul,
+    idiv,
+    __binop_end,
+
+// other
+
+    // compare integral types
+    icmp,
+    // call a function
+    call,
+};
+
+class Use : public IListNode<Use> {
     friend DefUser;
     DefUser *user;
     Def *def;
@@ -88,7 +88,7 @@ public:
 class Def {
 private:
     Type const *type;
-    ilist<Use> list;
+    IList<Use> list;
     static unsigned int name_counter;
 
 protected:
@@ -100,6 +100,7 @@ public:
     Type const *get_type() { return type; }
     void add_use(Use *use);
     void remove_use(Use *use);
+    void set_name(std::string &new_name);
     virtual void dump(int indent = 0) = 0;
 };
 
@@ -118,33 +119,40 @@ public:
     void dump_operands(int indent = 0);
 };
 
-class Block : public Def, public ilist_node<Block> {
+class Block
+    : public Def, public STPPIListUser<Instr, Block>, public STPPIListNode<Block, Function> {
 private:
-    Function *parent;
-    ilist<Instr> list;
+    STPPIList<Instr, Block> list;
+    SymbolTable<Instr> symtable;
+
+    STPPIList<Instr, Block> &get_inner_list(Instr *) override { return list; } 
 
 protected:
     Block(Block &) = default;
     Block(Block &&) = default;
 
 public:
-    Block(Function *func);
-    void add_instr(Instr *i);
+    Block(Function *func) : Def(ir::get_label()) {
+        static_assert(std::is_base_of<STPPIListUser<Instr, Block>, Block>::value);
+        set_parent(func); }
+    void add_instr(Instr *i) { list.append(i, this); }
+    void add_instr(Instr *i, std::string &name) { list.append_and_rename(i, name, this); }
+    Instr *get_instr(std::string &name) { return list.get_by_name(name); }
+    void remove_instr(Instr *instr);
     void dump(int indent) { }
 };
 
 /** ------------------- Instructions ------------------- */
 
-class Instr : public DefUser, public ilist_node<Instr> {
+class Instr : public DefUser, public STPPIListNode<Instr, Block> {
 private:
     ir::instr opcode;
-    Block *parent;
 
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type const *ty, int num_ops, ir::instr opc, Block *b)
-        : DefUser(ty, num_ops), opcode(opc), parent(b) { }
+    Instr(Type const *ty, int num_ops, ir::instr opc, Block *parent)
+        : DefUser(ty, num_ops), opcode(opc) { set_parent(parent); }
 
 public:
     void dump(int indent) { }
@@ -257,21 +265,23 @@ class Global : public Constant {
 public:
 
 private:
-    ir::linkage linkage;
+    linkage lty;
+
+protected:
+    Global(Type const *ty, linkage lty) : Constant(ty), lty(lty) { }
 
 public:
-    Global(Type const *ty, ir::linkage lty) : Constant(ty), linkage(lty) { }
-    ir::linkage get_linkage() { return linkage; }
-    void set_linkage(ir::linkage lty) { linkage = lty; }
+    linkage get_linkage() { return lty; }
+    void set_linkage(linkage linkage_ty) { lty = linkage_ty; }
 };
 
-class GlobalVar : public Global {
+class GlobalVar : public Global, public STPPIListNode<GlobalVar, Program> {
 private:
     bool is_const;
 
 public:
-    GlobalVar(Type const *ty, ir::linkage lty, bool is_const)
-        : Global(ty, lty), is_const(is_const) { }
+    GlobalVar(Type const *ty, linkage lty, Program *parent, bool is_const)
+        : Global(ty, lty), is_const(is_const) { set_parent(parent); }
 };
 
 class Param : public Def {
@@ -284,26 +294,44 @@ public:
     void dump(int indent = 0) { }
 };
 
-class Function : public Global {
-public:
-    using symtable_ty = std::map<std::string *, Def *>;
-
+class Function
+    : public Global, public STPPIListUser<Block, Function>,
+        public STPPIListNode<Function, Program> {
 private:
     std::vector<Param> params;
-    symtable_ty symtable;
-    ilist<Block> list;
+    STPPIList<Block, Function> list;
+    SymbolTable<Block> symtable;
+
+    STPPIList<Block, Function> &get_inner_list(Block *) override { return list; }
 
 public:
-    Function(Type const *ty, ir::linkage lty);
-    symtable_ty const &get_symtable() const { return symtable; };
-    void add_block(Block *b) { list.append(b); }
+    Function(FunctionType const *ty, linkage lty, Program *parent);
+    FunctionType *get_type() { return (FunctionType *)Global::get_type(); }
+    Block *get_block(std::string &name)
+        { return symtable.get(name); }
+    void add_block(Block *b) { list.append(b, this); }
     void dump(int indent = 0) { }
 };
 
-class Program {
+class Program
+    : public STPPIListUser<GlobalVar, Program>, public STPPIListUser<Function, Program> {
+private:
+    STPPIList<GlobalVar, Program> gvar_list;
+    STPPIList<Function, Program> func_list;
+
+    STPPIList<GlobalVar, Program> &get_inner_list(GlobalVar *)
+        override { return gvar_list; } 
+    STPPIList<Function, Program> &get_inner_list(Function *)
+        override { return func_list; } 
+
 public:
-    std::vector<Global *> globs;
-    std::vector<Function *> funcs;
+    void add_glob(GlobalVar *gvar) { gvar_list.append(gvar, this); }
+    GlobalVar *get_glob(std::string &name)
+        { return gvar_list.get_by_name(name); }
+    Function *get_function(std::string &name)
+        { return func_list.get_by_name(name); }
 };
+
+}
 
 #endif

@@ -31,15 +31,15 @@ namespace ir {
 
 class Type {
 private:
-    ir::typekind kind;
+    typekind kind;
 
 protected:
     Type(Type &) = default;
     Type(Type &&) = default;
-    Type(ir::typekind kind) : kind(kind) { }
+    Type(typekind kind) : kind(kind) { }
 
 public:
-    ir::typekind get_kind() { return kind; }
+    typekind get_kind() const { return kind; }
 
 private:
     friend Type const *get_u8();
@@ -64,10 +64,10 @@ protected:
     PointerType(PointerType &) = default;
     PointerType(PointerType &&) = default;
     PointerType(Type const *pointee_ty)
-        : Type(ir::typekind::pointer), points_to(pointee_ty) { }
+        : Type(typekind::pointer), points_to(pointee_ty) { }
 
 public:
-    Type const *pointee_ty() { return points_to; }
+    Type const *pointee_ty() const { return points_to; }
 };
 
 class ArrayType : public Type {
@@ -78,10 +78,10 @@ protected:
     ArrayType(ArrayType &) = default;
     ArrayType(ArrayType &&) = default;
     ArrayType(Type const *element_ty)
-        : Type(ir::typekind::array), array_of(element_ty) { }
+        : Type(typekind::array), array_of(element_ty) { }
 
 public:
-    Type const *element_ty() { return array_of; }
+    Type const *element_ty() const { return array_of; }
 };
 
 class FunctionType : public Type {
@@ -89,15 +89,15 @@ private:
     Type const *returns;
     std::vector<Type const *> params;
 
-protected:
+public:
     FunctionType(FunctionType &) = default;
     FunctionType(FunctionType &&) = default;
     FunctionType(Type const *return_ty, std::vector<Type const *> param_tys)
-        : Type(ir::typekind::function), returns(return_ty), params(param_tys) { }
+        : Type(typekind::function), returns(return_ty), params(param_tys) { }
 
 public:
-    Type const *return_ty() { return returns; }
-    std::vector<Type const *> &param_tys() { return params; }
+    Type const *return_ty() const { return returns; }
+    std::vector<Type const *> const &param_tys() const { return params; }
 };
 
 Type const *get_u8();

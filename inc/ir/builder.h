@@ -5,7 +5,9 @@
 #include "lexer/tokentypes.h"
 #include "ir/ir.h"
 
-class IRBuilder {
+namespace ir {
+
+class Builder {
 private:
     std::map<std::string const, Function *> funcs;
 
@@ -50,5 +52,7 @@ public:
 
     static Function *get_func(std::string const &name);
 };
+
+}
 
 #endif

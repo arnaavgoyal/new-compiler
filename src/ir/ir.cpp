@@ -4,6 +4,8 @@
 
 #define INDENT_INCR 2
 
+namespace ir {
+
 /** ------------------- Def ------------------- */
 
 unsigned int Def::name_counter = 0;
@@ -14,6 +16,10 @@ void Def::add_use(Use *use) {
 
 void Def::remove_use(Use *use) {
     list.remove(use);
+}
+
+void Def::set_name(std::string &new_name) {
+
 }
 
 void Def::dump(int indent) {
@@ -51,14 +57,7 @@ void DefUser::dump_operands(int indent) {
 
 /** ------------------- Block ------------------- */
 
-Block::Block(Function *func) : Def(nullptr) {
-    parent = func;
-    func->add_block(this);
-}
 
-void Block::add_instr(Instr *i) {
-    list.append(i);
-}
 
 /** ------------------- Instr ------------------- */
 
@@ -68,7 +67,7 @@ void Block::add_instr(Instr *i) {
 
 BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x1, Def *x2)
     : Instr(x1->get_type(), 2, opc, nullptr) {
-    assert(x1->get_type()->canonical == x2->get_type()->canonical);
+    assert(x1->get_type() == x2->get_type());
     set_operand(0, x1);
     set_operand(1, x2);
 }
@@ -81,12 +80,17 @@ void BinaryOpInstr::dump(int indent) {
 
 // ... 
 
+/** ------------------- Global ------------------- */
+
+
+
 /** ------------------- Function ------------------- */
 
-Function::Function(Type const *ty, ir::linkage lty)
+Function::Function(FunctionType const *ty, ir::linkage lty, Program *parent)
     : Global(ty, lty) {
+    set_parent(parent);
     int i = 0;
-    for (Type const *pty : ty->params) {
+    for (Type const *pty : ty->param_tys()) {
         params.emplace_back(pty, this, i);
         i++;
     }
@@ -112,4 +116,4 @@ IntegralConstant const *IntegralConstant::get(Type const *ty, uint64_t value) {
     return it.operator*().second;
 }
 
-
+}
