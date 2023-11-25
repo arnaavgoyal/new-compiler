@@ -21,15 +21,7 @@ namespace type {
 }
 
 class Type {
-private:
-    /** BUILTIN TYPES */
-    // TODO: maybe streamline this implementation
-    static std::map<token::token_type, Type const *> prims;
 
-public:
-    static Type const *builtin(token::token_type tk);
-
-private:
     friend class SemanticAnalyzer;
 
 public:
@@ -102,18 +94,5 @@ public:
     Type const &operator=(Type const &other) = delete;
 
 };
-
-class PointerType : public Type {
-private:
-    Type const *points_to;
-
-protected:
-    PointerType(PointerType &) = default;
-    PointerType(PointerType &&) = default;
-    PointerType(Type const *) : Type(type::pointer_type) { }
-
-public:
-
-}
 
 #endif

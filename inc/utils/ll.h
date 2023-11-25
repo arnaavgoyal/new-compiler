@@ -22,7 +22,7 @@ public:
     T *&prev() { return _prev; }
 };
 
-template <typename T, typename = std::enable_if_t<std::is_base_of_v<ilist_node<T>, T>>>
+template <typename T>
 class ilist {
 private:
     T *_head = nullptr;
@@ -30,6 +30,9 @@ private:
     unsigned int _size = 0;
 
 public:
+    ilist() {
+        static_assert(std::is_base_of<ilist_node<T>, T>::value == true);
+    }
     T *head() { return _head; }
     T *tail() { return _tail; }
     unsigned int size() { return _size; }

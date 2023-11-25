@@ -20,26 +20,15 @@ static void print_err_loc_preamble(SourceLocation loc) {
 }
 
 GlobalVar *ast2ir_gvar(ASTNode const *gvar) {
-
+    return nullptr;
 }
 
 Instr *ast2ir_instr(ASTNode const *node) {
-    if (node->kind == ast::call_expr) {
-        CallInstr *call = IRBuilder::make_call(IRBuilder::get_func(*node->children[0]->str));
-        for (int i = 1; i < node->children.size(); i++) {
-            
-        }
-    }
+    return nullptr;
 }
 
 Function *ast2ir_func(ASTNode const *fdecl) {
-    assert(fdecl->kind == ast::func_decl);
-
-    Function *f = IRBuilder::make_function(*fdecl->str, fdecl->type, ir::linkage::external);
-    Block *b = IRBuilder::make_block();
-    for (ASTNode const *node : fdecl->children) {
-        b->add_instr(ast2ir_instr(node));
-    }
+    return nullptr;
 }
 
 Program ast2ir(ASTNode const *ast) {
