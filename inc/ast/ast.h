@@ -7,7 +7,6 @@
 #include "lexer/token.h"
 #include "analyzer/type.h"
 #include "analyzer/op.h"
-#include "ir/ir.h"
 
 class ASTNode;
 
@@ -83,8 +82,6 @@ namespace ast {
     };
 
 }
-
-ir::Program ast2ir(ASTNode const *ast);
 
 class ASTNode {
 

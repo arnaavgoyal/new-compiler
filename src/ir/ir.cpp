@@ -18,17 +18,13 @@ void Def::remove_use(Use *use) {
     list.remove(use);
 }
 
-void Def::set_name(std::string &new_name) {
-
-}
-
 void Def::dump(int indent) {
 
 }
 
 /** ------------------- DefUser ------------------- */
 
-DefUser::DefUser(Type const *ty, unsigned int num_ops)
+DefUser::DefUser(Type *ty, unsigned int num_ops)
     : Def(ty), num_ops(num_ops) {
     operands = new Use[num_ops];
     for (int i = 0; i < num_ops; i++) {
@@ -86,11 +82,11 @@ void BinaryOpInstr::dump(int indent) {
 
 /** ------------------- Function ------------------- */
 
-Function::Function(FunctionType const *ty, ir::linkage lty, Program *parent)
+Function::Function(FunctionType *ty, ir::linkage lty, Program *parent)
     : Global(ty, lty) {
     set_parent(parent);
     int i = 0;
-    for (Type const *pty : ty->param_tys()) {
+    for (Type *pty : ty->param_tys()) {
         params.emplace_back(pty, this, i);
         i++;
     }
@@ -100,7 +96,7 @@ Function::Function(FunctionType const *ty, ir::linkage lty, Program *parent)
 
 IntegralConstant::map_type IntegralConstant::vals;
 
-IntegralConstant const *IntegralConstant::get(Type const *ty, uint64_t value) {
+IntegralConstant *IntegralConstant::get(Type *ty, uint64_t value) {
 
     // try to find value
     auto it = vals.find(value);

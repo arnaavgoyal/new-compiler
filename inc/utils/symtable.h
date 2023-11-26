@@ -5,10 +5,6 @@
 #include <string>
 #include <cassert>
 
-namespace ir {
-
-class Def;
-
 template <typename T>
 class SymbolTable {
 private:
@@ -16,7 +12,9 @@ private:
 
 public:
     std::string insert(std::string key, T *val) {
-        return map.emplace(key, val).first->first;
+        auto res = map.emplace(key, val);
+        assert(res.second);
+        return res.first->first;
     }
     T *remove(std::string key) {
         auto it = map.find(key);
@@ -31,7 +29,5 @@ public:
         return it->second;
     }
 };
-
-}
 
 #endif

@@ -15,6 +15,17 @@
 
 #define DEBUG
 
+// class haha;
+
+// class hehe : public STPPIListNode<hehe, haha> {
+// public:
+//     hehe() { set_parent(nullptr); }
+// };
+
+// class haha {
+//     STPPIList<hehe, haha> list;
+// };
+
 int main(int argc, char **argv) {
 
     // ---------------- FRONTEND ------------------
@@ -63,19 +74,35 @@ int main(int argc, char **argv) {
     // ---------------- MIDEND ------------------
 
     ir::Program p;
-    std::cout << "made p" << std::endl;
+
+    std::string fname = "myfunc";
     ir::Function f(
         new ir::FunctionType(
             ir::get_void(),
-            std::vector<ir::Type const *>()
+            std::vector<ir::Type *>()
         ),
-        ir::linkage::external, &p
+        ir::linkage::external,
+        &p,
+        fname
     );
-    std::cout << "made f" << std::endl;
-    ir::Block b(&f);
-    std::cout << "made b" << std::endl;
+    assert(f.get_parent() == &p);
+    assert(f.get_name() == fname);
+    assert(p.get_function(fname) == &f);
 
-    ir::Program binop = ast2ir(ast);
+    std::string bname = "myblock";
+    ir::Block b(&f, bname);
+    assert(b.get_parent() == &f);
+    assert(b.get_name() == bname);
+    assert(&b == f.get_block(bname));
+
+    ir::IntegralConstant *ic = ir::IntegralConstant::get(ir::get_i32(), 1);
+
+    std::string riname = "myretinstr";
+    ir::ReturnInstr ri(ic, &b, riname);
+    assert(ri.get_parent() == &b);
+    assert(ri.get_name() == riname);
+    assert(b.get_instr(riname) == &ri);
+
     //reinterpret_cast<BinaryOpInstr *>(binop)->dump();
     //binop->dump();
 

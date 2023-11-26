@@ -5,7 +5,6 @@
 #include "lexer/tokentypes.h"
 #include "lexer/token.h"
 #include "source/source.h"
-#include "ir/builder.h"
 
 static void print_err_loc_preamble(SourceLocation loc) {
 #define LOC_NUM_WIDTH 2
@@ -17,33 +16,6 @@ static void print_err_loc_preamble(SourceLocation loc) {
         << std::setw(LOC_NUM_WIDTH) << loc.end_col
         ;
 #undef LOC_NUM_WIDTH
-}
-
-ir::GlobalVar *ast2ir_gvar(ASTNode const *gvar) {
-    return nullptr;
-}
-
-ir::Instr *ast2ir_instr(ASTNode const *node) {
-    return nullptr;
-}
-
-ir::Function *ast2ir_func(ASTNode const *fdecl) {
-    return nullptr;
-}
-
-ir::Program ast2ir(ASTNode const *ast) {
-    assert(ast->kind == ast::translation_unit);
-    ir::Program p;
-    for (ASTNode const *node : ast->children) {
-        if (node->kind == ast::func_decl) {
-            //p.funcs.push_back(ast2ir_func(node));
-        }
-        else {
-            //p.globs.push_back(ast2ir_gvar(node));
-        }
-        // TODO: global scope typedef stmts are ignored
-    }
-    return p;
 }
 
 /** ------------------- ASTNode ------------------- */

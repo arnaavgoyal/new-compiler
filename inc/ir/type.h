@@ -39,79 +39,79 @@ protected:
     Type(typekind kind) : kind(kind) { }
 
 public:
-    typekind get_kind() const { return kind; }
+    typekind get_kind() { return kind; }
 
 private:
-    friend Type const *get_u8();
-    friend Type const *get_i8();
-    friend Type const *get_u16();
-    friend Type const *get_i16();
-    friend Type const *get_u32();
-    friend Type const *get_i32();
-    friend Type const *get_u64();
-    friend Type const *get_i64();
-    friend Type const *get_f32();
-    friend Type const *get_f64();
-    friend Type const *get_label();
-    friend Type const *get_void();
+    friend Type *get_u8();
+    friend Type *get_i8();
+    friend Type *get_u16();
+    friend Type *get_i16();
+    friend Type *get_u32();
+    friend Type *get_i32();
+    friend Type *get_u64();
+    friend Type *get_i64();
+    friend Type *get_f32();
+    friend Type *get_f64();
+    friend Type *get_label();
+    friend Type *get_void();
 };
 
 class PointerType : public Type {
 private:
-    Type const *points_to;
+    Type *points_to;
 
 protected:
     PointerType(PointerType &) = default;
     PointerType(PointerType &&) = default;
-    PointerType(Type const *pointee_ty)
+    PointerType(Type *pointee_ty)
         : Type(typekind::pointer), points_to(pointee_ty) { }
 
 public:
-    Type const *pointee_ty() const { return points_to; }
+    Type *pointee_ty() { return points_to; }
 };
 
 class ArrayType : public Type {
 private:
-    Type const *array_of;
+    Type *array_of;
 
 protected:
     ArrayType(ArrayType &) = default;
     ArrayType(ArrayType &&) = default;
-    ArrayType(Type const *element_ty)
+    ArrayType(Type *element_ty)
         : Type(typekind::array), array_of(element_ty) { }
 
 public:
-    Type const *element_ty() const { return array_of; }
+    Type *element_ty() { return array_of; }
 };
 
 class FunctionType : public Type {
 private:
-    Type const *returns;
-    std::vector<Type const *> params;
+    Type *returns;
+    std::vector<Type *> params;
 
 public:
     FunctionType(FunctionType &) = default;
     FunctionType(FunctionType &&) = default;
-    FunctionType(Type const *return_ty, std::vector<Type const *> param_tys)
+    FunctionType(Type *return_ty, std::vector<Type *> param_tys)
         : Type(typekind::function), returns(return_ty), params(param_tys) { }
 
 public:
-    Type const *return_ty() const { return returns; }
-    std::vector<Type const *> const &param_tys() const { return params; }
+    Type *return_ty() { return returns; }
+    std::vector<Type *> &param_tys() { return params; }
 };
 
-Type const *get_u8();
-Type const *get_i8();
-Type const *get_u16();
-Type const *get_i16();
-Type const *get_u32();
-Type const *get_i32();
-Type const *get_u64();
-Type const *get_i64();
-Type const *get_f32();
-Type const *get_f64();
-Type const *get_label();
-Type const *get_void();
+Type *get_u8();
+Type *get_i8();
+Type *get_u16();
+Type *get_i16();
+Type *get_u32();
+Type *get_i32();
+Type *get_u64();
+Type *get_i64();
+Type *get_f32();
+Type *get_f64();
+Type *get_label();
+Type *get_void();
 
 }
 
