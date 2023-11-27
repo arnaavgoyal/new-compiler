@@ -142,7 +142,7 @@ void Function::dump(unsigned indent) {
     for (Param *p : params_iterable()) {
         std::cout << " " << p->get_type()->stringify();
     }
-    std::cout << ") {" << std::endl;
+    std::cout << " ) {" << std::endl;
     Block *curr = blocks.head();
     for (size_t i = 0; i < blocks.size(); i++) {
         curr->dump(indent);

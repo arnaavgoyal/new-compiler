@@ -32,8 +32,8 @@ public:
     static   ReturnInstr *make_return();
     static   BranchInstr *make_branch();
     static   SAllocInstr *make_salloc();
-    static      GetInstr *make_get();
-    static    StoreInstr *make_store();
+    static      ReadInstr *make_get();
+    static    WriteInstr *make_store();
     static   PtrIdxInstr *make_ptridx();
     static   UpcastInstr *make_upcast();
     static DowncastInstr *make_downcast();

@@ -2,11 +2,10 @@
 #define IR_H
 
 #include <map>
-#include <type_traits>
-#include <ranges>
 #include "ir/type.h"
 #include "utils/stppilist.h"
 #include "utils/symtable.h"
+#include "utils/iterator.h"
 
 namespace ir {
 
@@ -362,7 +361,7 @@ public:
     block_list_ty::forward_iterator end() { return blocks.end(); }
     param_list_ty::forward_iterator params_begin() { return params.begin(); }
     param_list_ty::forward_iterator params_end() { return params.end(); }
-    auto params_iterable() { return std::ranges::subrange(params.begin(), params.end()); }
+    auto params_iterable() { return make_iterator_range(params.begin(), params.end()); }
     void dump(unsigned indent = 0);
     void dump_as_op(unsigned indent = 0, bool newline = true);
 };

@@ -53,4 +53,21 @@ public:
         { return static_cast<this_type const &>(l).curr != static_cast<this_type const &>(r).curr; }
 };
 
+template <typename Iterator>
+class iterator_range {
+private:
+    Iterator _begin;
+    Iterator _end;
+
+public:
+    iterator_range(Iterator b, Iterator e) : _begin(b), _end(e) { }
+    Iterator begin() { return _begin; }
+    Iterator end() { return _end; }
+};
+
+template <typename Iterator>
+iterator_range<Iterator> make_iterator_range(Iterator begin, Iterator end) {
+    return iterator_range(begin, end);
+}
+
 #endif
