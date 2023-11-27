@@ -73,13 +73,17 @@ int main(int argc, char **argv) {
 
     // ---------------- MIDEND ------------------
 
-    ir::Program p;
+    ir::Program p("myprogram");
+
+    std::cout << "1" << std::endl;
 
     std::string fname = "myfunc";
+    std::vector<ir::Type *> param_tys;
+    param_tys.push_back(ir::PrimitiveType::get_i32_type());
     ir::Function f(
         new ir::FunctionType(
-            ir::get_void(),
-            std::vector<ir::Type *>()
+            ir::PrimitiveType::get_void_type(),
+            param_tys
         ),
         ir::linkage::external,
         &p,
@@ -89,19 +93,39 @@ int main(int argc, char **argv) {
     assert(f.get_name() == fname);
     assert(p.get_function(fname) == &f);
 
+    std::cout << "2" << std::endl;
+
     std::string bname = "myblock";
     ir::Block b(&f, bname);
     assert(b.get_parent() == &f);
     assert(b.get_name() == bname);
     assert(&b == f.get_block(bname));
 
-    ir::IntegralConstant *ic = ir::IntegralConstant::get(ir::get_i32(), 1);
+    std::cout << "3" << std::endl;
+
+    ir::IntegralConstant *ic = ir::IntegralConstant::get(ir::PrimitiveType::get_i32_type(), 1);
+
+    std::cout << "4" << std::endl;
 
     std::string riname = "myretinstr";
     ir::ReturnInstr ri(ic, &b, riname);
     assert(ri.get_parent() == &b);
     assert(ri.get_name() == riname);
     assert(b.get_instr(riname) == &ri);
+
+    std::cout << "5" << std::endl;
+
+    f.dump();
+
+    std::cout << "6" << std::endl;
+
+    std::vector<ir::Def *> args{ic};
+    ir::CallInstr ci(&f, args, &b);
+
+    std::cout << "7" << std::endl;
+
+    f.dump();
+    std::cout << "8" << std::endl;
 
     //reinterpret_cast<BinaryOpInstr *>(binop)->dump();
     //binop->dump();

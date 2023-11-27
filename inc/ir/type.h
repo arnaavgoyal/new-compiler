@@ -2,6 +2,7 @@
 #define IR_TYPE_H
 
 #include <vector>
+#include <string>
 
 namespace ir {
     enum class typekind {
@@ -20,10 +21,10 @@ namespace ir {
         // other
         label,
         void_ty,
+        ptr,
 
     // constructible
 
-        pointer,
         array,
         function,
     };
@@ -40,34 +41,36 @@ protected:
 
 public:
     typekind get_kind() { return kind; }
-
-private:
-    friend Type *get_u8();
-    friend Type *get_i8();
-    friend Type *get_u16();
-    friend Type *get_i16();
-    friend Type *get_u32();
-    friend Type *get_i32();
-    friend Type *get_u64();
-    friend Type *get_i64();
-    friend Type *get_f32();
-    friend Type *get_f64();
-    friend Type *get_label();
-    friend Type *get_void();
+    virtual std::string stringify() = 0;
 };
 
-class PointerType : public Type {
+class PrimitiveType final : public Type {
 private:
-    Type *points_to;
+    std::string str;
 
-protected:
-    PointerType(PointerType &) = default;
-    PointerType(PointerType &&) = default;
-    PointerType(Type *pointee_ty)
-        : Type(typekind::pointer), points_to(pointee_ty) { }
+    PrimitiveType(typekind kind, std::string str)
+        : Type(kind), str(str) { }
 
 public:
-    Type *pointee_ty() { return points_to; }
+    PrimitiveType() = delete;
+    PrimitiveType(PrimitiveType &) = delete;
+    PrimitiveType(PrimitiveType &&) = delete;
+
+    static PrimitiveType *get_u8_type();
+    static PrimitiveType *get_i8_type();
+    static PrimitiveType *get_u16_type();
+    static PrimitiveType *get_i16_type();
+    static PrimitiveType *get_u32_type();
+    static PrimitiveType *get_i32_type();
+    static PrimitiveType *get_u64_type();
+    static PrimitiveType *get_i64_type();
+    static PrimitiveType *get_f32_type();
+    static PrimitiveType *get_f64_type();
+    static PrimitiveType *get_label_type();
+    static PrimitiveType *get_void_type();
+    static PrimitiveType *get_ptr_type();
+
+    std::string stringify();
 };
 
 class ArrayType : public Type {
@@ -98,20 +101,8 @@ public:
 public:
     Type *return_ty() { return returns; }
     std::vector<Type *> &param_tys() { return params; }
+    std::string stringify();
 };
-
-Type *get_u8();
-Type *get_i8();
-Type *get_u16();
-Type *get_i16();
-Type *get_u32();
-Type *get_i32();
-Type *get_u64();
-Type *get_i64();
-Type *get_f32();
-Type *get_f64();
-Type *get_label();
-Type *get_void();
 
 }
 

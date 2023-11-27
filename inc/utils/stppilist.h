@@ -3,8 +3,6 @@
 
 #include <type_traits>
 #include <cassert>
-#include <iostream>
-#include <concepts>
 #include "utils/ilist.h"
 #include "utils/symtable.h"
 
@@ -14,12 +12,8 @@ class STPPIListNode;
 template <typename, typename>
 class STPPIList;
 
-template <typename... Args> struct TD;
-template <typename Ret, typename... Args> struct TDFunc;
-template <typename Ret, typename... Args> struct TDFunc<Ret(Args...)>;
-
 /** ------------------- Ensure get_inner_list is member ------------------- */
-
+// THIS DOES NOT WORK -- DO NOT USE
 template<typename Class, typename MemberType>
 struct determine_get_inner_list_impl { };
 
@@ -52,6 +46,16 @@ struct determine_get_inner_list {
 
 /** ------------------- STPPIListNode decl ------------------- */
 
+/**
+ * Defines a Node of the Symbol Table and Parent Pointer Intrusive List (STPPIListNode).
+ * Adds a parent pointer and a string name to the IListNode implementation.
+ * Inner must derive from this class.
+ * Outer is the class that will contain the STPPIList in which Inner will be a node.
+ * STPPIList<Inner, Outer> &Outer::get_inner_list(Inner *) must be defined and accessible by STPPIListNode<Inner, Outer>.
+ * STPPIListNode relies on its corresponding STPPIList for all of its operations, thus it will not function without get_inner_list().
+ * @param Inner the stored class that derives from this class
+ * @param Outer the parent class that will contain this list
+*/
 template <typename Inner, typename Outer>
 class STPPIListNode : public IListNode<Inner> {
 private:
@@ -76,17 +80,31 @@ public:
 
 /** ------------------- STPPIList decl ------------------- */
 
+/**
+ * Defines the Symbol Table and Parent Pointer Intrusive List (STPPIList).
+ * Inner must derive from STPPIListNode<Inner, Outer> to work with the STPPIList defined inside Outer.
+ * @param Inner the stored class that derives from STPPIListNode<Inner, Outer>
+ * @param Outer the parent class that will contain this list
+*/
 template <typename Inner, typename Outer>
 class STPPIList : public IList<Inner> {
+public:
+    using node_type = STPPIListNode<Inner, Outer>;
 private:
     SymbolTable<Inner> symtable;
+    Outer *container;
 
     void set_parent_fields(Inner *i, Outer *p);
     void set_name_fields(Inner *i, std::string name);
     void maybe_remove_name_from_symtable(Inner *i);
 
 public:
-    STPPIList() {
+    /**
+     * Pass 'this' as the parameter.
+     * This is the way STPPIList gets a pointer to the parent
+     * (the class containing this object).
+    */
+    STPPIList(Outer *you) : container(you) {
         static_assert(
             std::is_base_of<STPPIListNode<Inner, Outer>, Inner>::value,
             "Inner must inherit from STPPIListNode<Inner>"
@@ -96,12 +114,12 @@ public:
         //     "Outer must define 'STPPIList<Inner, Outer> &get_inner_list(Inner *)'"
         // );
     }
-    void append(Inner *i, Outer *that);
+    void append(Inner *i);
     void remove(Inner *i);
     void rename(Inner *i, std::string name);
     void remove(std::string name);
     Inner *get(std::string name);
-    void append_and_rename(Inner *i, std::string name, Outer *that);
+    void append_and_rename(Inner *i, std::string name);
 };
 
 /** ------------------- STPPIListNode impl ------------------- */
@@ -117,7 +135,7 @@ void STPPIListNode<Inner, Outer>::set_parent(Outer *p) {
         parent->get_inner_list(static_cast<Inner *>(nullptr)).remove(static_cast<Inner *>(this));
     }
     parent = p;
-    parent->get_inner_list(static_cast<Inner *>(nullptr)).append(static_cast<Inner *>(this), p);
+    parent->get_inner_list(static_cast<Inner *>(nullptr)).append(static_cast<Inner *>(this));
 }
 template <typename Inner, typename Outer>
 void STPPIListNode<Inner, Outer>::set_name(std::string n) {
@@ -134,29 +152,29 @@ void STPPIListNode<Inner, Outer>::set_name(std::string n) {
 
 template <typename Inner, typename Outer>
 void STPPIList<Inner, Outer>::set_parent_fields(Inner *i, Outer *p) {
-    static_cast<STPPIListNode<Inner, Outer> *>(i)->parent = p;
+    static_cast<node_type *>(i)->parent = p;
 }
 template <typename Inner, typename Outer>
 void STPPIList<Inner, Outer>::set_name_fields(Inner *i, std::string name) {
-    STPPIListNode<Inner, Outer> *si = static_cast<STPPIListNode<Inner, Outer> *>(i);
+    node_type *si = static_cast<node_type *>(i);
     si->name = name;
     si->named = true;
 }
 template <typename Inner, typename Outer>
 void STPPIList<Inner, Outer>::maybe_remove_name_from_symtable(Inner *i) {
-    STPPIListNode<Inner, Outer> *si = static_cast<STPPIListNode<Inner, Outer> *>(i);
+    node_type *si = static_cast<node_type *>(i);
     if (si->has_name()) {
         symtable.remove(si->get_name());
     }
 }
 template <typename Inner, typename Outer>
-void STPPIList<Inner, Outer>::append(Inner *i, Outer *that) {
+void STPPIList<Inner, Outer>::append(Inner *i) {
     IList<Inner>::append(i);
-    STPPIListNode<Inner, Outer> *si = static_cast<STPPIListNode<Inner, Outer> *>(i);
+    node_type *si = static_cast<node_type *>(i);
     if (si->has_name()) {
         symtable.insert(si->get_name(), i);
     }
-    set_parent_fields(i, that);
+    set_parent_fields(i, container);
 }
 template <typename Inner, typename Outer>
 void STPPIList<Inner, Outer>::remove(Inner *i) {
@@ -181,9 +199,9 @@ Inner *STPPIList<Inner, Outer>::get(std::string name) {
     return symtable.get(name);
 }
 template <typename Inner, typename Outer>
-void STPPIList<Inner, Outer>::append_and_rename(Inner *i, std::string name, Outer *that) {
+void STPPIList<Inner, Outer>::append_and_rename(Inner *i, std::string name) {
     IList<Inner>::append(i);
-    set_parent_fields(i, that);
+    set_parent_fields(i, container);
     symtable.insert(name, i);
     set_name_fields(i, name);
 }

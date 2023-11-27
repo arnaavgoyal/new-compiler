@@ -8,7 +8,7 @@ namespace ir {
 
 /** ------------------- Def ------------------- */
 
-unsigned int Def::name_counter = 0;
+unsigned Def::name_counter = 0;
 
 void Def::add_use(Use *use) {
     list.append(use);
@@ -18,63 +18,106 @@ void Def::remove_use(Use *use) {
     list.remove(use);
 }
 
-void Def::dump(int indent) {
-
-}
-
 /** ------------------- DefUser ------------------- */
 
-DefUser::DefUser(Type *ty, unsigned int num_ops)
+DefUser::DefUser(Type *ty, unsigned num_ops)
     : Def(ty), num_ops(num_ops) {
     operands = new Use[num_ops];
-    for (int i = 0; i < num_ops; i++) {
+    for (unsigned i = 0; i < num_ops; i++) {
         operands[i].idx = i;
         operands[i].user = this;
     }
 }
-void DefUser::set_operand(unsigned int idx, Def *operand) {
+void DefUser::set_operand(unsigned idx, Def *operand) {
     assert(idx < num_ops);
     Use *u = operands + idx;
     u->set_def(operand);
-    std::cout << "adding use\n";
     operand->add_use(u);
-    std::cout << "done adding use\n";
 }
-Use *DefUser::get_operand(unsigned int idx) {
+Use *DefUser::get_operand(unsigned idx) {
     assert(idx < num_ops);
     return operands + idx;
 }
 
-void DefUser::dump_operands(int indent) {
-    for (int i = 0; i < num_ops; i++) {
+void DefUser::dump_operands(unsigned indent) {
+    for (unsigned i = 0; i < num_ops; i++) {
         operands[i].get_def()->dump(indent);
     }
 }
 
 /** ------------------- Block ------------------- */
 
+void Block::remove_instr(Instr *instr) {
+    list.remove(instr);
+}
 
+void Block::remove_instr(std::string name) {
+    list.remove(name);
+}
+
+void Block::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ');
+    if (has_name()) {
+        std::cout << get_name();
+    }
+    else {
+        std::cout << "<unnamed block>";
+    }
+    std::cout  << ":" << std::endl;
+    Instr *curr = list.head();
+    unsigned ni = indent + INDENT_INCR;
+    for (unsigned i = 0; i < list.size(); i++) {
+        curr->dump(ni);
+        curr = curr->get_next();
+    }
+}
 
 /** ------------------- Instr ------------------- */
 
-// ... 
-
-/** ------------------- BinaryOpInstr ------------------- */
-
-BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x1, Def *x2)
-    : Instr(x1->get_type(), 2, opc, nullptr) {
-    assert(x1->get_type() == x2->get_type());
-    set_operand(0, x1);
-    set_operand(1, x2);
+void ReturnInstr::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ') << STR_REPR << std::endl;
+    get_operand(0)->get_def()->dump(indent + INDENT_INCR);
 }
 
-void BinaryOpInstr::dump(int indent) {
+CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent)
+    : Instr(callee->get_type()->return_ty(), 1 + callee->num_params(), instr::call, parent) {
+    assert(callee->num_params() == args.size());
+    set_operand(0, callee);
+    auto it = callee->params_begin();
+    for (unsigned i = 0; i < callee->num_params(); i++) {
+        assert(args[i]->get_type() == (*it)->get_type());
+        set_operand(i + 1, args[i]);
+    }
+}
+
+void CallInstr::dump(unsigned indent) {
+    std::string is(indent, ' ');
+    std::cout << is << get_type()->stringify() << " ";
+    if (has_name()) {
+        std::cout << get_name();
+    }
+    else {
+        std::cout << "<unnamed>";
+    }
+    std::cout << " = " << STR_REPR << std::endl;
+    Function *callee = static_cast<Function *>(get_operand(0)->get_def());
+    callee->dump_as_op(indent + INDENT_INCR);
+    for (unsigned i = 1; i < get_num_ops(); i++) {
+        get_operand(i)->get_def()->dump(indent + INDENT_INCR);
+    }
+}
+
+BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y)
+    : Instr(x->get_type(), 2, opc, nullptr) {
+    assert(x->get_type() == y->get_type() && "both x and y must have same type");
+    set_operand(0, x);
+    set_operand(1, y);
+}
+
+void BinaryOpInstr::dump(unsigned indent) {
 
 }
 
-/** ------------------- Constant ------------------- */
-
-// ... 
 
 /** ------------------- Global ------------------- */
 
@@ -83,12 +126,42 @@ void BinaryOpInstr::dump(int indent) {
 /** ------------------- Function ------------------- */
 
 Function::Function(FunctionType *ty, ir::linkage lty, Program *parent)
-    : Global(ty, lty) {
+    : Global(ty, lty), params(this), blocks(this) {
     set_parent(parent);
-    int i = 0;
+    unsigned i = 0;
     for (Type *pty : ty->param_tys()) {
-        params.emplace_back(pty, this, i);
+        params.append(new Param(pty, this, i));
         i++;
+    }
+}
+
+void Function::dump(unsigned indent) {
+    std::string is(indent, ' ');
+    dump_as_op(indent, false);
+    std::cout << " (";
+    for (Param *p : params_iterable()) {
+        std::cout << " " << p->get_type()->stringify();
+    }
+    std::cout << ") {" << std::endl;
+    Block *curr = blocks.head();
+    for (size_t i = 0; i < blocks.size(); i++) {
+        curr->dump(indent);
+        curr = curr->get_next();
+    }
+    std::cout << is << "}" << std::endl;
+}
+
+void Function::dump_as_op(unsigned indent, bool newline) {
+    std::string is(indent, ' ');
+    std::cout << is << static_cast<FunctionType *>(get_type())->return_ty()->stringify() << " ";
+    if (has_name()) {
+        std::cout << get_name();
+    }
+    else {
+        std::cout << "<unnamed function>";
+    }
+    if (newline) {
+        std::cout << std::endl;
     }
 }
 
@@ -104,12 +177,21 @@ IntegralConstant *IntegralConstant::get(Type *ty, uint64_t value) {
     // not found
     if (it == vals.end()) {
 
+        // TODO: determine if value actually fits into type
+
         // insert into map
-        return vals.emplace(value, new IntegralConstant(ty, value)).first.operator*().second;
+        return vals.emplace(value, new IntegralConstant(ty, value)).first->second;
     }
 
     // found
-    return it.operator*().second;
+    return it->second;
+}
+
+void IntegralConstant::dump(unsigned indent) {
+    std::cout
+        << std::string(indent, ' ')
+        << get_type()->stringify()
+        << " " << value << std::endl;
 }
 
 }

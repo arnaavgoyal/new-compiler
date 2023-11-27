@@ -1,55 +1,73 @@
-#include "ir/type.h"
 #include <memory>
+#include <iostream>
+#include "ir/type.h"
 
 namespace ir {
 
-Type *get_u8() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::u8));
+std::string PrimitiveType::stringify() {
+    return str;
+}
+PrimitiveType *PrimitiveType::get_u8_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::u8, "u8"));
     return ty.get();
 }
-Type *get_i8() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::i8));
+PrimitiveType *PrimitiveType::get_i8_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::i8, "i8"));
     return ty.get();
 }
-Type *get_u16() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::u16));
+PrimitiveType *PrimitiveType::get_u16_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::u16, "u16"));
     return ty.get();
 }
-Type *get_i16() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::i16));
+PrimitiveType *PrimitiveType::get_i16_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::i16, "i16"));
     return ty.get();
 }
-Type *get_u32() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::u32));
+PrimitiveType *PrimitiveType::get_u32_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::u32, "u32"));
     return ty.get();
 }
-Type *get_i32() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::i32));
+PrimitiveType *PrimitiveType::get_i32_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::i32, "i32"));
     return ty.get();
 }
-Type *get_u64() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::u64));
+PrimitiveType *PrimitiveType::get_u64_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::u64, "u64"));
     return ty.get();
 }
-Type *get_i64() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::i64));
+PrimitiveType *PrimitiveType::get_i64_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::i64, "i64"));
     return ty.get();
 }
-Type *get_f32() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::f32));
+PrimitiveType *PrimitiveType::get_f32_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::f32, "f32"));
     return ty.get();
 }
-Type *get_f64() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::f64));
+PrimitiveType *PrimitiveType::get_f64_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::f64, "f64"));
     return ty.get();
 }
-Type *get_label() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::label));
+PrimitiveType *PrimitiveType::get_label_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::label, "label"));
     return ty.get();
 }
-Type *get_void() {
-    static std::unique_ptr<Type> ty(new Type(ir::typekind::void_ty));
+PrimitiveType *PrimitiveType::get_void_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::void_ty, "void"));
     return ty.get();
+}
+PrimitiveType *PrimitiveType::get_ptr_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::ptr, "ptr"));
+    return ty.get();
+}
+
+std::string FunctionType::stringify() {
+    std::string str("(");
+    for (Type *p : params) {
+        str.append(p->stringify());
+    }
+    str.append(")");
+    str.append(returns->stringify());
+    return str;
 }
 
 }
