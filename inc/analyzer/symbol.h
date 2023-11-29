@@ -5,11 +5,13 @@
 #include "lexer/tokentypes.h"
 #include "analyzer/type.h"
 
+class Scope;
+
 class Symbol {
 
     friend class SemanticAnalyzer;
 
-private:
+public:
 
     /** symbol name */
     std::string name;
@@ -18,6 +20,8 @@ private:
      * pointer to the type of this symbol
     */
     Type const *type_ptr;
+
+    Scope *scope;
 
     /**
      * Constructs a symbol with all fields as given.

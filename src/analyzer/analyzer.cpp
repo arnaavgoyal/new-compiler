@@ -5,6 +5,7 @@
 #include "memory/allocator.h"
 #include "error/error.h"
 #include "analyzer/scope.h"
+#include <cassert>
 
 Scope *SemanticAnalyzer::global_scope() {
     return gscope;
@@ -56,7 +57,7 @@ Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(
     return nullptr;  
 }
 
-void SemanticAnalyzer::insert_symbol(
+Symbol *SemanticAnalyzer::insert_symbol(
     Scope **scope,
     std::string const &name,
     Type const *type_ptr
@@ -64,10 +65,12 @@ void SemanticAnalyzer::insert_symbol(
     Symbol *sym = sym_allocator.alloc();
     sym->name = name;
     sym->type_ptr = type_ptr;
+    sym->scope = *scope;
     (*scope)->sym_table.insert(std::make_pair(name, sym));
     std::cout << "inserted " << name
         << " of type " << *type_ptr->str
         << " into symtable\n";
+    return sym;
 }
 
 Type const *SemanticAnalyzer::find_type_in_current_scope(
@@ -128,7 +131,7 @@ SemanticAnalyzer::SemanticAnalyzer(
     error_type->kind = type::error_type;
     error_type->canonical = error_type;
     str = str_allocator.alloc();
-    *str = std::string("<error-type>");
+    str->assign("<error-type>");
     error_type->str = str;
     error_type->contains_error = true;
 
@@ -139,24 +142,25 @@ SemanticAnalyzer::SemanticAnalyzer(
     *(std::string *)error_node->str = std::string("<error-node>");
     error_node->type = error_type;
 
-    // add all primitive types
-    Type *type_ptr;
-    for (
-        std::vector<token::token_type>::const_iterator
-            i = primitives.begin(),
-            end = primitives.end();
-        i != end;
-        i++
-    ) {
-        type_ptr = type_allocator.alloc();
-        type_ptr->kind = type::primitive_type;
-        str = str_allocator.alloc();
-        str->assign(token::get_keyword_string(*i));
-        type_ptr->str = str;
-        type_ptr->canonical = type_ptr;
-        type_ptr->contains_error = false;
-        primitive_types.push_back(type_ptr);
-    }
+    // IRRELEVANT NOW
+    // // add all primitive types
+    // Type *type_ptr;
+    // for (
+    //     std::vector<token::token_type>::const_iterator
+    //         i = primitives.begin(),
+    //         end = primitives.end();
+    //     i != end;
+    //     i++
+    // ) {
+    //     type_ptr = type_allocator.alloc();
+    //     type_ptr->kind = type::primitive_type;
+    //     str = str_allocator.alloc();
+    //     str->assign(token::get_keyword_string(*i));
+    //     type_ptr->str = str;
+    //     type_ptr->canonical = type_ptr;
+    //     type_ptr->contains_error = false;
+    //     primitive_types.push_back(type_ptr);
+    // }
 
     // create global scope
     gscope = scope_allocator.alloc();
@@ -486,17 +490,19 @@ Type *SemanticAnalyzer::analyze_primitive_type(
         ErrorHandler::prog_exit();
     }
 
-    // this must be valid because the set of primitives is given
-    unsigned int idx = std::distance(
-        primitive_keywords.begin(),
-        std::find(
-            primitive_keywords.begin(),
-            primitive_keywords.end(),
-            prim
-        )
-    );
+    // THIS IS ALSO IRRELEVANT NOW
+    // // this must be valid because the set of primitives is given
+    // unsigned int idx = std::distance(
+    //     primitive_keywords.begin(),
+    //     std::find(
+    //         primitive_keywords.begin(),
+    //         primitive_keywords.end(),
+    //         prim
+    //     )
+    // );
+    // return (Type *)primitive_types[idx];
 
-    return (Type *)primitive_types[idx];
+    return Type::get_prim(prim);
 }
 
 ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
@@ -544,20 +550,31 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
             );
         }
         else {
-            std::string bool_equiv_type_str = "i8";
-            op_type = find_type_in_any_active_scope(&bool_equiv_type_str, &gscope);
+            op_type = Type::get_i8_type();
         }
     }
 
     else if (op::is_log_op(op)) {
 
         ErrorHandler::handle(error::nyi, op_loc, "logical bin ops");
+
+        op_type = error_type;
+        err = true;
     }
 
     else if (op == op::group) {
         
         // type is last expr's type
         op_type = rhs->type;
+    }
+
+    else if (op::is_lval_op(op)) {
+        op_type = lhs->type;
+    }
+
+    else {
+        std::cout << "unknown op: " << op << std::endl;
+        assert(false && "unknown");
     }
 
 
@@ -570,6 +587,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
         tok,
         err
     );
+    node->op = op;
     node->children.push_back(lhs);
     node->children.push_back(rhs);
 
@@ -764,6 +782,7 @@ ASTNode *SemanticAnalyzer::analyze_ref_expr(
         token::identifier,
         err
     );
+    expr->sym = (Symbol *)res;
 
     return expr;
 }
@@ -849,7 +868,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     }
 
     // add to symbol table
-    insert_symbol(scope, *ident, type);
+    Symbol *sym = insert_symbol(scope, *ident, type);
 
     ASTNode *node = node_allocator.alloc();
     node->set(
@@ -860,6 +879,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         token::unknown,
         type->contains_error
     );
+    node->sym = sym;
 
     // enter new scope
     enter_new_scope(scope);
@@ -869,7 +889,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     for (int i = 0; i < params.size(); i++) {
 
         // add to symbol table
-        insert_symbol(
+        sym = insert_symbol(
             scope,
             *params[i].first,
             type->params[i]
@@ -885,6 +905,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
             token::identifier,
             type->params[i]->contains_error
         );
+        param->sym = sym;
 
         // add to decl node
         node->children.push_back(param);
@@ -935,7 +956,8 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
         decl->has_error = true;
     }
 
-    insert_symbol(scope, *ident, type);
+    Symbol *sym = insert_symbol(scope, *ident, type);
+    decl->sym = sym;
 
     ASTNode *res = decl;
     return res;

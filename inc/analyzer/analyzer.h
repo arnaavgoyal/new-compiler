@@ -95,7 +95,7 @@ private:
     
     Symbol const *find_symbol_in_current_scope(std::string const *ident, Scope **scope);
     Symbol const *find_symbol_in_any_active_scope(std::string const *ident, Scope **scope);
-    void insert_symbol(
+    Symbol *insert_symbol(
         Scope **scope,
         std::string const &name,
         Type const *type_ptr

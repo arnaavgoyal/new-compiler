@@ -1,13 +1,12 @@
-14 * 12;
+var i32 glob;
 
 def (i8, **i8) i32
 main (argc, argv) {
-    while (1) {
-        var i32 myint = 4;
-        type myi32 = i32;
-        var myi32 mytypeint = 4;
-    }
-    main(argc, argv);
+    var i32 myint = 4;
+    type myi32 = i32;
+    var myi32 mytypeint = 4;
+    mytypeint = 5;
+    var i32 result = main(argc, argv);
     return argc;
 }
 

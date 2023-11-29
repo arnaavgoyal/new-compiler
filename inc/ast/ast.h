@@ -8,6 +8,8 @@
 #include "analyzer/type.h"
 #include "analyzer/op.h"
 
+class Symbol;
+
 class ASTNode;
 
 namespace ast {
@@ -104,6 +106,8 @@ public:
     token::token_type tok;
 
     bool has_error;
+
+    Symbol *sym = nullptr;
 
     ASTNode(
         ast::node_type kind,

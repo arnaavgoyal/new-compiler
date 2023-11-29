@@ -24,6 +24,13 @@ class Type {
 
     friend class SemanticAnalyzer;
 
+private:
+    // primitive constructor
+    Type(std::string const *str, type::kind kind, bool is_integral)
+        : str(str), kind(kind), canonical(this),
+        is_integral(is_integral), points_to(nullptr),
+        contains_error(false) { }
+
 public:
 
     /** string representation (as-written) of this type */
@@ -87,12 +94,18 @@ public:
     Type();
     ~Type() { }
 
-    /**
-     * Prevent copying.
-    */
-    Type(Type const &other) = delete;
-    Type const &operator=(Type const &other) = delete;
-
+    static Type *get_u8_type();
+    static Type *get_i8_type();
+    static Type *get_u16_type();
+    static Type *get_i16_type();
+    static Type *get_u32_type();
+    static Type *get_i32_type();
+    static Type *get_u64_type();
+    static Type *get_i64_type();
+    static Type *get_f32_type();
+    static Type *get_f64_type();
+    static Type *get_void_type();
+    static Type *get_prim(token::token_type);
 };
 
 #endif

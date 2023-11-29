@@ -100,7 +100,8 @@ public:
     Type *get_type() { return type; }
     void add_use(Use *use);
     void remove_use(Use *use);
-    virtual void dump(unsigned indent = 0) = 0;
+    virtual void dump(unsigned indent = 0);
+    virtual void dump_as_operand();
 };
 
 class DefUser : public Def {
@@ -116,15 +117,48 @@ protected:
     unsigned get_num_ops() { return num_ops; }
     void set_operand(unsigned idx, Def *operand);
     Use *get_operand(unsigned idx);
-    void dump_operands(unsigned indent = 0);
+    void dump(unsigned indent = 0);
+    void dump_as_operand();
+    void dump_operands();
+
+private:
+    class fwiter : public bidirectional_iterator<Use *, fwiter> {
+    private:
+        using bidirectional_iterator<Use *, fwiter>::curr;
+
+        void go_forward() override { curr++; }
+        void go_backward() override { curr--; }
+
+    public:
+        fwiter() { curr = nullptr; }
+        fwiter(Use *ptr) { curr = ptr; }
+    };
+    class bwiter : public bidirectional_iterator<Use *, bwiter> {
+    private:
+        using bidirectional_iterator<Use *, bwiter>::curr;
+
+        void go_forward() override { curr--; }
+        void go_backward() override { curr++; }
+
+    public:
+        bwiter() { curr = nullptr; }
+        bwiter(Use *ptr) { curr = ptr; }
+    };
+
+public:
+    using iterator = fwiter;
+    iterator operands_begin() { return iterator(operands); }
+    iterator operands_end() { return iterator(operands + num_ops); }
+
+    using reverse_iterator = bwiter;
+    reverse_iterator operands_rbegin() { return reverse_iterator(operands + num_ops - 1); }
+    reverse_iterator operands_rend() { return reverse_iterator(operands - 1); }
 };
 
 class Block : public Def, public STPPIListNode<Block, Function> {
 private:
     using list_ty = STPPIList<Instr, Block>;
     list_ty list;
-
-    SymbolTable<Instr> symtable;
 
     friend list_ty::node_type;
     list_ty &get_inner_list(Instr *) { return list; } 
@@ -134,140 +168,176 @@ protected:
     Block(Block &&) = default;
 
 public:
-    Block(Function *func, std::string name = "")
+    Block(Function *parent, std::string name_hint = "")
         : Def(ir::PrimitiveType::get_label_type()), list(this) {
-        if (!name.empty()) {
-            set_name(name);
+        if (!name_hint.empty()) {
+            set_name(name_hint);
         }
-        set_parent(func);
+        set_parent(parent);
     }
-    void add_instr(Instr *i) { list.append(i); }
-    void add_instr(Instr *i, std::string name) { list.append_and_rename(i, name); }
+    std::string add_instr(Instr *i) { return list.append(i); }
+    std::string add_instr(Instr *i, std::string name_hint) { return list.append(i, name_hint); }
     Instr *get_instr(std::string name) { return list.get(name); }
     void remove_instr(Instr *instr);
-    void remove_instr(std::string name);
+    Instr *remove_instr(std::string name);
+    unsigned size() { return list.size(); }
     void dump(unsigned indent = 0);
+    void dump_as_operand();
 };
 
 /** ------------------- Instructions ------------------- */
 
 class Instr : public DefUser, public STPPIListNode<Instr, Block> {
 private:
+    static constexpr char const *const STR_REPR = "<instr>";
     instr kind;
 
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr, std::string name = "")
+    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr)
         : DefUser(ty, num_ops), kind(kind) {
-        if (!name.empty()) {
-            set_name(name);
-        }
-        if (parent) {
-            set_parent(parent);
-        }
+        set_parent(parent);
     }
 
 public:
     instr get_instr_kind() { return kind; }
-    void dump(unsigned indent) { }
+    void dump(unsigned indent = 0);
+    void dump_as_operand();
+    virtual std::string get_str_repr() { return STR_REPR; }
 };
 
 class ReturnInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "return";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
     
 public:
-    ReturnInstr(Def *retval, Block *in, std::string name = "")
-        : Instr(retval->get_type(), 1, instr::ret, in, name) { set_operand(0, retval); }
-    void dump(unsigned indent = 0);
+    ReturnInstr(Def *retval, Block *in)
+        : Instr(retval->get_type(), 1, instr::ret, in) { set_operand(0, retval); }
 };
 
 class BranchInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "branch";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
     
 public:
-    BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent = nullptr, std::string name = "")
+    BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent = nullptr)
         : Instr(cond->get_type(), 3, instr::branch, parent) { }
-    BranchInstr(Block *jmp, Block *parent = nullptr, std::string name = "")
-        : BranchInstr(nullptr, jmp, nullptr, parent, name) { }
+    BranchInstr(Block *jmp, Block *parent = nullptr)
+        : BranchInstr(nullptr, jmp, nullptr, parent) { }
 };
 
 class SAllocInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "salloc";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
 
 private:
     Type *alloc_ty;
 
 public:
-    SAllocInstr(Type *alloc_type, Block *parent = nullptr, std::string name = "")
-        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent, name), alloc_ty(alloc_type) { }
+    SAllocInstr(Type *alloc_type, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent), alloc_ty(alloc_type) {
+        if(!name_hint.empty()) { set_name(name_hint); }
+    }
+    void dump(unsigned indent = 0);
 };
 
 class ReadInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "read";
 
 public:
-    ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, std::string name = "")
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, std::string name_hint = "")
         : Instr(val_type, 1, instr::read, parent) {
         assert(mem_ptr->get_type() == PrimitiveType::get_ptr_type() && "mem_ptr must be of pointer type");
         set_operand(0, mem_ptr);
+        if(!name_hint.empty()) { set_name(name_hint); }
     }
+    void dump(unsigned indent = 0);
 };
 
 class WriteInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "write";
 
 public:
-    WriteInstr(Def *val, Def *mem, Block *parent = nullptr, std::string name = "")
-        : Instr(val->get_type(), 1, instr::write, parent) { set_operand(0, mem); }
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    WriteInstr(Def *val, Def *mem, Block *parent = nullptr)
+        : Instr(PrimitiveType::get_void_type(), 2, instr::write, parent) {
+        set_operand(0, val);
+        set_operand(1, mem);
+    }
 };
 
 class PtrIdxInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "ptridx";
 
 public:
-    PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, std::string name = "")
-        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent, name) {
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent) {
         assert(ptr_val->get_type() == PrimitiveType::get_ptr_type() && "ptr_val must be of pointer type");
         set_operand(0, ptr_val);
         set_operand(1, idx_val);
+        if(!name_hint.empty()) { set_name(name_hint); }
     }
 };
 
 class UpcastInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "upcast";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
 };
 
 class DowncastInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "downcast";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
 };
 
 class ICmpInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "icmp";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
 };
 
 class CallInstr : public Instr {
-public:
+private:
     static constexpr char const *const STR_REPR = "call";
 
 public:
-    CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr);
-    void dump(unsigned indent = 0);
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, std::string name_hint = "");
 };
 
 class BinaryOpInstr : public Instr {
 public:
-    BinaryOpInstr(instr opc, Def *x1, Def *x2);
-    void dump(unsigned indent = 0);
+    BinaryOpInstr(instr opc, Def *x1, Def *x2, Block *parent = nullptr, std::string name_hint = "");
 };
 
 
@@ -298,6 +368,7 @@ private:
 public:
     static IntegralConstant *get(Type *ty, uint64_t value);
     void dump(unsigned indent = 0);
+    void dump_as_operand();
 };
 
 /** ------------------- Globals ------------------- */
@@ -321,8 +392,14 @@ private:
     bool is_const;
 
 public:
-    GlobalVar(Type *ty, linkage lty, Program *parent, bool is_const)
-        : Global(ty, lty), is_const(is_const) { set_parent(parent); }
+    GlobalVar(Type *ty, linkage lty, Program *parent, bool is_const, std::string name_hint)
+        : Global(ty, lty), is_const(is_const) {
+        assert(!name_hint.empty() && "global variables must be named");
+        set_name(name_hint);
+        set_parent(parent);
+    }
+    void dump(unsigned indent = 0);
+    void dump_as_operand();
 };
 
 class Param : public Def, public STPPIListNode<Param, Function> {
@@ -330,9 +407,15 @@ class Param : public Def, public STPPIListNode<Param, Function> {
     unsigned idx;
 
 public:
-    Param(Type *ty, Function *func, unsigned idx)
-        : Def(ty), param_of(func), idx(idx) { }
-    void dump(unsigned indent = 0) { }
+    Param(Type *ty, Function *func, unsigned idx, std::string name_hint = "")
+        : Def(ty), param_of(func), idx(idx) {
+        if (!name_hint.empty()) {
+            set_name(name_hint);
+        }
+        set_parent(func);
+    }
+    void dump(unsigned indent = 0);
+    void dump_as_operand();
 };
 
 class Function
@@ -349,21 +432,20 @@ private:
     param_list_ty &get_inner_list(Param *) { return params; }
 
 public:
-    Function(FunctionType *ty, linkage lty, Program *parent);
-    Function(FunctionType *ty, linkage lty, Program *parent, std::string name)
-        : Function(ty, lty, parent) { set_name(name); }
-    FunctionType *get_type() { return static_cast<FunctionType *>(Global::get_type()); }
-    Block *get_block(std::string name)
-        { return blocks.get(name); }
+    Function(Type *return_ty, linkage lty, Program *parent, std::string name_hint);
+    Type *get_type() { return Global::get_type(); }
+    Block *get_block(std::string name) { return blocks.get(name); }
     void add_block(Block *b) { blocks.append(b); }
     unsigned num_params() { return params.size(); }
-    block_list_ty::forward_iterator begin() { return blocks.begin(); }
-    block_list_ty::forward_iterator end() { return blocks.end(); }
-    param_list_ty::forward_iterator params_begin() { return params.begin(); }
-    param_list_ty::forward_iterator params_end() { return params.end(); }
+    block_list_ty::iterator begin() { return blocks.begin(); }
+    block_list_ty::iterator end() { return blocks.end(); }
+    Block *get_first_block() { return blocks.first(); }
+    Block *get_last_block() { return blocks.last(); }
+    param_list_ty::iterator params_begin() { return params.begin(); }
+    param_list_ty::iterator params_end() { return params.end(); }
     auto params_iterable() { return make_iterator_range(params.begin(), params.end()); }
     void dump(unsigned indent = 0);
-    void dump_as_op(unsigned indent = 0, bool newline = true);
+    void dump_as_operand();
 };
 
 class Program {
@@ -385,10 +467,10 @@ public:
     Program(std::string name)
         : name(name), gvar_list(this), func_list(this) { }
     void add_glob(GlobalVar *gvar) { gvar_list.append(gvar); }
-    GlobalVar *get_glob(std::string name)
-        { return gvar_list.get(name); }
-    Function *get_function(std::string name)
-        { return func_list.get(name); }
+    GlobalVar *get_glob(std::string name) { return gvar_list.get(name); }
+    void add_function(Function *func) { func_list.append(func); }
+    Function *get_function(std::string name) { return func_list.get(name); }
+    void dump();
 };
 
 }

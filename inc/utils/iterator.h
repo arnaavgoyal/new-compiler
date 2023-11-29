@@ -34,18 +34,18 @@ public:
         return static_cast<ChildIteratorClass &>(*this);
     }
     ChildIteratorClass operator++(int) {
-        this_type it = *this;
+        ChildIteratorClass it = *static_cast<ChildIteratorClass *>(this);
         go_forward();
-        return static_cast<ChildIteratorClass>(it);
+        return it;
     }
     ChildIteratorClass &operator--() {
         go_backward();
         return static_cast<ChildIteratorClass &>(*this);
     }
     ChildIteratorClass operator--(int) {
-        this_type it = *this;
+        ChildIteratorClass it = *static_cast<ChildIteratorClass *>(this);
         go_backward();
-        return static_cast<ChildIteratorClass>(it);
+        return it;
     }
     friend bool operator==(ChildIteratorClass const &l, ChildIteratorClass const &r)
         { return static_cast<this_type const &>(l).curr == static_cast<this_type const &>(r).curr; }
