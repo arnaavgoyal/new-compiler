@@ -17,6 +17,9 @@ concept c_iterator_with_lambda_printer = requires(Iterator i, Iterator j, Lambda
 template <typename Iterator, typename Lambda> requires
 c_iterator_with_lambda_printer<Iterator, Lambda>
 void print_internally_separated_list(Iterator start, Iterator finish, std::string separator, Lambda &&l) {
+    if (!(start != finish)) {
+        return;
+    }
     l(*start);
     ++start;
     for (; start != finish; ++start) {
