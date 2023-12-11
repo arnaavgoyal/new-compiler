@@ -10,13 +10,17 @@ namespace ir {
     // primitives
     
         // integral
+        _integral_start,
         u8,  i8,
         u16, i16,
         u32, i32,
         u64, i64,
+        _integral_end,
 
         // floating point
+        _fp_start,
         f32, f64,
+        _fp_end,
 
         // other
         label,
@@ -41,6 +45,8 @@ protected:
 
 public:
     typekind get_kind() { return kind; }
+    bool is_integral_type() { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
+    bool is_fp_type() { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
     virtual std::string stringify() = 0;
 };
 

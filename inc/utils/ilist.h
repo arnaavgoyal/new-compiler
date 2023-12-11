@@ -62,6 +62,7 @@ public:
     }
     unsigned int size() { return _size; }
     void append(Inner *e) {
+        assert(e && "element to append cannot be null");
         e->set_prev(_tail->get_prev());
         e->set_next(_tail);
         _tail->get_prev()->set_next(e);
@@ -69,7 +70,8 @@ public:
         _size++;
     }
     void remove(Inner *e) {
-        assert(_size > 0 && "remove() called on empty list");
+        assert(_size > 0 && "remove() cannot be called on empty list");
+        assert(e && "element to remove cannot be null");
         e->get_next()->set_prev(e->get_prev());
         e->get_prev()->set_next(e->get_next());
         e->set_next(nullptr);

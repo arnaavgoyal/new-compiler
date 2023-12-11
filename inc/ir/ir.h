@@ -69,6 +69,19 @@ enum class instr {
     call,
 };
 
+enum class cmpkind {
+    ugt,
+    ult,
+    ugte,
+    ulte,
+    sgt,
+    slt,
+    sgte,
+    slte,
+    eq,
+    neq
+};
+
 class Use : public IListNode<Use> {
     friend DefUser;
     DefUser *user;
@@ -195,9 +208,10 @@ private:
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr)
+    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr, std::string name_hint = "")
         : DefUser(ty, num_ops), kind(kind) {
         set_parent(parent);
+        if(!name_hint.empty()) { set_name(name_hint); }
     }
 
 public:
@@ -245,9 +259,8 @@ private:
 
 public:
     SAllocInstr(Type *alloc_type, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent), alloc_ty(alloc_type) {
-        if(!name_hint.empty()) { set_name(name_hint); }
-    }
+        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent, name_hint),
+        alloc_ty(alloc_type) { }
     void dump(unsigned indent = 0);
 };
 
@@ -260,10 +273,9 @@ public:
 
 public:
     ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(val_type, 1, instr::read, parent) {
+        : Instr(val_type, 1, instr::read, parent, name_hint) {
         assert(mem_ptr->get_type() == PrimitiveType::get_ptr_type() && "mem_ptr must be of pointer type");
         set_operand(0, mem_ptr);
-        if(!name_hint.empty()) { set_name(name_hint); }
     }
     void dump(unsigned indent = 0);
 };
@@ -292,11 +304,10 @@ public:
 
 public:
     PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent) {
+        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent, name_hint) {
         assert(ptr_val->get_type() == PrimitiveType::get_ptr_type() && "ptr_val must be of pointer type");
         set_operand(0, ptr_val);
         set_operand(1, idx_val);
-        if(!name_hint.empty()) { set_name(name_hint); }
     }
 };
 
@@ -322,6 +333,18 @@ private:
 
 public:
     std::string get_str_repr() { return STR_REPR; }
+
+private:
+    cmpkind kind;
+
+public:
+    ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr)
+        : Instr(PrimitiveType::get_i8_type(), 2, instr::icmp, parent), kind(kind) {
+        assert(x->get_type() == y->get_type() && "operands must be of equivalent type");
+        assert(x->get_type()->is_integral_type() && "operands must be of integral type");
+        set_operand(0, x);
+        set_operand(1, y);
+    }
 };
 
 class CallInstr : public Instr {
@@ -339,8 +362,6 @@ class BinaryOpInstr : public Instr {
 public:
     BinaryOpInstr(instr opc, Def *x1, Def *x2, Block *parent = nullptr, std::string name_hint = "");
 };
-
-
 
 /** ------------------- Constants ------------------- */
 

@@ -40,13 +40,14 @@ DefUser::DefUser(Type *ty, unsigned num_ops)
     }
 }
 void DefUser::set_operand(unsigned idx, Def *operand) {
-    assert(idx < num_ops);
+    assert(idx < num_ops && "idx must be < num_ops");
+    assert(operand && "operand cannot be null");
     Use *u = operands + idx;
     u->set_def(operand);
     operand->add_use(u);
 }
 Use *DefUser::get_operand(unsigned idx) {
-    assert(idx < num_ops);
+    assert(idx < num_ops && "idx must be < num_ops");
     return operands + idx;
 }
 
@@ -123,10 +124,9 @@ void Instr::dump_as_operand() {
 }
 
 CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, std::string name_hint)
-    : Instr(callee->get_type(), 1 + callee->num_params(), instr::call, parent) {
+    : Instr(callee->get_type(), 1 + callee->num_params(), instr::call, parent, name_hint) {
     assert(callee->num_params() == args.size());
     set_operand(0, callee);
-    if(!name_hint.empty()) { set_name(name_hint); }
     auto it = callee->params_begin();
     for (unsigned i = 0; i < callee->num_params(); i++, ++it) {
         // std::cout << "arg: " << args[i]->get_type()->stringify()
@@ -154,11 +154,10 @@ void ReadInstr::dump(unsigned indent) {
 }
 
 BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y, Block *parent, std::string name_hint)
-    : Instr(x->get_type(), 2, opc, parent) {
+    : Instr(x->get_type(), 2, opc, parent, name_hint) {
     assert(x->get_type() == y->get_type() && "both x and y must have same type");
     set_operand(0, x);
     set_operand(1, y);
-    if(!name_hint.empty()) { set_name(name_hint); }
 }
 
 /** ------------------- Global ------------------- */
