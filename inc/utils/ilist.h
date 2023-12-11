@@ -37,23 +37,31 @@ template <typename Inner>
 class IList {
 public:
     using node_type = IListNode<Inner>;
-private:
+protected:
     Inner *_head = nullptr;
     Inner *_tail = nullptr;
     unsigned int _size = 0;
 
-public:
-    IList() {
+    IList(node_type *_h, node_type *_t)
+        : _head(static_cast<Inner *>(_h)), _tail(static_cast<Inner *>(_t)) {
+
         static_assert(
             std::is_base_of<node_type, Inner>::value,
             "Inner must inherit from IListNode<Inner>"
         );
 
-        _head = static_cast<Inner *>(new node_type);
-        _tail = static_cast<Inner *>(new node_type);
+        if (!_h) {
+            _head = static_cast<Inner *>(new node_type);
+        }
+        if (!_t) {
+            _tail = static_cast<Inner *>(new node_type);
+        }
         _head->set_next(_tail);
         _tail->set_prev(_head);
     }
+
+public:
+    IList() : IList(nullptr, nullptr) { }
     Inner *first() {
         return _head->get_next() == _tail ? nullptr : _head->get_next();
     }
@@ -61,13 +69,17 @@ public:
         return _tail->get_prev() == _head ? nullptr : _tail->get_prev();
     }
     unsigned int size() { return _size; }
-    void append(Inner *e) {
+    void append_before(Inner *e, Inner *before) {
         assert(e && "element to append cannot be null");
-        e->set_prev(_tail->get_prev());
-        e->set_next(_tail);
-        _tail->get_prev()->set_next(e);
-        _tail->set_prev(e);
+        assert(before && "element to append before cannot be null");
+        e->set_prev(before->get_prev());
+        e->set_next(before);
+        before->get_prev()->set_next(e);
+        before->set_prev(e);
         _size++;
+    }
+    void append(Inner *e) {
+        append_before(e, _tail);
     }
     void remove(Inner *e) {
         assert(_size > 0 && "remove() cannot be called on empty list");
@@ -78,6 +90,7 @@ public:
         e->set_prev(nullptr);
         _size--;
     }
+
 
 private:
     class fwiter : public bidirectional_iterator<Inner *, fwiter> {

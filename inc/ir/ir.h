@@ -194,6 +194,10 @@ public:
     void remove_instr(Instr *instr);
     Instr *remove_instr(std::string name);
     unsigned size() { return list.size(); }
+    list_ty::iterator begin() { return list.begin(); }
+    list_ty::iterator end() { return list.end(); }
+    Instr *get_first_instr() { return list.first(); }
+    Instr *get_last_instr() { return list.last(); }
     void dump(unsigned indent = 0);
     void dump_as_operand();
 };
@@ -208,10 +212,10 @@ private:
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr, std::string name_hint = "")
+    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : DefUser(ty, num_ops), kind(kind) {
-        set_parent(parent);
-        if(!name_hint.empty()) { set_name(name_hint); }
+        if (parent) { set_parent(parent); }
+        if (!name_hint.empty()) { set_name(name_hint); }
     }
 
 public:
@@ -229,8 +233,8 @@ public:
     std::string get_str_repr() { return STR_REPR; }
     
 public:
-    ReturnInstr(Def *retval, Block *in)
-        : Instr(retval->get_type(), 1, instr::ret, in) { set_operand(0, retval); }
+    ReturnInstr(Def *retval, Block *parent)
+        : Instr(retval->get_type(), 1, instr::ret, parent) { set_operand(0, retval); }
 };
 
 class BranchInstr : public Instr {
@@ -258,9 +262,10 @@ private:
     Type *alloc_ty;
 
 public:
-    SAllocInstr(Type *alloc_type, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent, name_hint),
+    SAllocInstr(Type *alloc_type, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent, before, name_hint),
         alloc_ty(alloc_type) { }
+    Type *get_alloc_ty() { return alloc_ty; }
     void dump(unsigned indent = 0);
 };
 
@@ -272,8 +277,8 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(val_type, 1, instr::read, parent, name_hint) {
+    ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(val_type, 1, instr::read, parent, before, name_hint) {
         assert(mem_ptr->get_type() == PrimitiveType::get_ptr_type() && "mem_ptr must be of pointer type");
         set_operand(0, mem_ptr);
     }
@@ -303,8 +308,8 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent, name_hint) {
+    PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent, before, name_hint) {
         assert(ptr_val->get_type() == PrimitiveType::get_ptr_type() && "ptr_val must be of pointer type");
         set_operand(0, ptr_val);
         set_operand(1, idx_val);
@@ -338,13 +343,14 @@ private:
     cmpkind kind;
 
 public:
-    ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr)
-        : Instr(PrimitiveType::get_i8_type(), 2, instr::icmp, parent), kind(kind) {
+    ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(PrimitiveType::get_i8_type(), 2, instr::icmp, parent, before, name_hint), kind(kind) {
         assert(x->get_type() == y->get_type() && "operands must be of equivalent type");
         assert(x->get_type()->is_integral_type() && "operands must be of integral type");
         set_operand(0, x);
         set_operand(1, y);
     }
+    void dump(unsigned indent = 0);
 };
 
 class CallInstr : public Instr {
@@ -355,12 +361,12 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, std::string name_hint = "");
+    CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
 };
 
 class BinaryOpInstr : public Instr {
 public:
-    BinaryOpInstr(instr opc, Def *x1, Def *x2, Block *parent = nullptr, std::string name_hint = "");
+    BinaryOpInstr(instr opc, Def *x1, Def *x2, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
 };
 
 /** ------------------- Constants ------------------- */

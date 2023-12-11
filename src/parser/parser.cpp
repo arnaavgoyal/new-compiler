@@ -193,10 +193,24 @@ ASTNode *Parser::parse_postfix(ASTNode *pre) {
 
             // unary postfix operators
             case token::op_plusplus:
+
+                // get result for postfix op
+                res = analyzer.analyze_postfix_op_expr(
+                    op::postincr,
+                    tk.get_type(),
+                    res,
+                    tk.get_src_loc()
+                );
+
+                // consume op token
+                consume();
+                break;
+            
             case token::op_minusminus:
 
                 // get result for postfix op
                 res = analyzer.analyze_postfix_op_expr(
+                    op::postdecr,
                     tk.get_type(),
                     res,
                     tk.get_src_loc()
@@ -260,6 +274,7 @@ ASTNode *Parser::parse_prefix() {
     token::token_type type = tk.get_type();
 
     ASTNode *res;
+    op::kind op;
     SourceLocation op_loc;
     token::token_type op_type;
     switch (type) {
@@ -347,13 +362,23 @@ ASTNode *Parser::parse_prefix() {
 
         // prefix unary operators
         case token::op_plusplus:
+            op = op::preincr;
+            goto finally;
         case token::op_minusminus:
-        case token::op_plus:
+            op = op::predecr;
+            goto finally;
         case token::op_minus:
+            op = op::neg;
+            goto finally;
         case token::op_exclamation:
+            op = op::lnot;
+            goto finally;
         case token::op_asterisk:
+            op = op::deref;
+            goto finally;
         case token::op_amp:
-
+            op = op::addr;
+        finally:
             // save op token loc
             op_loc = tk.get_src_loc();
 
@@ -364,7 +389,7 @@ ASTNode *Parser::parse_prefix() {
             res = parse_prefix();
 
             // get result for prefix op
-            res = analyzer.analyze_prefix_op_expr(type, res, op_loc);
+            res = analyzer.analyze_prefix_op_expr(op, type, res, op_loc);
             break;
 
         // empty

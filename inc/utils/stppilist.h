@@ -67,7 +67,11 @@ private:
     std::string name_hint = "";
     bool hinted = false;
 
+    // sentinel constructor
+    STPPIListNode(Outer *parent) : parent(parent) { }
+
 public:
+    STPPIListNode() = default;
     bool has_name() { return hinted && parent; }
     bool has_name_hint() { return hinted; }
     std::string get_name() {
@@ -81,6 +85,7 @@ public:
     Outer *get_parent() { return parent; }
     std::string set_parent(Outer *new_parent);
     std::string set_name(std::string name_hint);
+    std::string insert_before(Inner *i);
 };
 
 /** ------------------- STPPIList decl ------------------- */
@@ -110,18 +115,17 @@ public:
      * This is the way STPPIList gets a pointer to the parent
      * (the class containing this object).
     */
-    STPPIList(Outer *you) : container(you) {
+    STPPIList(Outer *you)
+        : IList<Inner>(new node_type(you), new node_type(you)), container(you) {
         static_assert(
             std::is_base_of<STPPIListNode<Inner, Outer>, Inner>::value,
             "Inner must inherit from STPPIListNode<Inner>"
         );
-        // static_assert(
-        //     determine_get_inner_list<Inner, Outer>::value,
-        //     "Outer must define 'STPPIList<Inner, Outer> &get_inner_list(Inner *)'"
-        // );
     }
     std::string append(Inner *i);
     std::string append(Inner *i, std::string name_hint);
+    std::string append_before(Inner *i, Inner *before);
+    std::string append_before(Inner *i, Inner *before, std::string name_hint);
     void remove(Inner *i);
     Inner *remove(std::string name);
     std::string rename(Inner *i, std::string name_hint);
@@ -157,6 +161,21 @@ std::string STPPIListNode<Inner, Outer>::set_name(std::string name_hint) {
 
     // we have a parent, let it do all the work
     return parent->get_inner_list(static_cast<Inner *>(this)).rename(static_cast<Inner *>(this), name_hint);
+}
+template <typename Inner, typename Outer>
+std::string STPPIListNode<Inner, Outer>::insert_before(Inner *i) {
+
+    if (parent) {
+
+        // we must remove this node from the existing parent
+        parent->get_inner_list(static_cast<Inner *>(nullptr)).remove(static_cast<Inner *>(this));
+    }
+
+    Outer *new_parent = i->parent;
+    assert(new_parent && "cannot insert before a parent-less node");
+
+    // let the new parent do everything else
+    return new_parent->get_inner_list(static_cast<Inner *>(nullptr)).append_before(static_cast<Inner *>(this), i);
 }
 
 /** ------------------- STPPIList impl ------------------- */
@@ -194,9 +213,6 @@ std::string STPPIList<Inner, Outer>::append(Inner *i) {
     // set the parent
     set_parent_fields(i, container);
 
-    std::cout << std::endl
-        << "node" << std::endl;
-
     // maybe set name ...
     std::string name;
     if (i->hinted) {
@@ -207,13 +223,7 @@ std::string STPPIList<Inner, Outer>::append(Inner *i) {
 
         // set name to the rename
         set_name_fields(i, name);
-
-        std::cout << "  name='" << i->name << "'" << std::endl
-            << "  name_hint='" << i->name_hint << "'" << std::endl;
     }
-
-    std::cout << "appended to parent @ " << i->parent
-        << std::endl << std::endl;
     
     return name;
 }
@@ -232,12 +242,47 @@ std::string STPPIList<Inner, Outer>::append(Inner *i, std::string name_hint) {
 
     // set name hint and name
     set_name_fields(i, name, name_hint);
+    
+    return name;
+}
+template <typename Inner, typename Outer>
+std::string STPPIList<Inner, Outer>::append_before(Inner *i, Inner *before) {
 
-    std::cout << std::endl
-        << "node\n  name='" << i->name
-        << "'\n  name_hint='" << i->name_hint
-        << "'\nappended to parent @ " << i->parent
-        << std::endl << std::endl;
+    // append to the ilist
+    IList<Inner>::append_before(i, before);
+
+    // set the parent
+    set_parent_fields(i, container);
+
+    // maybe set name ...
+    std::string name;
+    if (i->hinted) {
+
+        // this node needs a name
+        // insert into symtable and get rename
+        name = symtable.insert(i->name_hint, i);
+
+        // set name to the rename
+        set_name_fields(i, name);
+    }
+    
+    return name;
+}
+template <typename Inner, typename Outer>
+std::string STPPIList<Inner, Outer>::append_before(Inner *i, Inner *before, std::string name_hint) {
+
+    // append to ilist
+    IList<Inner>::append_before(i, before);
+
+    // set parent
+    set_parent_fields(i, container);
+
+    // needs a name ...
+    // insert into symtable and get rename
+    std::string name = symtable.insert(name_hint, i);
+
+    // set name hint and name
+    set_name_fields(i, name, name_hint);
     
     return name;
 }

@@ -1,10 +1,13 @@
 var i32 glob;
 
-def (i8, **i8) i32
+def (i32, **i8) i32
 main (argc, argv) {
     var i32 myint = 4;
+    var *i32 myintptr;
+    myint = *myintptr;
     type myi32 = i32;
     var myi32 mytypeint = 4;
+    var myi32 cmp = !myint;
     mytypeint = 5;
     var i32 result = main(argc, argv);
     return argc;

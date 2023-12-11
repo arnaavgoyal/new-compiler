@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 
     // ---------------- MIDEND ------------------
 
-    ir::Program *translated_ast = translate(ast);
+    ir::Program *translated_ast = ASTTranslator().translate(ast);
     std::cout << std::endl;
     translated_ast->dump();
 

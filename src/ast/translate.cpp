@@ -9,12 +9,7 @@
 #define UNREACHABLE assert(false && "should be unreachable");
 #define NYI(WHAT) assert(false && "NYI" #WHAT);
 
-static std::map<Symbol *, ir::SAllocInstr *> ir_symtable;
-
-static ir::Def *translate_in_func_body(ASTNode const *node, ir::Function *f);
-static std::pair<Symbol *, ir::SAllocInstr *> translate_ref_expr(ASTNode const *ref, ir::Function *f);
-
-static ir::Type *translate_type(Type const *ty) {
+ir::Type *ASTTranslator::t_type(Type const *ty) {
     ir::Type *nt = nullptr;
     switch (ty->canonical->kind) {
         case type::pointer_type:
@@ -55,9 +50,7 @@ else PRIM_TYPE_IF_CASE(TYKW)
             assert(false && "array type NYI");
             break;
         case type::function_type:
-            [[fallthrough]];
         case type::error_type:
-            [[fallthrough]];
         default:
             UNREACHABLE
     }
@@ -67,137 +60,86 @@ else PRIM_TYPE_IF_CASE(TYKW)
     return nt;
 }
 
-static ir::Def *translate_binop_expr(ASTNode const *binop, ir::Function *f) {
-    switch (binop->op) {
-        case op::add:
-            UNREACHABLE
-        case op::addr:
-            UNREACHABLE
-        case op::assign:
-            assert(binop->children[0]->kind == ast::ref_expr && "can only with direct references in lvalue assignments");
-            return new ir::WriteInstr(
-                translate_in_func_body(binop->children[1], f),
-                translate_ref_expr(binop->children[0], f).second,
-                f->get_last_block()
-            );
-        case op::decr:
-            UNREACHABLE
-        case op::div:
-            UNREACHABLE
-        case op::eq:
-            UNREACHABLE
-        case op::group:
-            UNREACHABLE
-        case op::gt:
-            UNREACHABLE
-        case op::gte:
-            UNREACHABLE
-        case op::incr:
-            UNREACHABLE
-        case op::land:
-            UNREACHABLE
-        case op::lnot:
-            UNREACHABLE
-        case op::lor:
-            UNREACHABLE
-        case op::lt:
-            UNREACHABLE
-        case op::lte:
-            UNREACHABLE
-        case op::mod:
-            UNREACHABLE
-        case op::mult:
-            UNREACHABLE
-        case op::neq:
-            UNREACHABLE
-        case op::sub:
-            UNREACHABLE
-        default:
-            std::cout << binop->op << std::endl;
-            UNREACHABLE
-    }
-}
+ir::Program *ASTTranslator::t_program(ASTNode const *ast) {
 
-static ir::SAllocInstr *translate_lvar_decl(ASTNode const *vdecl, ir::Function *f) {
-
-    // add to function
-    ir::Block *b = f->get_last_block();
-    ir::SAllocInstr *sa = new ir::SAllocInstr(translate_type(vdecl->type), b, *vdecl->str);
-    std::cout << "var ty: " << sa->get_type()->stringify() << std::endl;
-
-    // add to symtable
-    ir_symtable.emplace(vdecl->sym, sa);
-
-    // check for definition
-    if (vdecl->children.size() > 0) {
-        ir::WriteInstr *wi = new ir::WriteInstr(translate_in_func_body(vdecl->children[0], f), sa, f->get_last_block());
-    }
-
-    return sa;
-}
-
-static ir::ReadInstr *get_rval_from_lval(std::pair<Symbol *, ir::SAllocInstr *> p, ir::Function *f) {
-    return new ir::ReadInstr(
-        translate_type(p.first->type_ptr),
-        p.second,
-        f->get_last_block(),
-        "tmp"
-    );
-}
-
-static ir::CallInstr *translate_call_expr(ASTNode const *cexpr, ir::Function *f) {
-    std::vector<ir::Def *> args;
-    for (ASTNode const *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
-        ir::Def *d;
-        if (a->kind == ast::ref_expr) {
-            d = get_rval_from_lval(translate_ref_expr(a, f), f);
-        }
-        else {
-            d = translate_in_func_body(a, f);
-        }
-        args.push_back(d);
-        d->dump();
-    }
-    ir::Function *callee = f->get_parent()->get_function(*cexpr->children[0]->str);
-    assert(callee && "callee does not exist?");
-    return new ir::CallInstr(
-        callee,
-        args,
-        f->get_last_block(),
-        "tmp"
-    );
-}
-
-/** 
- * the def returned is the pointer to the location in memory where it resides.
- * aka, its salloc instr.
-*/
-static std::pair<Symbol *, ir::SAllocInstr *> translate_ref_expr(ASTNode const *ref, ir::Function *f) {
-
-    Scope *ast_scope = ref->sym->scope;
-
-    //std::cout << std::endl << *ref->str << std::endl << std::endl;
-    //ast_scope->dump_me();
-    //std::cout << std::endl;
-
-    auto it = ast_scope->sym_table.find(*ref->str);
-    assert(it != ast_scope->sym_table.end() && "analyzer messed up");
+    assert(ast->kind == ast::translation_unit && "translation requires an AST rooted at a translation unit");
     
-    auto ist_it = ir_symtable.find(it.operator*().second);
-    assert(ist_it != ir_symtable.end() && "declared symbol is not in ir_symtable");
+    // make a new program
+    ir::Program *p = new ir::Program("input");
 
-    return ist_it.operator*();
+    // generate ir
+    for (ASTNode const *node : ast->children) {
+
+        // only var and func decls can be here
+        switch (node->kind) {
+            case ast::func_decl:
+                t_func(node, p);
+                break;
+            case ast::var_decl:
+                t_gvar(node, p);
+                break;
+            default:
+                UNREACHABLE
+        }
+    }
+
+    return p;
 }
 
-static ir::Def *translate_in_func_body(ASTNode const *node, ir::Function *f) {
-    std::cout << "doing this node: \n";
-    node->print();
+ir::GlobalVar *ASTTranslator::t_gvar(ASTNode const *vdecl, ir::Program *p) {
+    assert(vdecl->str && "should have a str representation");
+    return new ir::GlobalVar(t_type(vdecl->type), ir::linkage::external, p, false, *vdecl->str);
+}
+
+ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
+
+    // make a new function
+    ir::Function *f = new ir::Function(
+        t_type(fdecl->type->returns->canonical),
+        ir::linkage::external,
+        p,
+        *fdecl->str
+    );
+
+    // make the params
+    std::vector<ir::Param *> params;
+    for (unsigned i = 0; i < fdecl->type->params.size(); i++) {
+        params.push_back(
+            new ir::Param(
+                t_type(fdecl->type->params[i]->canonical),
+                f,
+                i,
+                *fdecl->children[i]->str
+            )
+        );
+    }
+    
+    // make the entry block
+    ir::Block *entry = new ir::Block(f, "entry");
+
+    // null last lvar
+    last_lvar = nullptr;
+
+    // add param lvars (to make them mutable variables)
+    for (unsigned i = 0; i < params.size(); i++) {
+        t_lvar(fdecl->children[i], entry);
+    }
+    
+    // generate ir for the function body
+    t_stmt(fdecl->children[params.size()], entry);
+    
+    return f;
+}
+
+ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
+
     ir::Def *res;
+
     switch (node->kind) {
         case ast::binary_op:
-            return translate_binop_expr(node, f);
+            return t_binop(node, b);
         case ast::call_expr:
-            return translate_call_expr(node, f);
+            return t_call(node, b);
         case ast::cast_expr:
             NYI(cast exprs)
         case ast::char_lit:
@@ -222,22 +164,20 @@ static ir::Def *translate_in_func_body(ASTNode const *node, ir::Function *f) {
             UNREACHABLE
         case ast::paren_expr:
             for (ASTNode const *c : node->children) {
-                res = translate_in_func_body(c, f);
+                res = t_stmt(c, b);
             }
             return res;
         case ast::recovery:
             UNREACHABLE
-        case ast::ref_expr:
-            // if there is just a random ref expr with no operator then use it as rval
-            return get_rval_from_lval(translate_ref_expr(node, f), f);
+        case ast::ref_expr: {
+            ci_lval = true;
+            return t_ref(node, b);
+        }
         case ast::ret_stmt:
-            return new ir::ReturnInstr(
-                translate_in_func_body(node->children[0], f),
-                f->get_last_block()
-            );
+            return new ir::ReturnInstr(t_stmt(node->children[0], b), b);
         case ast::stmt_block:
             for (ASTNode const *c : node->children) {
-                res = translate_in_func_body(c, f);
+                res = t_stmt(c, b);
             }
             return res;
         case ast::str_lit:
@@ -251,77 +191,186 @@ static ir::Def *translate_in_func_body(ASTNode const *node, ir::Function *f) {
         case ast::typedef_stmt:
             return nullptr;
         case ast::unary_op:
-            NYI(unary ops)
+            return t_unop(node, b);
         case ast::var_decl:
-            std::cout << "var decl" << std::endl;
-            return translate_lvar_decl(node, f);
+            ci_lval = true;
+            return t_lvar(node, b);
         default:
             UNREACHABLE
     }
 }
 
-static ir::Function *translate_func_decl(ASTNode const *fdecl, ir::Program *p) {
-    ir::Function *f = new ir::Function(
-        translate_type(fdecl->type->returns->canonical),
-        ir::linkage::external,
-        p,
-        *fdecl->str
-    );
-    std::vector<ir::Param *> params;
-    for (unsigned i = 0; i < fdecl->type->params.size(); i++) {
-        params.push_back(
-            new ir::Param(
-                translate_type(fdecl->type->params[i]->canonical),
-                f,
-                i,
-                *fdecl->children[i]->str
-            )
-        );
+ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl, ir::Block *b) {
+
+    // get the type
+    ir::Type *ty = t_type(vdecl->type);
+
+    // make the instruction
+    ir::SAllocInstr *sa = new ir::SAllocInstr(ty, nullptr, nullptr, *vdecl->str);
+
+    // insert into block
+    if (last_lvar) {
+        sa->insert_before(last_lvar);
     }
-    //std::cout << "params done" << std::endl;
-    ir::Block *entry = new ir::Block(f, "entry");
-    for (unsigned i = 0; i < params.size(); i++) {
-        std::cout << "adding salloc for param " << params[i]->get_name() << "_mut" << std::endl;
-        auto pvar = new ir::SAllocInstr(params[i]->get_type(), entry, params[i]->get_name() + "_mut");
-        auto en = ir_symtable.emplace(
-            fdecl->children[i]->sym,
-            pvar
-        );
-        std::cout << "param alloc " << en.first.operator*().first->name << std::endl;
+    else {
+        sa->insert_before(*b->end());
     }
-    std::cout << "func done" << std::endl;
-    //std::cout << "entry done" << std::endl;
-    auto param_end_it = fdecl->children.begin() + fdecl->type->params.size();
-    ir::Def *d;
-    translate_in_func_body(fdecl->children.rbegin().operator*(), f);
-    std::cout << entry->size() << " instrs in entry block\n";
-    std::cout << "body done" << std::endl;
-    return f;
+    last_lvar = sa;
+
+    // add to symtable
+    ir_symtable.emplace(vdecl->sym, sa);
+
+    // add to lvar -> type map
+    lvartys.emplace(sa, ty);
+
+    // check for definition
+    if (vdecl->children.size() > 0) {
+        ir::WriteInstr *wi = new ir::WriteInstr(t_stmt(vdecl->children[0], b), sa, b);
+    }
+
+    return sa;
 }
 
-static ir::GlobalVar *translate_gvar_decl(ASTNode const *vdecl, ir::Program *p) {
-    assert(vdecl->str && "should have a str representation");
-    return new ir::GlobalVar(translate_type(vdecl->type), ir::linkage::external, p, false, *vdecl->str);
-}
+ir::Def *ASTTranslator::t_binop(ASTNode const *binop, ir::Block *b) {
 
-ir::Program *translate(ASTNode const *ast) {
-    assert(ast->kind == ast::translation_unit && "translation requires an AST rooted at a translation unit");
-    ir::Program *p = new ir::Program("input");
-    for (ASTNode const *node : ast->children) {
-        // only var and func decls can be here
-        switch (node->kind) {
-            case ast::func_decl:
-                translate_func_decl(node, p);
-                break;
-            case ast::var_decl:
-                translate_gvar_decl(node, p);
-                break;
-            default:
-                UNREACHABLE
+    switch (binop->op) {
+        case op::add:
+            NYI(add)
+        case op::assign: {
+            auto rhs = t_stmt(binop->children[1], b);
+            if (ci_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
+            return new ir::WriteInstr(
+                rhs,
+                t_ref(binop->children[0], b),
+                b
+            );
         }
+        case op::div:
+            NYI(div)
+        case op::eq:
+            NYI(eq)
+        case op::group:
+            NYI(group)
+        case op::gt:
+            NYI(gt)
+        case op::gte:
+            NYI(gte)
+        case op::land:
+            NYI(land)
+        case op::lor:
+            NYI(lor)
+        case op::lt:
+            NYI(lt)
+        case op::lte:
+            NYI(lte)
+        case op::mod:
+            NYI(mod)
+        case op::mult:
+            NYI(mult)
+        case op::neq:
+            NYI(neq)
+        case op::sub:
+            NYI(sub)
+        case op::postdecr:
+        case op::postincr:
+        case op::predecr:
+        case op::preincr:
+        case op::lnot:
+        case op::addr:
+            // unary
+            UNREACHABLE
+        default:
+            std::cout << binop->op << std::endl;
+            UNREACHABLE
     }
-    return p;
 }
+
+ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr, ir::Block *b) {
+
+    // generate ir for the arguments
+    std::vector<ir::Def *> args;
+    for (ASTNode const *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
+        ir::Def *d;
+        if (a->kind == ast::ref_expr) {
+            auto res = t_ref(a, b);
+            d = t_rval(res, res->get_alloc_ty(), b);
+        }
+        else {
+            d = t_stmt(a, b);
+        }
+        args.push_back(d);
+        d->dump();
+    }
+
+    // get the callee function
+    ir::Function *callee = b->get_parent()->get_parent()->get_function(*cexpr->children[0]->str);
+    assert(callee && "callee does not exist?");
+
+    return new ir::CallInstr(callee, args, b, nullptr, "tmp");
+}
+
+/** 
+ * the def returned is the pointer to the location in memory where it resides.
+ * aka, its salloc instr.
+*/
+ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref, ir::Block *b) {
+
+    // get the scope of the symbol being referenced
+    Scope *ast_scope = ref->sym->scope;
+
+    auto it = ast_scope->sym_table.find(*ref->str);
+    assert(it != ast_scope->sym_table.end() && "analyzer messed up");
+    
+    auto ist_it = ir_symtable.find(it.operator*().second);
+    assert(ist_it != ir_symtable.end() && "declared symbol is not in ir_symtable");
+
+    return ist_it.operator*().second;
+}
+
+ir::Def *ASTTranslator::t_unop(ASTNode const *unop, ir::Block *b) {
+
+    // generate ir for the inner expr
+    Type *ast_inner_ty = (Type *)unop->children[0]->type;
+    ir::Def *d = t_stmt(unop->children[0], b);
+    ir::Def *e;
+
+    switch (unop->op) {
+        case op::addr:
+            // idk how to impl this rn
+            NYI(addr)
+        case op::deref:
+            ci_lval = true;
+            return new ir::ReadInstr(ir::PrimitiveType::get_ptr_type(), d, b, nullptr, "tmp");
+        case op::lnot:
+            if (ci_lval) {
+                d = t_rval(d, t_type(ast_inner_ty), b);
+            }
+            return new ir::ICmpInstr(
+                ir::cmpkind::eq,
+                d,
+                ir::IntegralConstant::get(d->get_type(), 0),
+                b,
+                nullptr,
+                "tmp"
+            );
+        case op::neg:
+            NYI(neg)
+        case op::postdecr:
+        case op::postincr:
+        case op::predecr:
+        case op::preincr:
+            // idk
+            NYI(unary in/decrs)
+        default:
+            UNREACHABLE
+    }
+}
+
+ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b) {
+    ci_lval = false;
+    return new ir::ReadInstr(ty, lval, b, nullptr, "tmp");
+}
+
 
 #undef NYI
 #undef UNREACHABLE

@@ -5,6 +5,7 @@
 #include "lexer/tokentypes.h"
 #include "lexer/token.h"
 #include "source/source.h"
+#include "utils/ioformat.h"
 
 static void print_err_loc_preamble(SourceLocation loc) {
 #define LOC_NUM_WIDTH 2
@@ -112,27 +113,38 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
 
         if (tree->kind != ast::recovery) {
 
-            std::cout << str << "`" << "\e[0;97m" << type_str
-                << "\e[0;93m" << " ";
+            std::cout << str << "`" << ioformat::WHITE << type_str
+                << ioformat::YELLOW << " '";
             if (tree->str != nullptr) {
-                std::cout << *tree->str << " ";
+                std::cout << *tree->str;
             }
+            else if (token::is_keyword(tree->tok)) {
+                std::cout << token::get_keyword_string(tree->tok);
+            }
+            else if (token::is_operator(tree->tok)) {
+                std::cout << token::get_operator_string(tree->tok);
+            }
+            std::cout << "' ";
 
             if (tree->type != nullptr) {
                 std::cout
-                    << "\e[0;92m"
+                    << ioformat::GREEN
                     << *(tree->type->get_str())
-                    << "\e[1;34m" << " "
+                    << ioformat::BLUE << " "
                     << *(tree->type->canonical->get_str());
             }
 
-            std::cout << "\e[0;95m" << " <";
+            if (tree->is_lvalue) {
+                std::cout << ioformat::CYAN << " lval";
+            }
+
+            std::cout << ioformat::PURPLE << " <";
             print_err_loc_preamble(tree->loc);
             std::cout << ">";
             if (tree->has_error) {
-                std::cout << "\e[0;91m" << " {contains errors}";
+                std::cout << ioformat::RED << " {contains errors}";
             }
-            std::cout << "\e[0m" << std::endl;
+            std::cout << ioformat::RESET << std::endl;
 
             str.push_back(' ');
             str.push_back('|');

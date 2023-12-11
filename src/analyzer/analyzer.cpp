@@ -22,11 +22,11 @@ void SemanticAnalyzer::exit_current_scope(Scope **curr) {
 
 Symbol const *SemanticAnalyzer::find_symbol_in_current_scope(
     std::string const *ident,
-    Scope **scope
+    Scope *scope
 ) {
     std::map<std::string, Symbol *>::iterator
-        iter = (*scope)->sym_table.find(*ident),
-        end = (*scope)->sym_table.end();
+        iter = scope->sym_table.find(*ident),
+        end = scope->sym_table.end();
 
     if (iter == end) {
         return nullptr;
@@ -37,10 +37,10 @@ Symbol const *SemanticAnalyzer::find_symbol_in_current_scope(
 
 Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(
     std::string const *ident,
-    Scope **scope
+    Scope *scope
 ) {
 
-    Scope *curr = *scope;
+    Scope *curr = scope;
     while (curr) {
         std::map<std::string, Symbol *>::iterator
             iter = curr->sym_table.find(*ident),
@@ -58,15 +58,15 @@ Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(
 }
 
 Symbol *SemanticAnalyzer::insert_symbol(
-    Scope **scope,
+    Scope *scope,
     std::string const &name,
     Type const *type_ptr
 ) {
     Symbol *sym = sym_allocator.alloc();
     sym->name = name;
     sym->type_ptr = type_ptr;
-    sym->scope = *scope;
-    (*scope)->sym_table.insert(std::make_pair(name, sym));
+    sym->scope = scope;
+    scope->sym_table.insert(std::make_pair(name, sym));
     std::cout << "inserted " << name
         << " of type " << *type_ptr->str
         << " into symtable\n";
@@ -75,11 +75,11 @@ Symbol *SemanticAnalyzer::insert_symbol(
 
 Type const *SemanticAnalyzer::find_type_in_current_scope(
     std::string const *ident,
-    Scope **scope
+    Scope *scope
 ) {
     std::map<std::string, Type *>::iterator
-        iter = (*scope)->type_table.find(*ident),
-        end = (*scope)->type_table.end();
+        iter = scope->type_table.find(*ident),
+        end = scope->type_table.end();
 
     if (iter == end) {
         return nullptr;
@@ -90,9 +90,9 @@ Type const *SemanticAnalyzer::find_type_in_current_scope(
 
 Type const *SemanticAnalyzer::find_type_in_any_active_scope(
     std::string const *ident,
-    Scope **scope
+    Scope *scope
 ) {
-    Scope *curr = *scope;
+    Scope *curr = scope;
     while (curr) {
         std::map<std::string, Type *>::iterator
             iter = curr->type_table.find(*ident),
@@ -110,11 +110,11 @@ Type const *SemanticAnalyzer::find_type_in_any_active_scope(
 }
 
 void SemanticAnalyzer::insert_type(
-    Scope **scope,
+    Scope *scope,
     std::string const &key,
     Type *value
 ) {
-    (*scope)->type_table.insert(std::make_pair(key, value));
+    scope->type_table.insert(std::make_pair(key, value));
 }
 
 SemanticAnalyzer::SemanticAnalyzer(
@@ -219,7 +219,7 @@ Type *SemanticAnalyzer::analyze_function_type(
     }
 
     // find type
-    Type *type = (Type *)find_type_in_any_active_scope(&rep, scope);
+    Type *type = (Type *)find_type_in_any_active_scope(&rep, *scope);
 
     // already exists
     if (type) {
@@ -229,7 +229,7 @@ Type *SemanticAnalyzer::analyze_function_type(
     // does not exist yet
 
     // attempt to find canon type
-    Type *canon = (Type *)find_type_in_current_scope(&can_rep, &gscope);
+    Type *canon = (Type *)find_type_in_current_scope(&can_rep, gscope);
 
     // canon already exists
     if (canon) {
@@ -263,7 +263,7 @@ Type *SemanticAnalyzer::analyze_function_type(
         type->canonical = canon;
 
         // insert into curr scope
-        insert_type(scope, *str, type);
+        insert_type(*scope, *str, type);
 
         return type;
     }
@@ -298,7 +298,7 @@ Type *SemanticAnalyzer::analyze_function_type(
         canon->canonical = canon;
 
         // insert into global scope
-        insert_type(&gscope, *can_str, canon);
+        insert_type(gscope, *can_str, canon);
 
         // the type is not canon
         if (!iscanon) {
@@ -330,7 +330,7 @@ Type *SemanticAnalyzer::analyze_function_type(
             type->canonical = canon;
 
             // insert into curr scope
-            insert_type(scope, *str, type);
+            insert_type(*scope, *str, type);
 
             return type;
         }
@@ -347,7 +347,7 @@ Type *SemanticAnalyzer::analyze_typename(
     SourceLocation loc
 ) {
     // get type
-    Type const *type = find_type_in_any_active_scope(ident, scope);
+    Type const *type = find_type_in_any_active_scope(ident, *scope);
 
     // type does not exist
     if (type == nullptr) {
@@ -369,7 +369,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
     std::string rep = "*" + *pointee->str;
 
     // find type
-    Type *type = (Type *)find_type_in_any_active_scope(&rep, scope);
+    Type *type = (Type *)find_type_in_any_active_scope(&rep, *scope);
 
     // already exists
     if (type) {
@@ -400,7 +400,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
         *can_str = "*" + *pointee->canonical->str;
 
         // attempt to find canon (in global scope)
-        Type *canon = (Type *)find_type_in_any_active_scope(can_str, &gscope);
+        Type *canon = (Type *)find_type_in_any_active_scope(can_str, gscope);
 
         // not found
         if (canon == nullptr) {
@@ -415,7 +415,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
             canon->canonical = canon;
 
             // insert into global scope
-            insert_type(&gscope, *can_str, canon);
+            insert_type(gscope, *can_str, canon);
         }
 
         // make type
@@ -428,7 +428,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
         type->canonical = canon;
 
         // insert into local scope (since it is a non-canonical type)
-        insert_type(scope, *str, type);
+        insert_type(*scope, *str, type);
     }
 
     // is canon itself
@@ -444,7 +444,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
         type->canonical = type;
 
         // insert into global scope (since it is a modified builtin)
-        insert_type(&gscope, *str, type);
+        insert_type(gscope, *str, type);
     }
 
     // return result
@@ -595,25 +595,46 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 }
 
 ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
-    token::token_type op,
+    op::kind op,
+    token::token_type tk,
     ASTNode *expr,
-    SourceLocation op_loc
+    SourceLocation loc
 ) {
     // ErrorHandler::handle(error::nyi, op_loc, "postfix operations");
     // ErrorHandler::prog_exit();
 
-    op_loc.copy_start(expr->loc);
+    bool err = expr->has_error;
 
-    // TODO: typecheck for these ops
+    switch (op) {
+        case op::postincr:
+        case op::postdecr:
+            // the expr must be of lvalue type
+            if (!expr->is_lvalue) {
+                ErrorHandler::handle(error::lvalue_required, loc, "postfix in/decrement cannot be applied to non-lvalue values");
+                err = true;
+            }
+            // the lvalue must be of integral type
+            if (!expr->type->is_integral) {
+                ErrorHandler::handle(error::integral_type_required, loc, "postfix in/decrement cannot be applied to non-integral types");
+                err = true;
+            }
+            break;
+        default:
+            assert(false && "should be unreachable");
+    }
+
+    loc.copy_start(expr->loc);
+
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::unary_op,
         expr->type,
         nullptr,
-        op_loc,
-        op,
-        expr->has_error
+        loc,
+        tk,
+        err
     );
+    node->op = op;
     node->children.push_back(expr);
 
     return node;
@@ -737,6 +758,7 @@ ASTNode *SemanticAnalyzer::analyze_paren_expr(
         token::op_leftparen,
         inside->has_error
     );
+    pexpr->is_lvalue = inside->is_lvalue;
     pexpr->children.push_back(inside);
 
     return pexpr;
@@ -754,7 +776,7 @@ ASTNode *SemanticAnalyzer::analyze_ref_expr(
     //       if current scope's symbol is invalid
 
     // find symbol
-    Symbol const *res = find_symbol_in_any_active_scope(ident, scope);
+    Symbol const *res = find_symbol_in_any_active_scope(ident, *scope);
 
     Type const *sym_type;
     bool err = false;
@@ -783,6 +805,7 @@ ASTNode *SemanticAnalyzer::analyze_ref_expr(
         err
     );
     expr->sym = (Symbol *)res;
+    expr->is_lvalue = true;
 
     return expr;
 }
@@ -829,13 +852,89 @@ ASTNode *SemanticAnalyzer::analyze_string_literal(
 }
 
 ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
-    token::token_type op,
+    op::kind op,
+    token::token_type tk,
     ASTNode *expr,
-    SourceLocation op_loc
+    SourceLocation loc
 ) {
-    // TODO: implement
-    ErrorHandler::handle(error::nyi, op_loc, "prefix operations");
-    ErrorHandler::prog_exit();
+
+    bool err = expr->has_error;
+    Type const *ty = expr->type;
+    bool lval = false;
+
+    switch (op) {
+        case op::preincr:
+        case op::predecr:
+            // the expr must be lvalue
+            if (!expr->is_lvalue) {
+                ErrorHandler::handle(error::lvalue_required, loc, "prefix in/decrement cannot be applied to non-lvalue values");
+                err = true;
+            }
+            // the lvalue must be of integral type
+            if (!expr->type->is_integral) {
+                ErrorHandler::handle(error::integral_type_required, loc, "prefix in/decrement cannot be applied to non-integral types");
+                err = true;
+            }
+            // resulting value is an lval
+            lval = true;
+            break;
+        case op::addr:
+            // the expr must be lvalue
+            if (!expr->is_lvalue) {
+                ErrorHandler::handle(error::lvalue_required, loc, "a non-lvalue value does not have an address");
+                err = true;
+            }
+            // resulting value is pointer type
+            // TODO: how do I get uniqued pointer type to expr type from here?
+            ErrorHandler::handle(error::nyi, loc, "address-of operator");
+            ErrorHandler::prog_exit();
+            break;
+        case op::deref:
+            // the expr must be of pointer type
+            if (expr->type->kind != type::pointer_type) {
+                ErrorHandler::handle(error::pointer_type_required, loc, "value of non-pointer type cannot be dereferenced");
+                err = true;
+            }
+            ty = expr->type->points_to;
+            lval = true;
+            break;
+        case op::lnot:
+            // expr must be of integral type
+            if (!expr->type->is_integral) {
+                ErrorHandler::handle(error::integral_type_required, loc, "logical not cannot be applied to non-integral types");
+                err = true;
+            }
+            // resulting value is bool
+            ty = Type::get_i8_type();
+            break;
+        case op::neg:
+            // expr must be of integral type
+            if (!expr->type->is_integral) {
+                ErrorHandler::handle(error::integral_type_required, loc, "negation cannot be applied to non-integral types");
+                err = true;
+            }
+            ty = expr->type;
+            break;
+        default:
+            assert(false && "should be unreachable");
+    }
+
+    loc.copy_start(expr->loc);
+
+    ASTNode *node = node_allocator.alloc();
+    node->set(
+        ast::unary_op,
+        ty,
+        nullptr,
+        loc,
+        tk,
+        err
+    );
+    node->op = op;
+    node->is_lvalue = lval;
+    node->children.push_back(expr);
+
+    return node;
 }
 
 ASTNode *SemanticAnalyzer::analyze_func_decl(
@@ -859,7 +958,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     }
 
     // redeclaration in current scope
-    if (find_symbol_in_current_scope(ident, scope)) {
+    if (find_symbol_in_current_scope(ident, *scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -868,7 +967,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     }
 
     // add to symbol table
-    Symbol *sym = insert_symbol(scope, *ident, type);
+    Symbol *sym = insert_symbol(*scope, *ident, type);
 
     ASTNode *node = node_allocator.alloc();
     node->set(
@@ -890,7 +989,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
 
         // add to symbol table
         sym = insert_symbol(
-            scope,
+            *scope,
             *params[i].first,
             type->params[i]
         );
@@ -947,7 +1046,7 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
     );
 
     // ensure no redeclaration
-    if (find_symbol_in_current_scope(ident, scope)) {
+    if (find_symbol_in_current_scope(ident, *scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -956,7 +1055,7 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
         decl->has_error = true;
     }
 
-    Symbol *sym = insert_symbol(scope, *ident, type);
+    Symbol *sym = insert_symbol(*scope, *ident, type);
     decl->sym = sym;
 
     ASTNode *res = decl;
@@ -986,7 +1085,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
     Type *alias;
 
     // ensure no redeclaration
-    if (find_type_in_current_scope(ident, scope)) {
+    if (find_type_in_current_scope(ident, *scope)) {
         ErrorHandler::handle(
             error::redeclaration_of_symbol_in_same_scope,
             ident_loc,
@@ -1004,7 +1103,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
         alias->kind = type::alias_type;
         alias->canonical = type->canonical;
 
-        insert_type(scope, *ident, alias);
+        insert_type(*scope, *ident, alias);
     }
 
     ASTNode *stmt = node_allocator.alloc();

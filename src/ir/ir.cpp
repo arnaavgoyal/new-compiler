@@ -123,8 +123,34 @@ void Instr::dump_as_operand() {
     }
 }
 
-CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, std::string name_hint)
-    : Instr(callee->get_type(), 1 + callee->num_params(), instr::call, parent, name_hint) {
+void ICmpInstr::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ')
+        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
+        << " = " << get_str_repr() << " ";
+
+#define CMPCP(kind) case cmpkind::kind: std::cout << #kind; break;
+    switch (kind) {
+        CMPCP(ugt)
+        CMPCP(ult)
+        CMPCP(ugte)
+        CMPCP(ulte)
+        CMPCP(sgt)
+        CMPCP(slt)
+        CMPCP(sgte)
+        CMPCP(slte)
+        CMPCP(eq)
+        CMPCP(neq)
+        default: assert(false && "unknown cmpkind value?");
+    }
+#undef CMPCP
+
+    std::cout << ", ";
+    dump_operands();
+    std::cout << std::endl;
+}
+
+CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, Instr *before, std::string name_hint)
+    : Instr(callee->get_type(), 1 + callee->num_params(), instr::call, parent, before, name_hint) {
     assert(callee->num_params() == args.size());
     set_operand(0, callee);
     auto it = callee->params_begin();
@@ -153,8 +179,8 @@ void ReadInstr::dump(unsigned indent) {
     std::cout << std::endl;
 }
 
-BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y, Block *parent, std::string name_hint)
-    : Instr(x->get_type(), 2, opc, parent, name_hint) {
+BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y, Block *parent, Instr *before, std::string name_hint)
+    : Instr(x->get_type(), 2, opc, parent, before, name_hint) {
     assert(x->get_type() == y->get_type() && "both x and y must have same type");
     set_operand(0, x);
     set_operand(1, y);

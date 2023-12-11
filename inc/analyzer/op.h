@@ -8,10 +8,14 @@ namespace op {
         __lvalue_low_bound,
 
         // lvalue ops
-        //  unary increment
-        incr,
-        //  unary decrement
-        decr,
+        //  prefix unary increment
+        preincr,
+        //  postfix unary increment
+        postincr,
+        //  prefix unary decrement
+        predecr,
+        //  postfix unary decrement
+        postdecr,
         //  assignment
         assign,
         //  address of
@@ -42,6 +46,8 @@ namespace op {
         div,
         //  modulo
         mod,
+        // unary negate
+        neg,
 
         __arithmetic_high_bound,
         __relational_low_bound,
@@ -66,6 +72,8 @@ namespace op {
         // misc
         //  grouping
         group,
+        // indirection
+        deref,
 
         __misc_high_bound,
     };

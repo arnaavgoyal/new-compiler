@@ -93,18 +93,18 @@ private:
     */
     void exit_current_scope(Scope **curr);
     
-    Symbol const *find_symbol_in_current_scope(std::string const *ident, Scope **scope);
-    Symbol const *find_symbol_in_any_active_scope(std::string const *ident, Scope **scope);
+    Symbol const *find_symbol_in_current_scope(std::string const *ident, Scope *scope);
+    Symbol const *find_symbol_in_any_active_scope(std::string const *ident, Scope *scope);
     Symbol *insert_symbol(
-        Scope **scope,
+        Scope *scope,
         std::string const &name,
         Type const *type_ptr
     );
 
-    Type const *find_type_in_current_scope(std::string const *ident, Scope **scope);
-    Type const *find_type_in_any_active_scope(std::string const *ident, Scope **scope);
+    Type const *find_type_in_current_scope(std::string const *ident, Scope *scope);
+    Type const *find_type_in_any_active_scope(std::string const *ident, Scope *scope);
     void insert_type(
-        Scope **scope,
+        Scope *scope,
         std::string const &key,
         Type *value
     );
@@ -178,9 +178,10 @@ public:
     );
 
     ASTNode *analyze_postfix_op_expr(
-        token::token_type op,
+        op::kind op,
+        token::token_type tk,
         ASTNode *expr,
-        SourceLocation op_loc
+        SourceLocation loc
     );
 
     ASTNode *analyze_call_expr(
@@ -224,9 +225,10 @@ public:
     );
 
     ASTNode *analyze_prefix_op_expr(
-        token::token_type op,
+        op::kind op,
+        token::token_type tk,
         ASTNode *expr,
-        SourceLocation op_loc
+        SourceLocation loc
     );
 
     ASTNode *analyze_func_decl(

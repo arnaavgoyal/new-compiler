@@ -109,6 +109,8 @@ public:
 
     Symbol *sym = nullptr;
 
+    bool is_lvalue = false;
+
     ASTNode(
         ast::node_type kind,
         Type const *type,

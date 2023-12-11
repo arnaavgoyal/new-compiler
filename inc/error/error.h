@@ -21,6 +21,9 @@ namespace error {
         referenced_ident_is_undefined,
         incompatible_operand_type,
         pointer_to_function_type,
+        lvalue_required,
+        pointer_type_required,
+        integral_type_required,
 
         // dev errors
         deprecated,
