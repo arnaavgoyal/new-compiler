@@ -103,6 +103,9 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
             case ast::loop_stmt:
                 type_str = "loop";
                 break;
+            case ast::if_stmt:
+                type_str = "if stmt";
+                break;
             case ast::error:
                 type_str = "error";
                 break;

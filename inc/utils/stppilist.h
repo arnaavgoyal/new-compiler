@@ -130,6 +130,8 @@ public:
     Inner *remove(std::string name);
     std::string rename(Inner *i, std::string name_hint);
     Inner *get(std::string name);
+    AutoRenamingSymbolTable<Inner *> &get_symtable() { return symtable; }
+    void set_symtable(AutoRenamingSymbolTable<Inner *> &st) { symtable = st; }
 };
 
 /** ------------------- STPPIListNode impl ------------------- */
@@ -143,8 +145,13 @@ std::string STPPIListNode<Inner, Outer>::set_parent(Outer *new_parent) {
         parent->get_inner_list(static_cast<Inner *>(nullptr)).remove(static_cast<Inner *>(this));
     }
 
-    // let the new parent do everything else
-    return new_parent->get_inner_list(static_cast<Inner *>(nullptr)).append(static_cast<Inner *>(this));
+    if (new_parent) {
+
+        // let the new parent do everything else
+        return new_parent->get_inner_list(static_cast<Inner *>(nullptr)).append(static_cast<Inner *>(this));
+    }
+
+    return name_hint;
 }
 template <typename Inner, typename Outer>
 std::string STPPIListNode<Inner, Outer>::set_name(std::string name_hint) {

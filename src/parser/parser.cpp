@@ -1096,6 +1096,48 @@ ASTNode *Parser::parse_stmt() {
         req_semi = false;
     }
 
+    // if stmt
+    else if (tk_type == token::kw_if) {
+        loc_cache = tk.get_src_loc();
+        consume();
+
+        match(token::op_leftparen);
+        consume();
+
+        // cond
+        ASTNode *cond = parse_expr();
+
+        match(token::op_rightparen);
+        consume();
+
+        // get end loc of if stmt
+        loc_cache.copy_end(prev_tk_loc);
+
+        // analyze
+        ASTNode *ifstmt = analyzer.analyze_if_stmt(cond, loc_cache);
+
+        // match {
+        match(token::op_leftbrace);
+
+        // parse stmt block
+        ASTNode *stmts = parse_stmt();
+
+        // add stmt block to loop node
+        ifstmt->children.push_back(stmts);
+
+        // if has follow-up else block
+        if (tk.get_type() == token::kw_else) {
+
+            consume();
+
+            ifstmt->children.push_back(parse_stmt());
+        }
+
+        res = ifstmt;
+
+        req_semi = false;
+    }
+
     // while loop
     else if (tk_type == token::kw_while) {
 

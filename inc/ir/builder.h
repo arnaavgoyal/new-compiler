@@ -35,8 +35,8 @@ public:
     static      ReadInstr *make_get();
     static    WriteInstr *make_store();
     static   PtrIdxInstr *make_ptridx();
-    static   UpcastInstr *make_upcast();
-    static DowncastInstr *make_downcast();
+    static   IUpcastInstr *make_upcast();
+    static IDowncastInstr *make_downcast();
     static     ICmpInstr *make_icmp();
     static     CallInstr *make_call(Function *callee);
 

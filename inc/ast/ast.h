@@ -143,19 +143,33 @@ public:
 
 };
 
-class Decl : public ASTNode {
-private:
-    std::string *name;
-};
+namespace ast {
 
-class ParamDecl : public ASTNode {
+class ASTNode {
 private:
 
 };
 
-class FuncDecl : public ASTNode {
+/**
+ * A language statement.
+ * Statements are AST nodes at the top level of a program
+ * or function
+*/
+class Stmt : public ASTNode {
 private:
-    std::vector<ParamDecl *> params;
+
 };
+
+class Decl : public Stmt {
+private:
+    Symbol *symbol;
+
+};
+
+class FuncDecl : public Decl {
+
+};
+
+}
 
 #endif

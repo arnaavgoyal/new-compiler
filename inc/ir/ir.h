@@ -47,10 +47,10 @@ enum class instr {
 
 // typecasting
 
-    // upcast (smaller -> bigger)
-    upcast,
-    // downcast (bigger -> smaller)
-    downcast,
+    // integral upcast (smaller -> bigger)
+    iupcast,
+    // integral downcast (bigger -> smaller)
+    idowncast,
 
 // binary operations
 
@@ -102,7 +102,6 @@ class Def {
 private:
     Type *type;
     IList<Use> list;
-    static unsigned name_counter;
 
 protected:
     Def(Def &) = default;
@@ -345,20 +344,36 @@ public:
     }
 };
 
-class UpcastInstr : public Instr {
+class IUpcastInstr : public Instr {
 private:
-    static constexpr char const *const STR_REPR = "upcast";
+    static constexpr char const *const STR_REPR = "iuc";
 
 public:
     std::string get_str_repr() { return STR_REPR; }
+
+public:
+    IUpcastInstr(Def *val, Type *ty, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(ty, 1, instr::iupcast, parent, name_hint) {
+        set_operand(0, val);
+        // TODO: check for invalid upcast
+    }
+    void dump(unsigned indent = 0);
 };
 
-class DowncastInstr : public Instr {
+class IDowncastInstr : public Instr {
 private:
-    static constexpr char const *const STR_REPR = "downcast";
+    static constexpr char const *const STR_REPR = "idc";
 
 public:
     std::string get_str_repr() { return STR_REPR; }
+
+public:
+    IDowncastInstr(Def *val, Type *ty, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(ty, 1, instr::idowncast, parent, name_hint) {
+        set_operand(0, val);
+        // TODO: check for invalid downcast
+    }
+    void dump(unsigned indent = 0);
 };
 
 class ICmpInstr : public Instr {

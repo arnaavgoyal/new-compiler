@@ -131,6 +131,8 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
     return f;
 }
 
+
+
 ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
 
     ir::Def *res;
@@ -159,7 +161,9 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
                 std::stoi(*node->str)
             );
         case ast::loop_stmt:
-            NYI(loops)
+            return translate_loop(node, b);
+        case ast::if_stmt:
+            return translate_if_stmt(node, b);
         case ast::param_decl:
             UNREACHABLE
         case ast::paren_expr:
@@ -369,6 +373,70 @@ ir::Def *ASTTranslator::t_unop(ASTNode const *unop, ir::Block *b) {
 ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b) {
     ci_lval = false;
     return new ir::ReadInstr(ty, lval, b, nullptr, "tmp");
+}
+
+static ir::Def *translate_if_stmt(ASTNode const *ifstmt, ir::Block *b) {
+
+    // get cond
+    ir::Def *cond = translate_in_func_body(ifstmt->children[0], b);
+
+    // make if block
+    ir::Block *ifblock = new ir::Block(b->get_parent(), "if");
+
+    // add all inner stmts
+    for (ASTNode const *child : ifstmt->children[1]->children) {
+        translate_in_func_body(child, ifblock);
+    }
+
+    ir::Block *elseblock = nullptr;
+
+    // do for else, if necessary
+    if (ifstmt->children.size() > 2) {
+
+        // make else block
+        elseblock = new ir::Block(b->get_parent(), "else");
+
+        // add inner stmts
+        translate_in_func_body(ifstmt->children[2], elseblock);
+    }
+
+    // make done block
+    ir::Block *doneblock = new ir::Block(b->get_parent(), "done");
+
+    // add branch from if block to done block
+    ir::BranchInstr *br_if_to_done = new ir::BranchInstr(doneblock, ifblock);
+
+    ir::Block *nextblock = doneblock;
+
+    // if theres an else
+    if (elseblock) {
+
+        // branch from else block to done block
+        ir::BranchInstr *br_else_to_done = new ir::BranchInstr(doneblock, elseblock);
+
+        nextblock = elseblock;
+    }
+
+    // branch into if block or the next block (else or done)
+    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(ifblock, cond, nextblock, b);
+
+    return doneblock;
+}
+
+static ir::Def *translate_loop(ASTNode const *lnode, ir::Block *b) {
+    ir::Function *f = b->get_parent();
+    ir::Block *loopcond = new ir::Block(f, "loopcond");
+    ir::Def *cond_inner = translate_in_func_body(lnode->children[0], loopcond);
+    ir::Block *loopbody = new ir::Block(f, "loopbody");
+    ir::Block *loopend = new ir::Block(f, "loopend");
+    auto cond = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+    b->get_parent()->dump();
+    for (ASTNode const *stmt : lnode->children[1]->children) {
+        translate_in_func_body(stmt, loopbody);
+    }
+    b->get_parent()->dump();
+    auto jmp = new ir::BranchInstr(loopcond, loopbody);
+    return loopend;
 }
 
 

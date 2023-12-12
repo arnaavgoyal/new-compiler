@@ -1168,6 +1168,24 @@ ASTNode *SemanticAnalyzer::analyze_loop_stmt(
     return loop;
 }
 
+ASTNode *SemanticAnalyzer::analyze_if_stmt(
+    ASTNode *cond,
+    SourceLocation loc
+) {
+    // TODO: ensure cond is boolean (or boolean coercible)
+    ASTNode *ifstmt = node_allocator.alloc();
+    ifstmt->set(
+        ast::if_stmt,
+        cond->type,
+        nullptr,
+        loc,
+        token::kw_if,
+        false
+    );
+    ifstmt->children.push_back(cond);
+    return ifstmt;
+}
+
 void SemanticAnalyzer::add_expr_as_stmt(
     ASTNode *expr
 ) {

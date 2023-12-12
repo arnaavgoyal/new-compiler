@@ -9,8 +9,6 @@ namespace ir {
 
 /** ------------------- Def ------------------- */
 
-unsigned Def::name_counter = 0;
-
 void Def::add_use(Use *use) {
     list.append(use);
 }
@@ -37,6 +35,7 @@ DefUser::DefUser(Type *ty, unsigned num_ops)
     for (unsigned i = 0; i < num_ops; i++) {
         operands[i].idx = i;
         operands[i].user = this;
+        operands[i].def = nullptr;
     }
 }
 void DefUser::set_operand(unsigned idx, Def *operand) {
@@ -206,6 +205,23 @@ void ReadInstr::dump(unsigned indent) {
     dump_operands();
     std::cout << std::endl;
 }
+
+void IUpcastInstr::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ')
+        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
+        << " = " << get_str_repr() << " ";
+    dump_operands();
+    std::cout << ", " << get_type()->stringify() << std::endl;
+}
+
+void IDowncastInstr::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ')
+        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
+        << " = " << get_str_repr() << " ";
+    dump_operands();
+    std::cout << ", " << get_type()->stringify() << std::endl;
+}
+
 
 BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y, Block *parent, Instr *before, std::string name_hint)
     : Instr(x->get_type(), 2, opc, parent, before, name_hint) {

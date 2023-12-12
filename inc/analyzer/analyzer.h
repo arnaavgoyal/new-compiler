@@ -292,6 +292,11 @@ public:
         SourceLocation loc
     );
 
+    ASTNode *analyze_if_stmt(
+        ASTNode *cond,
+        SourceLocation loc
+    );
+
     void add_expr_as_stmt(
         ASTNode *expr
     );
