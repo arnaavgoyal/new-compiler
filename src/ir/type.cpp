@@ -7,6 +7,10 @@ namespace ir {
 std::string PrimitiveType::stringify() {
     return str;
 }
+PrimitiveType *PrimitiveType::get_i1_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::i1, "i1"));
+    return ty.get();
+}
 PrimitiveType *PrimitiveType::get_u8_type() {
     static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::u8, "u8"));
     return ty.get();

@@ -82,7 +82,7 @@ public:
         append_before(e, _tail);
     }
     void remove(Inner *e) {
-        assert(_size > 0 && "remove() cannot be called on empty list");
+        assert(_size > 0 && "cannot remove from empty list");
         assert(e && "element to remove cannot be null");
         e->get_next()->set_prev(e->get_prev());
         e->get_prev()->set_next(e->get_next());

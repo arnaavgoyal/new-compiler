@@ -136,6 +136,7 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
 ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
 
     ir::Def *res;
+    ci_lval = false;
 
     switch (node->kind) {
         case ast::binary_op:
@@ -237,22 +238,33 @@ ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl, ir::Block *b) {
 
 ir::Def *ASTTranslator::t_binop(ASTNode const *binop, ir::Block *b) {
 
+    ir::Def *lhs = t_stmt(binop->children[0], b);
+    bool lhs_lval = ci_lval;
+    ir::Def *rhs = t_stmt(binop->children[1], b);
+    bool rhs_lval = ci_lval;
+
+    std::cout << "lhs (" << lhs_lval << ")\n";
+    lhs->dump(2);
+    std::cout << "rhs (" << rhs_lval << ")\n";
+    rhs->dump(2);
+
     switch (binop->op) {
         case op::add:
             NYI(add)
         case op::assign: {
-            auto rhs = t_stmt(binop->children[1], b);
-            if (ci_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
             return new ir::WriteInstr(
                 rhs,
-                t_ref(binop->children[0], b),
+                lhs,
                 b
             );
         }
         case op::div:
             NYI(div)
         case op::eq:
-            NYI(eq)
+            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type), b); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
+            return new ir::ICmpInstr(ir::cmpkind::eq, lhs, rhs, b, nullptr, "tmp");
         case op::group:
             NYI(group)
         case op::gt:
@@ -378,7 +390,7 @@ ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b) 
 ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt, ir::Block *b) {
 
     // get cond
-    ir::Def *cond = t_stmt(ifstmt->children[0], b);
+    ir::Def *cond = t_cond(ifstmt->children[0], b);
 
     // make if block
     ir::Block *ifblock = new ir::Block(b->get_parent(), "if");
@@ -418,7 +430,7 @@ ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt, ir::Block *b) {
     }
 
     // branch into if block or the next block (else or done)
-    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(ifblock, cond, nextblock, b);
+    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(cond, ifblock, nextblock, b);
 
     return doneblock;
 }
@@ -426,10 +438,10 @@ ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt, ir::Block *b) {
 ir::Def *ASTTranslator::t_loop(ASTNode const *lnode, ir::Block *b) {
     ir::Function *f = b->get_parent();
     ir::Block *loopcond = new ir::Block(f, "loopcond");
-    ir::Def *cond_inner = t_stmt(lnode->children[0], loopcond);
+    ir::Def *cond_inner = t_cond(lnode->children[0], loopcond);
     ir::Block *loopbody = new ir::Block(f, "loopbody");
     ir::Block *loopend = new ir::Block(f, "loopend");
-    auto cond = new ir::BranchInstr(loopbody, cond_inner, loopend, loopcond);
+    auto cond = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
     b->get_parent()->dump();
     for (ASTNode const *stmt : lnode->children[1]->children) {
         t_stmt(stmt, loopbody);
@@ -439,6 +451,25 @@ ir::Def *ASTTranslator::t_loop(ASTNode const *lnode, ir::Block *b) {
     return loopend;
 }
 
+ir::Def *ASTTranslator::t_cond(ASTNode const *expr, ir::Block *b) {
+    ir::Def *irexpr = t_stmt(expr, b);
+    if (ci_lval) {
+        irexpr = t_rval(irexpr, t_type(expr->type), b);
+    }
+    if (irexpr->get_type() == ir::PrimitiveType::get_i1_type()) {
+        return irexpr;
+    }
+    assert(irexpr->get_type()->is_integral_type() && "only integral types can be coerced to boolean");
+    irexpr->dump();
+    return new ir::ICmpInstr(
+        ir::cmpkind::neq,
+        irexpr,
+        ir::IntegralConstant::get(irexpr->get_type(), 0),
+        b,
+        nullptr,
+        "tmp"
+    );
+}
 
 #undef NYI
 #undef UNREACHABLE

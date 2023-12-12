@@ -177,8 +177,9 @@ CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, I
     }
 }
 
-BranchInstr::BranchInstr(Block *jmp_true, Def *cond, Block *jmp_false, Block *parent)
+BranchInstr::BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent)
     : Instr(PrimitiveType::get_void_type(), 3, instr::branch, true, parent) {
+    assert(cond->get_type() == PrimitiveType::get_i1_type() && "cond must be of i1 type");
     set_operand(0, jmp_true);
     set_operand(1, cond);
     set_operand(2, jmp_false);
@@ -204,6 +205,14 @@ void ReadInstr::dump(unsigned indent) {
         << get_type()->stringify() << ", ";
     dump_operands();
     std::cout << std::endl;
+}
+
+void TypecastInstr::dump(unsigned indent) {
+    std::cout << std::string(indent, ' ')
+        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
+        << " = " << get_str_repr() << " ";
+    dump_operands();
+    std::cout << ", " << get_type()->stringify() << std::endl;
 }
 
 void IUpcastInstr::dump(unsigned indent) {
@@ -289,7 +298,8 @@ IntegralConstant::map_type IntegralConstant::vals;
 IntegralConstant *IntegralConstant::get(Type *ty, uint64_t value) {
 
     // try to find value
-    auto it = vals.find(value);
+    auto key = std::make_pair(ty, value);
+    auto it = vals.find(key);
 
     // not found
     if (it == vals.end()) {
@@ -297,7 +307,7 @@ IntegralConstant *IntegralConstant::get(Type *ty, uint64_t value) {
         // TODO: determine if value actually fits into type
 
         // insert into map
-        return vals.emplace(value, new IntegralConstant(ty, value)).first->second;
+        return vals.emplace(key, new IntegralConstant(ty, value)).first->second;
     }
 
     // found

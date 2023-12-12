@@ -11,6 +11,7 @@ namespace ir {
     
         // integral
         _integral_start,
+        i1,
         u8,  i8,
         u16, i16,
         u32, i32,
@@ -62,6 +63,7 @@ public:
     PrimitiveType(PrimitiveType &) = delete;
     PrimitiveType(PrimitiveType &&) = delete;
 
+    static PrimitiveType *get_i1_type();
     static PrimitiveType *get_u8_type();
     static PrimitiveType *get_i8_type();
     static PrimitiveType *get_u16_type();

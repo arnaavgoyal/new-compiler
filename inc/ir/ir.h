@@ -47,6 +47,8 @@ enum class instr {
 
 // typecasting
 
+    // typecast between types of same size
+    typecast,
     // integral upcast (smaller -> bigger)
     iupcast,
     // integral downcast (bigger -> smaller)
@@ -265,7 +267,7 @@ private:
     bool conditional;
 
 public:
-    BranchInstr(Block *jmp_true, Def *cond, Block *jmp_false, Block *parent = nullptr);
+    BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent = nullptr);
     BranchInstr(Block *jmp, Block *parent = nullptr);
     bool is_conditional() { return conditional; }
     Block *get_jmp_true() { return static_cast<Block *>(get_operand(0)->get_def()); }
@@ -344,9 +346,25 @@ public:
     }
 };
 
+class TypecastInstr : public Instr {
+private:
+    static constexpr char const *const STR_REPR = "cast";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    TypecastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(ty, 1, instr::iupcast, parent, before, name_hint) {
+        set_operand(0, val);
+        // TODO: check for invalid cast (types are different sizes)
+    }
+    void dump(unsigned indent = 0);
+};
+
 class IUpcastInstr : public Instr {
 private:
-    static constexpr char const *const STR_REPR = "iuc";
+    static constexpr char const *const STR_REPR = "iucast";
 
 public:
     std::string get_str_repr() { return STR_REPR; }
@@ -362,7 +380,7 @@ public:
 
 class IDowncastInstr : public Instr {
 private:
-    static constexpr char const *const STR_REPR = "idc";
+    static constexpr char const *const STR_REPR = "idcast";
 
 public:
     std::string get_str_repr() { return STR_REPR; }
@@ -388,7 +406,7 @@ private:
 
 public:
     ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_i8_type(), 2, instr::icmp, parent, before, name_hint), kind(kind) {
+        : Instr(PrimitiveType::get_i1_type(), 2, instr::icmp, parent, before, name_hint), kind(kind) {
         assert(x->get_type() == y->get_type() && "operands must be of equivalent type");
         assert(x->get_type()->is_integral_type() && "operands must be of integral type");
         set_operand(0, x);
@@ -424,7 +442,7 @@ protected:
 
 class IntegralConstant : public Constant {
 public:
-    using map_type = std::map<uint64_t, IntegralConstant *>;
+    using map_type = std::map<std::pair<Type *, uint64_t>, IntegralConstant *>;
 
 private:
     friend map_type;
