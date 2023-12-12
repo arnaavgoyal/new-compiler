@@ -72,6 +72,21 @@ void DefUser::dump_operands() {
 
 /** ------------------- Block ------------------- */
 
+std::string Block::add_instr(Instr *i, std::string name_hint) {
+    assert(!terminator && "cannot add instruction after terminator");
+
+    if (!name_hint.empty()) {
+        list.append(i, name_hint);
+    }
+    else {
+        list.append(i);
+    }
+
+    if (i->is_terminator()) {
+        terminator = i;
+    }
+}
+
 void Block::remove_instr(Instr *instr) {
     list.remove(instr);
 }
@@ -161,6 +176,19 @@ CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, I
         assert(args[i]->get_type() == (*it)->get_type());
         set_operand(i + 1, args[i]);
     }
+}
+
+BranchInstr::BranchInstr(Block *jmp_true, Def *cond, Block *jmp_false, Block *parent)
+    : Instr(PrimitiveType::get_void_type(), 3, instr::branch, true, parent) {
+    set_operand(0, jmp_true);
+    set_operand(1, cond);
+    set_operand(2, jmp_false);
+    conditional = true;
+}
+BranchInstr::BranchInstr(Block *jmp, Block *parent)
+    : Instr(PrimitiveType::get_void_type(), 1, instr::branch, true, parent) {
+    set_operand(0, jmp);
+    conditional = false;
 }
 
 void SAllocInstr::dump(unsigned indent) {

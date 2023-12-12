@@ -13,6 +13,7 @@
 #include "analyzer/type.h"
 #include "ast/translate.h"
 #include "ir/ir.h"
+#include "codegen/codegen.h"
 
 #define DEBUG
 

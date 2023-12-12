@@ -115,6 +115,14 @@ public:
     void remove_use(Use *use);
     virtual void dump(unsigned indent = 0);
     virtual void dump_as_operand();
+
+    // iterators
+    IList<Use>::iterator uses_begin() { return list.begin(); }
+    IList<Use>::iterator uses_end() { return list.end(); }
+    IList<Use>::reverse_iterator uses_rbegin() { return list.rbegin(); }
+    IList<Use>::reverse_iterator uses_rend() { return list.rend(); }
+    iterator_range<IList<Use>::iterator> uses_iterable()
+        { return make_iterator_range(uses_begin(), uses_end()); }
 };
 
 class DefUser : public Def {
@@ -174,7 +182,9 @@ private:
     list_ty list;
 
     friend list_ty::node_type;
-    list_ty &get_inner_list(Instr *) { return list; } 
+    list_ty &get_inner_list(Instr *) { return list; }
+
+    Instr *terminator = nullptr;
 
 protected:
     Block(Block &) = default;
@@ -188,12 +198,12 @@ public:
         }
         set_parent(parent);
     }
-    std::string add_instr(Instr *i) { return list.append(i); }
-    std::string add_instr(Instr *i, std::string name_hint) { return list.append(i, name_hint); }
+    std::string add_instr(Instr *i, std::string name_hint = "");
     Instr *get_instr(std::string name) { return list.get(name); }
     void remove_instr(Instr *instr);
     Instr *remove_instr(std::string name);
     unsigned size() { return list.size(); }
+    Instr *get_terminator() { return terminator; }
     list_ty::iterator begin() { return list.begin(); }
     list_ty::iterator end() { return list.end(); }
     Instr *get_first_instr() { return list.first(); }
@@ -208,21 +218,29 @@ class Instr : public DefUser, public STPPIListNode<Instr, Block> {
 private:
     static constexpr char const *const STR_REPR = "<instr>";
     instr kind;
+    bool term;
 
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type *ty, unsigned num_ops, instr kind, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : DefUser(ty, num_ops), kind(kind) {
+    Instr(Type *ty, unsigned num_ops, instr kind, bool term,
+        Block *parent = nullptr, Instr *before = nullptr,
+        std::string name_hint = "")
+        : DefUser(ty, num_ops), kind(kind), term(term) {
         if (parent) { set_parent(parent); }
         if (!name_hint.empty()) { set_name(name_hint); }
     }
+    Instr(Type *ty, unsigned num_ops, instr kind,
+        Block *parent = nullptr, Instr *before = nullptr,
+        std::string name_hint = "")
+        : Instr(ty, num_ops, kind, false, parent, before, name_hint) { }
 
 public:
     instr get_instr_kind() { return kind; }
     void dump(unsigned indent = 0);
     void dump_as_operand();
     virtual std::string get_str_repr() { return STR_REPR; }
+    bool is_terminator() { return term; }
 };
 
 class ReturnInstr : public Instr {
@@ -234,7 +252,7 @@ public:
     
 public:
     ReturnInstr(Def *retval, Block *parent)
-        : Instr(retval->get_type(), 1, instr::ret, parent) { set_operand(0, retval); }
+        : Instr(retval->get_type(), 1, instr::ret, true, parent) { set_operand(0, retval); }
 };
 
 class BranchInstr : public Instr {
@@ -243,12 +261,23 @@ private:
 
 public:
     std::string get_str_repr() { return STR_REPR; }
-    
+
+private:
+    bool conditional;
+
 public:
-    BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent = nullptr)
-        : Instr(cond->get_type(), 3, instr::branch, parent) { }
-    BranchInstr(Block *jmp, Block *parent = nullptr)
-        : BranchInstr(nullptr, jmp, nullptr, parent) { }
+    BranchInstr(Block *jmp_true, Def *cond, Block *jmp_false, Block *parent = nullptr);
+    BranchInstr(Block *jmp, Block *parent = nullptr);
+    bool is_conditional() { return conditional; }
+    Block *get_jmp_true() { return static_cast<Block *>(get_operand(0)->get_def()); }
+    Block *get_jmp_false() {
+        assert(is_conditional() && "unconditional branch instrs do not have a jmp false block");
+        return static_cast<Block *>(get_operand(2)->get_def());
+    }
+    Def *get_cond() {
+        assert(is_conditional() && "unconditional branch instrs do not have a cond");
+        return get_operand(1)->get_def();
+    }
 };
 
 class SAllocInstr : public Instr {
@@ -498,6 +527,12 @@ public:
     void add_function(Function *func) { func_list.append(func); }
     Function *get_function(std::string name) { return func_list.get(name); }
     void dump();
+
+    // iterator forwarding
+    func_list_ty::iterator begin() { return func_list.begin(); }
+    func_list_ty::iterator end() { return func_list.end(); }
+    gvar_list_ty::iterator gvar_begin() { return gvar_list.begin(); }
+    gvar_list_ty::iterator gvar_end() { return gvar_list.end(); }
 };
 
 }
