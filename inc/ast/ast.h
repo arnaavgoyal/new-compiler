@@ -52,6 +52,9 @@ namespace ast {
         // a loop statement
         loop_stmt,
 
+        // an if statement
+        if_stmt,
+
         // a scoped block of statements (func def, loop body, etc)
         stmt_block,
 
