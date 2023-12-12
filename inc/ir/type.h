@@ -24,7 +24,7 @@ namespace ir {
         _fp_end,
 
         // other
-        label,
+        block,
         void_ty,
         ptr,
 
@@ -74,7 +74,7 @@ public:
     static PrimitiveType *get_i64_type();
     static PrimitiveType *get_f32_type();
     static PrimitiveType *get_f64_type();
-    static PrimitiveType *get_label_type();
+    static PrimitiveType *get_block_type();
     static PrimitiveType *get_void_type();
     static PrimitiveType *get_ptr_type();
 

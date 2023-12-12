@@ -1,0 +1,10 @@
+digraph {
+	entry -> entry [weight=3 headlabel="0"]
+	entry -> ifthen [weight=3 headlabel="1"]
+	entry -> ifelse [weight=3 headlabel="1"]
+	ifthen -> ifdone1 [weight=3 headlabel="2"]
+	ifelse -> ifthen1 [weight=3 headlabel="2"]
+	ifelse -> ifdone [weight=3 headlabel="2"]
+	ifthen1 -> ifdone [style="dashed" headlabel="2"]
+	ifdone -> ifdone1 [style="dashed" headlabel="2"]
+}

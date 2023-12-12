@@ -100,6 +100,7 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
         p,
         *fdecl->str
     );
+    curr_func = f;
 
     // make the params
     std::vector<ir::Param *> params;
@@ -116,33 +117,35 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
     
     // make the entry block
     ir::Block *entry = new ir::Block(f, "entry");
+    curr_block = entry;
 
     // null last lvar
     last_lvar = nullptr;
 
     // add param lvars (to make them mutable variables)
     for (unsigned i = 0; i < params.size(); i++) {
-        t_lvar(fdecl->children[i], entry);
+        auto sa = t_lvar(fdecl->children[i]);
+        auto wi = new ir::WriteInstr(params[i], sa, curr_block);
     }
     
     // generate ir for the function body
-    t_stmt(fdecl->children[params.size()], entry);
+    t_stmt(fdecl->children[params.size()]);
     
     return f;
 }
 
 
 
-ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
+ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
 
     ir::Def *res;
     ci_lval = false;
 
     switch (node->kind) {
         case ast::binary_op:
-            return t_binop(node, b);
+            return t_binop(node);
         case ast::call_expr:
-            return t_call(node, b);
+            return t_call(node);
         case ast::cast_expr:
             NYI(cast exprs)
         case ast::char_lit:
@@ -162,27 +165,27 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
                 std::stoi(*node->str)
             );
         case ast::loop_stmt:
-            return t_loop(node, b);
+            return t_loop(node);
         case ast::if_stmt:
-            return t_if(node, b);
+            return t_if(node);
         case ast::param_decl:
             UNREACHABLE
         case ast::paren_expr:
             for (ASTNode const *c : node->children) {
-                res = t_stmt(c, b);
+                res = t_stmt(c);
             }
             return res;
         case ast::recovery:
             UNREACHABLE
         case ast::ref_expr: {
             ci_lval = true;
-            return t_ref(node, b);
+            return t_ref(node);
         }
         case ast::ret_stmt:
-            return new ir::ReturnInstr(t_stmt(node->children[0], b), b);
+            return new ir::ReturnInstr(t_stmt(node->children[0]), curr_block);
         case ast::stmt_block:
             for (ASTNode const *c : node->children) {
-                res = t_stmt(c, b);
+                res = t_stmt(c);
             }
             return res;
         case ast::str_lit:
@@ -196,16 +199,16 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
         case ast::typedef_stmt:
             return nullptr;
         case ast::unary_op:
-            return t_unop(node, b);
+            return t_unop(node);
         case ast::var_decl:
             ci_lval = true;
-            return t_lvar(node, b);
+            return t_lvar(node);
         default:
             UNREACHABLE
     }
 }
 
-ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl, ir::Block *b) {
+ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl) {
 
     // get the type
     ir::Type *ty = t_type(vdecl->type);
@@ -218,7 +221,7 @@ ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl, ir::Block *b) {
         sa->insert_before(last_lvar);
     }
     else {
-        sa->insert_before(*b->end());
+        sa->insert_before(*curr_block->end());
     }
     last_lvar = sa;
 
@@ -230,17 +233,17 @@ ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl, ir::Block *b) {
 
     // check for definition
     if (vdecl->children.size() > 0) {
-        ir::WriteInstr *wi = new ir::WriteInstr(t_stmt(vdecl->children[0], b), sa, b);
+        ir::WriteInstr *wi = new ir::WriteInstr(t_stmt(vdecl->children[0]), sa, curr_block);
     }
 
     return sa;
 }
 
-ir::Def *ASTTranslator::t_binop(ASTNode const *binop, ir::Block *b) {
+ir::Def *ASTTranslator::t_binop(ASTNode const *binop) {
 
-    ir::Def *lhs = t_stmt(binop->children[0], b);
+    ir::Def *lhs = t_stmt(binop->children[0]);
     bool lhs_lval = ci_lval;
-    ir::Def *rhs = t_stmt(binop->children[1], b);
+    ir::Def *rhs = t_stmt(binop->children[1]);
     bool rhs_lval = ci_lval;
 
     std::cout << "lhs (" << lhs_lval << ")\n";
@@ -252,19 +255,19 @@ ir::Def *ASTTranslator::t_binop(ASTNode const *binop, ir::Block *b) {
         case op::add:
             NYI(add)
         case op::assign: {
-            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
             return new ir::WriteInstr(
                 rhs,
                 lhs,
-                b
+                curr_block
             );
         }
         case op::div:
             NYI(div)
         case op::eq:
-            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type), b); }
-            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type), b); }
-            return new ir::ICmpInstr(ir::cmpkind::eq, lhs, rhs, b, nullptr, "tmp");
+            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type)); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
+            return new ir::ICmpInstr(ir::cmpkind::eq, lhs, rhs, curr_block, nullptr, "tmp");
         case op::group:
             NYI(group)
         case op::gt:
@@ -301,35 +304,35 @@ ir::Def *ASTTranslator::t_binop(ASTNode const *binop, ir::Block *b) {
     }
 }
 
-ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr, ir::Block *b) {
+ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
 
     // generate ir for the arguments
     std::vector<ir::Def *> args;
     for (ASTNode const *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
         ir::Def *d;
         if (a->kind == ast::ref_expr) {
-            auto res = t_ref(a, b);
-            d = t_rval(res, res->get_alloc_ty(), b);
+            auto res = t_ref(a);
+            d = t_rval(res, res->get_alloc_ty());
         }
         else {
-            d = t_stmt(a, b);
+            d = t_stmt(a);
         }
         args.push_back(d);
         d->dump();
     }
 
     // get the callee function
-    ir::Function *callee = b->get_parent()->get_parent()->get_function(*cexpr->children[0]->str);
+    ir::Function *callee = curr_block->get_parent()->get_parent()->get_function(*cexpr->children[0]->str);
     assert(callee && "callee does not exist?");
 
-    return new ir::CallInstr(callee, args, b, nullptr, "tmp");
+    return new ir::CallInstr(callee, args, curr_block, nullptr, "tmp");
 }
 
 /** 
  * the def returned is the pointer to the location in memory where it resides.
  * aka, its salloc instr.
 */
-ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref, ir::Block *b) {
+ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref) {
 
     // get the scope of the symbol being referenced
     Scope *ast_scope = ref->sym->scope;
@@ -343,11 +346,11 @@ ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref, ir::Block *b) {
     return ist_it.operator*().second;
 }
 
-ir::Def *ASTTranslator::t_unop(ASTNode const *unop, ir::Block *b) {
+ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
 
     // generate ir for the inner expr
     Type *ast_inner_ty = (Type *)unop->children[0]->type;
-    ir::Def *d = t_stmt(unop->children[0], b);
+    ir::Def *d = t_stmt(unop->children[0]);
     ir::Def *e;
 
     switch (unop->op) {
@@ -356,16 +359,16 @@ ir::Def *ASTTranslator::t_unop(ASTNode const *unop, ir::Block *b) {
             NYI(addr)
         case op::deref:
             ci_lval = true;
-            return new ir::ReadInstr(ir::PrimitiveType::get_ptr_type(), d, b, nullptr, "tmp");
+            return new ir::ReadInstr(ir::PrimitiveType::get_ptr_type(), d, curr_block, nullptr, "tmp");
         case op::lnot:
             if (ci_lval) {
-                d = t_rval(d, t_type(ast_inner_ty), b);
+                d = t_rval(d, t_type(ast_inner_ty));
             }
             return new ir::ICmpInstr(
                 ir::cmpkind::eq,
                 d,
                 ir::IntegralConstant::get(d->get_type(), 0),
-                b,
+                curr_block,
                 nullptr,
                 "tmp"
             );
@@ -382,79 +385,125 @@ ir::Def *ASTTranslator::t_unop(ASTNode const *unop, ir::Block *b) {
     }
 }
 
-ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b) {
+ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty) {
     ci_lval = false;
-    return new ir::ReadInstr(ty, lval, b, nullptr, "tmp");
+    return new ir::ReadInstr(ty, lval, curr_block, nullptr, "tmp");
 }
 
-ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt, ir::Block *b) {
+ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt) {
 
     // get cond
-    ir::Def *cond = t_cond(ifstmt->children[0], b);
+    ir::Def *cond = t_cond(ifstmt->children[0]);
+
+    // cache the current block
+    ir::Block *startblock = curr_block;
 
     // make if block
-    ir::Block *ifblock = new ir::Block(b->get_parent(), "if");
+    ir::Block *ifblock = new ir::Block(curr_block->get_parent(), "ifthen");
 
     // add all inner stmts
+    curr_block = ifblock;
     for (ASTNode const *child : ifstmt->children[1]->children) {
-        t_stmt(child, ifblock);
+        t_stmt(child);
     }
 
+    // in the case of nested control flow, the original if block
+    // we made might not be the one we need to actually branch out
+    // from. Here, we update the ifblock pointer to account for this.
+    // If nested control flow, this points to the natural ending block
+    // in the control flow path started by the if branch. Else, this
+    // just points to ifblock.
+    ir::Block *if_cfpath_endblock = curr_block;
+
     ir::Block *elseblock = nullptr;
+    ir::Block *else_cfpath_endblock = nullptr;
 
     // do for else, if necessary
     if (ifstmt->children.size() > 2) {
 
         // make else block
-        elseblock = new ir::Block(b->get_parent(), "else");
+        elseblock = new ir::Block(curr_block->get_parent(), "ifelse");
+        
+        // set curr block to else block so ir gen happens in the else block
+        curr_block = elseblock;
 
-        // add inner stmts
-        t_stmt(ifstmt->children[2], elseblock);
+        // ir gen the inner stmts
+        t_stmt(ifstmt->children[2]);
+
+        // same thing as the ifblock to account for nested control flow
+        // except we have to cache the original else block so that we
+        // can make the correct branch from the end of the start block
+        // to the start of the else control flow later on
+        else_cfpath_endblock = curr_block;
     }
 
     // make done block
-    ir::Block *doneblock = new ir::Block(b->get_parent(), "done");
+    ir::Block *doneblock = new ir::Block(curr_block->get_parent(), "ifdone");
 
-    // add branch from if block to done block
-    ir::BranchInstr *br_if_to_done = new ir::BranchInstr(doneblock, ifblock);
+    // check if the block at the end of the if control flow path has
+    // a terminator already (if it defined its own control flow path)
+    if (if_cfpath_endblock->size() == 0 || !if_cfpath_endblock->get_last_instr()->is_terminator()) {
+
+        // it does not have a terminator, so we have to branch back
+        // to the normal control flow path
+        ir::BranchInstr *br_if_to_done = new ir::BranchInstr(doneblock, if_cfpath_endblock);
+    }
 
     ir::Block *nextblock = doneblock;
 
     // if theres an else
     if (elseblock) {
 
-        // branch from else block to done block
-        ir::BranchInstr *br_else_to_done = new ir::BranchInstr(doneblock, elseblock);
+        // check if the block at the end of the else control flow path has
+        // a terminator already (if it defined its own control flow path)
+        if (else_cfpath_endblock->size() == 0 || !else_cfpath_endblock->get_last_instr()->is_terminator()) {
+
+            // it does not have a terminator, so we have to branch back
+            // to the normal control flow path
+            ir::BranchInstr *br_else_to_done = new ir::BranchInstr(doneblock, else_cfpath_endblock);
+        }
 
         nextblock = elseblock;
     }
 
-    // branch into if block or the next block (else or done)
-    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(cond, ifblock, nextblock, b);
+    // branch from the start block into the if block or the next block (else or done)
+    // based on the condition
+    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(cond, ifblock, nextblock, startblock);
 
+    // set the curr block to the new end block (which represents the natural
+    // end of the current control flow path)
+    curr_block = doneblock;
+
+    // TODO: make this return whatever the last value in the if stmt is
     return doneblock;
 }
 
-ir::Def *ASTTranslator::t_loop(ASTNode const *lnode, ir::Block *b) {
-    ir::Function *f = b->get_parent();
+ir::Def *ASTTranslator::t_loop(ASTNode const *lnode) {
+    ir::Function *f = curr_block->get_parent();
     ir::Block *loopcond = new ir::Block(f, "loopcond");
-    ir::Def *cond_inner = t_cond(lnode->children[0], loopcond);
+    ir::BranchInstr *curr_to_cond = new ir::BranchInstr(loopcond, curr_block);
+    curr_block = loopcond;
+    ir::Def *cond_inner = t_cond(lnode->children[0]);
     ir::Block *loopbody = new ir::Block(f, "loopbody");
     ir::Block *loopend = new ir::Block(f, "loopend");
     auto cond = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
-    b->get_parent()->dump();
+    curr_block->get_parent()->dump();
+    curr_block = loopbody;
     for (ASTNode const *stmt : lnode->children[1]->children) {
-        t_stmt(stmt, loopbody);
+        t_stmt(stmt);
     }
-    b->get_parent()->dump();
+    curr_block->get_parent()->dump();
     auto jmp = new ir::BranchInstr(loopcond, loopbody);
+    curr_block = loopend;
+
+    // TODO: make this return whatever the last value in the loop is
     return loopend;
 }
 
-ir::Def *ASTTranslator::t_cond(ASTNode const *expr, ir::Block *b) {
-    ir::Def *irexpr = t_stmt(expr, b);
+ir::Def *ASTTranslator::t_cond(ASTNode const *expr) {
+    ir::Def *irexpr = t_stmt(expr);
     if (ci_lval) {
-        irexpr = t_rval(irexpr, t_type(expr->type), b);
+        irexpr = t_rval(irexpr, t_type(expr->type));
     }
     if (irexpr->get_type() == ir::PrimitiveType::get_i1_type()) {
         return irexpr;
@@ -465,7 +514,7 @@ ir::Def *ASTTranslator::t_cond(ASTNode const *expr, ir::Block *b) {
         ir::cmpkind::neq,
         irexpr,
         ir::IntegralConstant::get(irexpr->get_type(), 0),
-        b,
+        curr_block,
         nullptr,
         "tmp"
     );

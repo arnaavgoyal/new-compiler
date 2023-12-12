@@ -14,6 +14,8 @@
 #include "ast/translate.h"
 #include "ir/ir.h"
 #include "codegen/codegen.h"
+#include "ir/analysis.h"
+#include "ir/pass.h"
 
 #define DEBUG
 
@@ -75,9 +77,18 @@ int main(int argc, char **argv) {
 
     // ---------------- MIDEND ------------------
 
-    ir::Program *translated_ast = ASTTranslator().translate(ast);
+    ir::Program *prog = ASTTranslator().translate(ast);
     std::cout << std::endl;
-    translated_ast->dump();
+    prog->dump();
+
+    CFG cfg = make_cfg(prog->get_function("main"));
+    std::ofstream gfile("g.dot");
+    cfg.dump(gfile);
+
+    std::cout << "in main -- starting\n";
+    run_stackpromotion(cfg);
+    std::cout << "in main -- done\n";
+    prog->dump();
 
     // ---------------- BACKEND ------------------
 

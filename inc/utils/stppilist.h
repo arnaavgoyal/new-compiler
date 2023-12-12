@@ -86,6 +86,7 @@ public:
     std::string set_parent(Outer *new_parent);
     std::string set_name(std::string name_hint);
     std::string insert_before(Inner *i);
+    void remove_from_parent();
 };
 
 /** ------------------- STPPIList decl ------------------- */
@@ -183,6 +184,14 @@ std::string STPPIListNode<Inner, Outer>::insert_before(Inner *i) {
 
     // let the new parent do everything else
     return new_parent->get_inner_list(static_cast<Inner *>(nullptr)).append_before(static_cast<Inner *>(this), i);
+}
+template <typename Inner, typename Outer>
+void STPPIListNode<Inner, Outer>::remove_from_parent() {
+
+    assert(parent && "cannot remove a parent-less node from parent");
+
+    // let parent do the rest
+    parent->get_inner_list(static_cast<Inner *>(nullptr)).remove(static_cast<Inner *>(this));
 }
 
 /** ------------------- STPPIList impl ------------------- */

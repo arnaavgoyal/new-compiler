@@ -1,0 +1,9 @@
+digraph {
+	entry -> ifthen
+	ifthen -> ifdone1
+	entry -> ifelse
+	ifelse -> ifthen1
+	ifelse -> ifdone
+	ifthen1 -> ifdone
+	ifdone -> ifdone1
+}

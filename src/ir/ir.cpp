@@ -72,17 +72,12 @@ void DefUser::dump_operands() {
 /** ------------------- Block ------------------- */
 
 std::string Block::add_instr(Instr *i, std::string name_hint) {
-    assert(!terminator && "cannot add instruction after terminator");
 
     if (!name_hint.empty()) {
         list.append(i, name_hint);
     }
     else {
         list.append(i);
-    }
-
-    if (i->is_terminator()) {
-        terminator = i;
     }
 }
 

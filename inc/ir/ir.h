@@ -69,6 +69,8 @@ enum class instr {
     icmp,
     // call a function
     call,
+    // ssa phi function
+    phi
 };
 
 enum class cmpkind {
@@ -136,6 +138,7 @@ protected:
     DefUser(DefUser &&) = default;
     DefUser(Type *ty, unsigned num_ops);
 
+public:
     unsigned get_num_ops() { return num_ops; }
     void set_operand(unsigned idx, Def *operand);
     Use *get_operand(unsigned idx);
@@ -185,15 +188,13 @@ private:
     friend list_ty::node_type;
     list_ty &get_inner_list(Instr *) { return list; }
 
-    Instr *terminator = nullptr;
-
 protected:
     Block(Block &) = default;
     Block(Block &&) = default;
 
 public:
     Block(Function *parent, std::string name_hint = "")
-        : Def(ir::PrimitiveType::get_label_type()), list(this) {
+        : Def(ir::PrimitiveType::get_block_type()), list(this) {
         if (!name_hint.empty()) {
             set_name(name_hint);
         }
@@ -204,7 +205,6 @@ public:
     void remove_instr(Instr *instr);
     Instr *remove_instr(std::string name);
     unsigned size() { return list.size(); }
-    Instr *get_terminator() { return terminator; }
     list_ty::iterator begin() { return list.begin(); }
     list_ty::iterator end() { return list.end(); }
     Instr *get_first_instr() { return list.first(); }
@@ -328,6 +328,7 @@ public:
         set_operand(0, val);
         set_operand(1, mem);
     }
+    Def *get_val() { return get_operand(0)->get_def(); }
 };
 
 class PtrIdxInstr : public Instr {
@@ -424,6 +425,29 @@ public:
 
 public:
     CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
+};
+
+class PhiInstr : public Instr {
+private:
+    static constexpr char const *const STR_REPR = "phi";
+
+public:
+    std::string get_str_repr() { return STR_REPR; }
+
+public:
+    PhiInstr(Type *ty, std::vector<std::pair<Block *, Def *>> args, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(ty, args.size() * 2, ir::instr::phi, nullptr, nullptr, name_hint) {
+        if (parent) {
+            insert_before(parent->get_first_instr());
+        }
+        // TODO: make sure the args' types match the given type
+        unsigned idx = 0;
+        for (auto &[b, d] : args) {
+            set_operand(idx, b);
+            set_operand(idx + 1, d);
+            idx += 2;
+        }
+    }
 };
 
 class BinaryOpInstr : public Instr {

@@ -1,8 +1,8 @@
 #ifndef IR_PASS_H
 #define IR_PASS_H
 
-#include "ir/ir.h"
+#include "ir/analysis.h"
 
-void run_stackpromote(ir::Program *p);
+void run_stackpromotion(CFG &cfg);
 
 #endif

@@ -86,8 +86,11 @@ public:
         assert(e && "element to remove cannot be null");
         e->get_next()->set_prev(e->get_prev());
         e->get_prev()->set_next(e->get_next());
-        e->set_next(nullptr);
-        e->set_prev(nullptr);
+        // commented this out because it leads to unintended
+        // iterator invalidation when remove is called on the current element
+        // of the iterator
+        //e->set_next(nullptr);
+        //e->set_prev(nullptr);
         _size--;
     }
 

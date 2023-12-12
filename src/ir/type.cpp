@@ -51,8 +51,8 @@ PrimitiveType *PrimitiveType::get_f64_type() {
     static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::f64, "f64"));
     return ty.get();
 }
-PrimitiveType *PrimitiveType::get_label_type() {
-    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::label, "label"));
+PrimitiveType *PrimitiveType::get_block_type() {
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::block, "block"));
     return ty.get();
 }
 PrimitiveType *PrimitiveType::get_void_type() {
