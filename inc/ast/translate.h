@@ -25,6 +25,8 @@ private:
     ir::SAllocInstr *t_ref(ASTNode const *ref, ir::Block *b);
     ir::Def *t_unop(ASTNode const *unop, ir::Block *b);
     ir::ReadInstr *t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b);
+    ir::Def *t_if(ASTNode const *ifstmt, ir::Block *b);
+    ir::Def *t_loop(ASTNode const *lnode, ir::Block *b);
 
 public:
     ir::Program *translate(ASTNode const *ast) { return t_program(ast); }

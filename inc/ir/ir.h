@@ -352,8 +352,8 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    IUpcastInstr(Def *val, Type *ty, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(ty, 1, instr::iupcast, parent, name_hint) {
+    IUpcastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(ty, 1, instr::iupcast, parent, before, name_hint) {
         set_operand(0, val);
         // TODO: check for invalid upcast
     }
@@ -368,8 +368,8 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    IDowncastInstr(Def *val, Type *ty, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(ty, 1, instr::idowncast, parent, name_hint) {
+    IDowncastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
+        : Instr(ty, 1, instr::idowncast, parent, before, name_hint) {
         set_operand(0, val);
         // TODO: check for invalid downcast
     }

@@ -161,9 +161,9 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node, ir::Block *b) {
                 std::stoi(*node->str)
             );
         case ast::loop_stmt:
-            return translate_loop(node, b);
+            return t_loop(node, b);
         case ast::if_stmt:
-            return translate_if_stmt(node, b);
+            return t_if(node, b);
         case ast::param_decl:
             UNREACHABLE
         case ast::paren_expr:
@@ -375,17 +375,17 @@ ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty, ir::Block *b) 
     return new ir::ReadInstr(ty, lval, b, nullptr, "tmp");
 }
 
-static ir::Def *translate_if_stmt(ASTNode const *ifstmt, ir::Block *b) {
+ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt, ir::Block *b) {
 
     // get cond
-    ir::Def *cond = translate_in_func_body(ifstmt->children[0], b);
+    ir::Def *cond = t_stmt(ifstmt->children[0], b);
 
     // make if block
     ir::Block *ifblock = new ir::Block(b->get_parent(), "if");
 
     // add all inner stmts
     for (ASTNode const *child : ifstmt->children[1]->children) {
-        translate_in_func_body(child, ifblock);
+        t_stmt(child, ifblock);
     }
 
     ir::Block *elseblock = nullptr;
@@ -397,7 +397,7 @@ static ir::Def *translate_if_stmt(ASTNode const *ifstmt, ir::Block *b) {
         elseblock = new ir::Block(b->get_parent(), "else");
 
         // add inner stmts
-        translate_in_func_body(ifstmt->children[2], elseblock);
+        t_stmt(ifstmt->children[2], elseblock);
     }
 
     // make done block
@@ -423,16 +423,16 @@ static ir::Def *translate_if_stmt(ASTNode const *ifstmt, ir::Block *b) {
     return doneblock;
 }
 
-static ir::Def *translate_loop(ASTNode const *lnode, ir::Block *b) {
+ir::Def *ASTTranslator::t_loop(ASTNode const *lnode, ir::Block *b) {
     ir::Function *f = b->get_parent();
     ir::Block *loopcond = new ir::Block(f, "loopcond");
-    ir::Def *cond_inner = translate_in_func_body(lnode->children[0], loopcond);
+    ir::Def *cond_inner = t_stmt(lnode->children[0], loopcond);
     ir::Block *loopbody = new ir::Block(f, "loopbody");
     ir::Block *loopend = new ir::Block(f, "loopend");
-    auto cond = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+    auto cond = new ir::BranchInstr(loopbody, cond_inner, loopend, loopcond);
     b->get_parent()->dump();
     for (ASTNode const *stmt : lnode->children[1]->children) {
-        translate_in_func_body(stmt, loopbody);
+        t_stmt(stmt, loopbody);
     }
     b->get_parent()->dump();
     auto jmp = new ir::BranchInstr(loopcond, loopbody);
