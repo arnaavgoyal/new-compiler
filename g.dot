@@ -1,9 +1,16 @@
 digraph {
-	entry -> ifthen
-	ifthen -> ifdone1
-	entry -> ifelse
-	ifelse -> ifthen1
-	ifelse -> ifdone
-	ifthen1 -> ifdone
-	ifdone -> ifdone1
+	entry -> loopcond
+	loopcond -> loopbody
+	loopcond -> loopend
+	loopbody -> ifthen
+	loopbody -> ifdone
+	ifthen -> ifdone
+	ifdone -> loopcond
+	loopend -> ifthen1
+	loopend -> ifelse
+	ifthen1 -> ifdone2
+	ifelse -> ifthen2
+	ifelse -> ifdone1
+	ifthen2 -> ifdone1
+	ifdone1 -> ifdone2
 }

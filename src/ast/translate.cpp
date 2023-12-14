@@ -503,15 +503,13 @@ ir::Def *ASTTranslator::t_loop(ASTNode const *lnode) {
     curr_block = loopcond;
     ir::Def *cond_inner = t_cond(lnode->children[0]);
     ir::Block *loopbody = new ir::Block(f, "loopbody");
-    ir::Block *loopend = new ir::Block(f, "loopend");
-    auto cond = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
-    curr_block->get_parent()->dump();
     curr_block = loopbody;
     for (ASTNode const *stmt : lnode->children[1]->children) {
         t_stmt(stmt);
     }
-    curr_block->get_parent()->dump();
-    auto jmp = new ir::BranchInstr(loopcond, loopbody);
+    ir::Block *loopend = new ir::Block(f, "loopend");
+    auto condbr = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+    auto jmp = new ir::BranchInstr(loopcond, curr_block);
     curr_block = loopend;
 
     // TODO: make this return whatever the last value in the loop is

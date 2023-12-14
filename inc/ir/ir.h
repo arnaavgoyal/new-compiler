@@ -130,7 +130,7 @@ public:
 
 class DefUser : public Def {
 private:
-    Use *operands;
+    std::vector<Use> operands;
     unsigned num_ops;
 
 protected:
@@ -139,45 +139,54 @@ protected:
     DefUser(Type *ty, unsigned num_ops);
 
 public:
-    unsigned get_num_ops() { return num_ops; }
+    unsigned get_num_ops() { return operands.size(); }
     void set_operand(unsigned idx, Def *operand);
     Use *get_operand(unsigned idx);
     void dump(unsigned indent = 0);
     void dump_as_operand();
     void dump_operands();
 
-private:
-    class fwiter : public bidirectional_iterator<Use *, fwiter> {
-    private:
-        using bidirectional_iterator<Use *, fwiter>::curr;
+// private:
+//     class fwiter : public bidirectional_iterator<Use *, fwiter> {
+//     private:
+//         using bidirectional_iterator<Use *, fwiter>::curr;
 
-        void go_forward() override { curr++; }
-        void go_backward() override { curr--; }
+//         void go_forward() override { curr++; }
+//         void go_backward() override { curr--; }
 
-    public:
-        fwiter() { curr = nullptr; }
-        fwiter(Use *ptr) { curr = ptr; }
-    };
-    class bwiter : public bidirectional_iterator<Use *, bwiter> {
-    private:
-        using bidirectional_iterator<Use *, bwiter>::curr;
+//     public:
+//         fwiter() { curr = nullptr; }
+//         fwiter(Use *ptr) { curr = ptr; }
+//     };
+//     class bwiter : public bidirectional_iterator<Use *, bwiter> {
+//     private:
+//         using bidirectional_iterator<Use *, bwiter>::curr;
 
-        void go_forward() override { curr--; }
-        void go_backward() override { curr++; }
+//         void go_forward() override { curr--; }
+//         void go_backward() override { curr++; }
 
-    public:
-        bwiter() { curr = nullptr; }
-        bwiter(Use *ptr) { curr = ptr; }
-    };
+//     public:
+//         bwiter() { curr = nullptr; }
+//         bwiter(Use *ptr) { curr = ptr; }
+//     };
+
+// public:
+//     using iterator = fwiter;
+//     iterator operands_begin() { return iterator(operands); }
+//     iterator operands_end() { return iterator(operands + num_ops); }
+
+//     using reverse_iterator = bwiter;
+//     reverse_iterator operands_rbegin() { return reverse_iterator(operands + num_ops - 1); }
+//     reverse_iterator operands_rend() { return reverse_iterator(operands - 1); }
 
 public:
-    using iterator = fwiter;
-    iterator operands_begin() { return iterator(operands); }
-    iterator operands_end() { return iterator(operands + num_ops); }
+    using iterator = std::vector<Use>::iterator;
+    iterator operands_begin() { return operands.begin(); }
+    iterator operands_end() { return operands.end(); }
 
-    using reverse_iterator = bwiter;
-    reverse_iterator operands_rbegin() { return reverse_iterator(operands + num_ops - 1); }
-    reverse_iterator operands_rend() { return reverse_iterator(operands - 1); }
+    using reverse_iterator = std::vector<Use>::reverse_iterator;
+    reverse_iterator operands_rbegin() { return operands.rbegin(); }
+    reverse_iterator operands_rend() { return operands.rend(); }
 };
 
 class Block : public Def, public STPPIListNode<Block, Function> {
@@ -435,18 +444,16 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    PhiInstr(Type *ty, std::vector<std::pair<Block *, Def *>> args, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(ty, args.size() * 2, ir::instr::phi, nullptr, nullptr, name_hint) {
+    PhiInstr(Type *ty, Block *parent = nullptr, std::string name_hint = "")
+        : Instr(ty, 0, ir::instr::phi, nullptr, nullptr, name_hint) {
         if (parent) {
             insert_before(parent->get_first_instr());
         }
+    }
+    void add_alternative(Block *from, Def *value) {
         // TODO: make sure the args' types match the given type
-        unsigned idx = 0;
-        for (auto &[b, d] : args) {
-            set_operand(idx, b);
-            set_operand(idx + 1, d);
-            idx += 2;
-        }
+        set_operand(get_num_ops(), from);
+        set_operand(get_num_ops(), value);
     }
 };
 

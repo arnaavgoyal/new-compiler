@@ -10,10 +10,12 @@ std::vector<ir::Block *> predecessors(ir::Block *b) {
     std::vector<ir::Block *> preds;
     //std::cout << "preds for " << b->get_name() << std::endl;
     for (ir::Use *u : b->uses_iterable()) {
-        ir::Block *pred = static_cast<ir::Instr *>(u->get_user())->get_parent();
-        preds.push_back(pred);
-        //std::cout << "  found pred: " << pred->get_name() << "\n";
-        //u->get_user()->dump(4);
+        auto instr = static_cast<ir::Instr *>(u->get_user());
+        if (instr->get_instr_kind() == ir::instr::branch) {
+            preds.push_back(instr->get_parent());
+            //std::cout << "  found pred: " << instr->get_parent()->get_name() << "\n";
+            //u->get_user()->dump(4);
+        }
     }
     //std::cout << "  done\n";
     return preds;

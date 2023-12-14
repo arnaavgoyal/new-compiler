@@ -1,3 +1,18 @@
 digraph {
 	entry -> entry [style="dashed" color="crimson" headlabel="1"]
+	entry -> loopcond [style="dashed" color="crimson" headlabel="2"]
+	loopcond -> loopend [style="dashed" color="crimson" headlabel="3"]
+	loopend -> ifelse [style="dashed" color="crimson" headlabel="4"]
+	ifelse -> ifthen2 [style="dashed" color="crimson" headlabel="5"]
+	ifelse -> ifdone1 [style="dashed" color="crimson" headlabel="5"]
+	loopend -> ifthen1 [style="dashed" color="crimson" headlabel="4"]
+	loopend -> ifdone2 [style="dashed" color="crimson" headlabel="4"]
+	loopcond -> loopbody [style="dashed" color="crimson" headlabel="3"]
+	loopbody -> ifthen [style="dashed" color="crimson" headlabel="4"]
+	loopbody -> ifdone [style="dashed" color="crimson" headlabel="4"]
+	ifdone -> loopcond [constraint=false color="black" penwidth=2 headlabel="2"]
+	ifthen2 -> ifdone1 [constraint=false color="black" penwidth=2 headlabel="5"]
+	ifthen1 -> ifdone2 [constraint=false color="black" penwidth=2 headlabel="4"]
+	ifdone1 -> ifdone2 [constraint=false color="black" penwidth=2 headlabel="4"]
+	ifthen -> ifdone [constraint=false color="black" penwidth=2 headlabel="4"]
 }

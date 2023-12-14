@@ -30,24 +30,34 @@ void Def::dump_as_operand() {
 /** ------------------- DefUser ------------------- */
 
 DefUser::DefUser(Type *ty, unsigned num_ops)
-    : Def(ty), num_ops(num_ops) {
-    operands = new Use[num_ops];
-    for (unsigned i = 0; i < num_ops; i++) {
-        operands[i].idx = i;
-        operands[i].user = this;
-        operands[i].def = nullptr;
-    }
+    : Def(ty), num_ops(num_ops), operands(num_ops) {
+    // operands = new Use[num_ops];
+    // for (unsigned i = 0; i < num_ops; i++) {
+    //     operands[i].idx = i;
+    //     operands[i].user = this;
+    //     operands[i].def = nullptr;
+    // }
 }
 void DefUser::set_operand(unsigned idx, Def *operand) {
-    assert(idx < num_ops && "idx must be < num_ops");
     assert(operand && "operand cannot be null");
-    Use *u = operands + idx;
-    u->set_def(operand);
+
+    Use *u;
+    if (idx >= operands.size()) {
+        assert(idx == operands.size() && "must add immediate next operand if adding new");
+        operands.push_back(Use(this, operand, idx));
+        u = &operands[idx];
+    }
+    else {
+        u = &operands[idx];
+        u->idx = idx;
+        u->user = this;
+        u->def = operand;
+    }
     operand->add_use(u);
 }
 Use *DefUser::get_operand(unsigned idx) {
-    assert(idx < num_ops && "idx must be < num_ops");
-    return operands + idx;
+    assert(idx < operands.size() && "idx must be < num_ops");
+    return &operands[idx];
 }
 
 void DefUser::dump(unsigned indent) {
@@ -65,7 +75,7 @@ void DefUser::dump_operands() {
         operands_begin(),
         operands_end(),
         ", ",
-        [](Use *u) { u->get_def()->dump_as_operand(); }
+        [](Use &u) { u.get_def()->dump_as_operand(); }
     );
 }
 

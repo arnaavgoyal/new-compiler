@@ -81,16 +81,16 @@ int main(int argc, char **argv) {
     std::cout << std::endl;
     prog->dump();
 
+    CFG cfg2 = make_cfg(prog->get_function("foo"));
+
+    run_stackpromotion(cfg2);
+    prog->dump();
+
     CFG cfg = make_cfg(prog->get_function("main"));
     std::ofstream gfile("g.dot");
     cfg.dump(gfile);
 
     run_stackpromotion(cfg);
-    prog->dump();
-
-    CFG cfg2 = make_cfg(prog->get_function("foo"));
-
-    run_stackpromotion(cfg2);
     prog->dump();
 
     // ---------------- BACKEND ------------------
