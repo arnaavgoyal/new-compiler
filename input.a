@@ -6,13 +6,13 @@ def (i32, **i8) i32
 main(argc, argv) {
     var *i8 str = *argv;
     var i32 val = 0;
+    foo(str);
     if (argc == 0) {
         str = *argv;
-        val = foo(str);
+        val = foo(*argv);
     }
     else if (argc == 2) {
         str = *argv;
-        val = foo(str);
     }
     foo(str);
     return val;

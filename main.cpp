@@ -85,9 +85,12 @@ int main(int argc, char **argv) {
     std::ofstream gfile("g.dot");
     cfg.dump(gfile);
 
-    std::cout << "in main -- starting\n";
     run_stackpromotion(cfg);
-    std::cout << "in main -- done\n";
+    prog->dump();
+
+    CFG cfg2 = make_cfg(prog->get_function("foo"));
+
+    run_stackpromotion(cfg2);
     prog->dump();
 
     // ---------------- BACKEND ------------------

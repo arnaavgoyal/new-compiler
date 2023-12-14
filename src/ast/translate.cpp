@@ -125,6 +125,7 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
     // add param lvars (to make them mutable variables)
     for (unsigned i = 0; i < params.size(); i++) {
         auto sa = t_lvar(fdecl->children[i]);
+        sa->set_name(sa->get_name() + ".addr");
         auto wi = new ir::WriteInstr(params[i], sa, curr_block);
     }
     
@@ -181,8 +182,13 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
             ci_lval = true;
             return t_ref(node);
         }
-        case ast::ret_stmt:
-            return new ir::ReturnInstr(t_stmt(node->children[0]), curr_block);
+        case ast::ret_stmt: {
+            auto i = t_stmt(node->children[0]);
+            if (ci_lval) {
+                i = t_rval(i, t_type(node->children[0]->type));
+            }
+            return new ir::ReturnInstr(i, curr_block);
+        }
         case ast::stmt_block:
             for (ASTNode const *c : node->children) {
                 res = t_stmt(c);
@@ -233,41 +239,45 @@ ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl) {
 
     // check for definition
     if (vdecl->children.size() > 0) {
-        ir::WriteInstr *wi = new ir::WriteInstr(t_stmt(vdecl->children[0]), sa, curr_block);
+        t_assign(sa, vdecl->children[0]);
     }
 
     return sa;
 }
 
+ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode const *expr) {
+
+    assert(ci_lval && "assignment to non-lval value");
+
+    ir::Def *ir_expr = t_stmt(expr);
+    if (ci_lval) { ir_expr = t_rval(ir_expr, t_type(expr->type)); }
+    
+    return new ir::WriteInstr(
+        ir_expr,
+        lval,
+        curr_block
+    );
+}
+
 ir::Def *ASTTranslator::t_binop(ASTNode const *binop) {
-
-    ir::Def *lhs = t_stmt(binop->children[0]);
-    bool lhs_lval = ci_lval;
-    ir::Def *rhs = t_stmt(binop->children[1]);
-    bool rhs_lval = ci_lval;
-
-    std::cout << "lhs (" << lhs_lval << ")\n";
-    lhs->dump(2);
-    std::cout << "rhs (" << rhs_lval << ")\n";
-    rhs->dump(2);
 
     switch (binop->op) {
         case op::add:
             NYI(add)
         case op::assign: {
-            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
-            return new ir::WriteInstr(
-                rhs,
-                lhs,
-                curr_block
-            );
+            return t_assign(t_stmt(binop->children[0]), binop->children[1]);
         }
         case op::div:
             NYI(div)
-        case op::eq:
+        case op::eq: {
+            ir::Def *lhs = t_stmt(binop->children[0]);
+            bool lhs_lval = ci_lval;
+            ir::Def *rhs = t_stmt(binop->children[1]);
+            bool rhs_lval = ci_lval;
             if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type)); }
             if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
             return new ir::ICmpInstr(ir::cmpkind::eq, lhs, rhs, curr_block, nullptr, "tmp");
+        }
         case op::group:
             NYI(group)
         case op::gt:
@@ -310,12 +320,9 @@ ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
     std::vector<ir::Def *> args;
     for (ASTNode const *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
         ir::Def *d;
-        if (a->kind == ast::ref_expr) {
-            auto res = t_ref(a);
-            d = t_rval(res, res->get_alloc_ty());
-        }
-        else {
-            d = t_stmt(a);
+        d = t_stmt(a);
+        if (ci_lval) {
+            d = t_rval(d, t_type(a->type));
         }
         args.push_back(d);
         d->dump();
@@ -324,6 +331,9 @@ ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
     // get the callee function
     ir::Function *callee = curr_block->get_parent()->get_parent()->get_function(*cexpr->children[0]->str);
     assert(callee && "callee does not exist?");
+
+    // for now, funcs only return rvalues
+    ci_lval = false;
 
     return new ir::CallInstr(callee, args, curr_block, nullptr, "tmp");
 }
@@ -348,6 +358,8 @@ ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref) {
 
 ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
 
+    std::cout << "\nUNOP------------\n";
+
     // generate ir for the inner expr
     Type *ast_inner_ty = (Type *)unop->children[0]->type;
     ir::Def *d = t_stmt(unop->children[0]);
@@ -357,9 +369,15 @@ ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
         case op::addr:
             // idk how to impl this rn
             NYI(addr)
-        case op::deref:
+        case op::deref: {
+            unop->print_ast(unop, "  ");
+            if (ci_lval) {
+                d = t_rval(d, ir::PrimitiveType::get_ptr_type());
+            }
+            d->dump(2);
             ci_lval = true;
-            return new ir::ReadInstr(ir::PrimitiveType::get_ptr_type(), d, curr_block, nullptr, "tmp");
+            return d;
+        }
         case op::lnot:
             if (ci_lval) {
                 d = t_rval(d, t_type(ast_inner_ty));

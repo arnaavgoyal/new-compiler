@@ -20,6 +20,7 @@ private:
     ir::Function *t_func(ASTNode const *fdecl, ir::Program *p);
     ir::Def *t_stmt(ASTNode const *node);
     ir::SAllocInstr *t_lvar(ASTNode const *vdecl);
+    ir::WriteInstr *t_assign(ir::Def *lval, ASTNode const *expr);
     ir::Def *t_binop(ASTNode const *binop);
     ir::CallInstr *t_call(ASTNode const *cexpr);
     ir::SAllocInstr *t_ref(ASTNode const *ref);

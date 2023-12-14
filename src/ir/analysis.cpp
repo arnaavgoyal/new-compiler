@@ -56,7 +56,8 @@ CFG make_cfg(ir::Function *f) {
             cfg.add_edge(cfg.get_root(), v);
         }
         for (ir::Block *succ : successors(b)) {
-            CFG::vertex_ty *u = cfg.add_vertex(succ);
+            CFG::vertex_ty *u = cfg.get_vertex(succ);
+            if (!u) { u = cfg.add_vertex(succ); }
             cfg.add_edge(v, u);
         }
     }
