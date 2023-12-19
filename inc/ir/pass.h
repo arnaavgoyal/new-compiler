@@ -3,6 +3,6 @@
 
 #include "ir/analysis.h"
 
-void run_stackpromotion(CFG &cfg);
+void run_stackpromotion(ir::Function *f);
 
 #endif

@@ -3,14 +3,15 @@ digraph {
 	loopcond -> loopbody
 	loopcond -> loopend
 	loopbody -> ifthen
-	loopbody -> ifdone
+	loopbody -> ifelse
 	ifthen -> ifdone
+	ifelse -> ifdone
 	ifdone -> loopcond
 	loopend -> ifthen1
-	loopend -> ifelse
+	loopend -> ifelse1
 	ifthen1 -> ifdone2
-	ifelse -> ifthen2
-	ifelse -> ifdone1
+	ifelse1 -> ifthen2
+	ifelse1 -> ifdone1
 	ifthen2 -> ifdone1
 	ifdone1 -> ifdone2
 }

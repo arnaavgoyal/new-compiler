@@ -129,8 +129,8 @@ public:
 static void calc_po_nums(
     std::vector<ir::Block *> &po2v,
     std::map<ir::Block *, unsigned> &v2po,
-    CFGVertex *v,
-    std::set<CFGVertex *> &visited,
+    ir::Block *v,
+    std::set<ir::Block *> &visited,
     std::vector<unsigned> &order,
     unsigned &i
 ) {
@@ -142,15 +142,15 @@ static void calc_po_nums(
     assert(res.second && "insertion of v failed");
     // std::cout << "      inserted into visited\n";
 
-    // visit children first
-    for (auto e : v->out_edges) {
+    // visit successors first
+    for (auto succ : successors(v)) {
 
         // std::cout << "      out-edge " << e->from->val->get_name() << " -> " << e->to->val->get_name() << std::endl;
 
         // only visit if not already visited
-        if (!visited.count(e->to)) {
+        if (!visited.count(succ)) {
             // std::cout << "        visiting!" << std::endl;
-            calc_po_nums(po2v, v2po, e->to, visited, order, i);
+            calc_po_nums(po2v, v2po, succ, visited, order, i);
         }
     }
 
@@ -166,9 +166,9 @@ static void calc_po_nums(
     // }
 
     // visit v
-    po2v[i] = v->val;
+    po2v[i] = v;
     //std::cout << "      added to po2v\n";
-    v2po[v->val] = i;
+    v2po[v] = i;
     //std::cout << "      added to v2po\n";
     order.push_back(i);
     //std::cout << "      added to order\n";
@@ -196,20 +196,20 @@ static unsigned intersect(unsigned *doms, unsigned b1, unsigned b2) {
     return f1;
 }
 
-static DJG make_djg(CFG &cfg) {
+static DJG make_djg(ir::Function *f) {
 
     // std::cout << "making djg\n";
 
     // std::cout << "  calculating postorder nums\n";
 
     // calculate postorder numbers
-    std::vector<ir::Block *> po2v(cfg.vertices.size() + 1);
+    std::vector<ir::Block *> po2v(f->size() + 1);
     std::map<ir::Block *, unsigned> v2po;
-    std::set<CFGVertex *> visited;
+    std::set<ir::Block *> visited;
     std::vector<unsigned> postorder;
     unsigned num = 1;
-    calc_po_nums(po2v, v2po, cfg.get_root(), visited, postorder, num);
-    assert(num - 1 == cfg.vertices.size() && "number of vertices visited does not match the number of cfg vertices");
+    calc_po_nums(po2v, v2po, f->get_first_block(), visited, postorder, num);
+    assert(num - 1 == f->size() && "number of vertices visited does not match the number of cfg vertices");
     unsigned start_node = num - 1;
 
     // std::cout << "  calculated postorder nums\n";
@@ -273,7 +273,7 @@ static DJG make_djg(CFG &cfg) {
 
     // std::cout << "  making djg\n";
 
-    DJG djg(cfg.get_root()->val);
+    DJG djg(f->get_first_block());
 
     // add d-edges
     for (unsigned i = start_node - 1; i > 0; i--) {
@@ -285,12 +285,11 @@ static DJG make_djg(CFG &cfg) {
 
     // add j-edges
     for (unsigned i = start_node - 1; i > 0; i--) {
-        auto v = djg.get_vertex(po2v[i]);
-        auto cfg_v = cfg.get_vertex(po2v[i]);
-        auto cfg_idomv = cfg.get_vertex(po2v[doms[i]]);
-        for (auto e : cfg_v->in_edges) {
-            if (e->from != cfg_idomv) {
-                djg.add_edge(DJGEdge::j_edge, djg.get_vertex(e->from->val), v);
+        auto v = po2v[i];
+        auto idom_v = po2v[doms[i]];
+        for (auto pred : predecessors(v)) {
+            if (pred != idom_v) {
+                djg.add_edge(DJGEdge::j_edge, djg.get_vertex(pred), djg.get_vertex(v));
             }
         }
     }
@@ -303,34 +302,6 @@ static DJG make_djg(CFG &cfg) {
     // out.close();
 
     return djg;
-
-    // std::set<CFG::vertex_ty *> found;
-    // std::deque<CFG::vertex_ty *> working;
-    // CFG::vertex_ty *curr = cfg.get_root();
-    // found.insert(curr);
-    // DJG djg(curr->val);
-    // for (auto e : curr->out_edges) {
-    //     djg.add_vertex(e->to->val);
-    //     found.insert(e->to);
-    //     working.push_back(e->to);
-    // }
-    // while (!working.empty()) {
-    //     curr = working.front();
-    //     working.pop_front();
-    //     for (auto e : curr->out_edges) {
-    //         if (found.contains(e->to)) {
-    //             // make a j edge
-    //             djg.add_j_edge(djg.get_vertex(e->from->val), djg.get_vertex(e->to->val));
-    //         }
-    //         else {
-    //             // make a d edge
-    //             djg.add_vertex(djg.get_vertex(e->from->val), e->to->val);
-    //             working.push_back(e->to);
-    //             found.insert(e->to);
-    //         }
-    //     }
-    // }
-    // return djg;
 }
 
 /** ---------------- Iterated Dominance Frontier ---------------- */
@@ -604,8 +575,8 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
     sa->remove_from_parent();
 }
 
-void run_stackpromotion(CFG &cfg) {
-    DJG djg = make_djg(cfg);
+void run_stackpromotion(ir::Function *f) {
+    DJG djg = make_djg(f);
     std::ofstream djgfile("djg.dot");
     djg.dump(djgfile);
     ir::Block *entry = djg.get_root()->block;

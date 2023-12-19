@@ -11,6 +11,9 @@ main(argc, argv) {
         if (val) {
             val = 1;
         }
+        else {
+            val = 4;
+        }
     }
     if (argc == 0) {
         str = *argv;

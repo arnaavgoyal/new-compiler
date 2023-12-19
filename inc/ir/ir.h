@@ -554,18 +554,22 @@ private:
 public:
     Function(Type *return_ty, linkage lty, Program *parent, std::string name_hint);
     Type *get_type() { return Global::get_type(); }
+    void dump(unsigned indent = 0);
+    void dump_as_operand();
+
+    unsigned size() { return blocks.size(); }
     Block *get_block(std::string name) { return blocks.get(name); }
     void add_block(Block *b) { blocks.append(b); }
-    unsigned num_params() { return params.size(); }
     block_list_ty::iterator begin() { return blocks.begin(); }
     block_list_ty::iterator end() { return blocks.end(); }
     Block *get_first_block() { return blocks.first(); }
     Block *get_last_block() { return blocks.last(); }
+
+    unsigned num_params() { return params.size(); }
     param_list_ty::iterator params_begin() { return params.begin(); }
     param_list_ty::iterator params_end() { return params.end(); }
-    auto params_iterable() { return make_iterator_range(params.begin(), params.end()); }
-    void dump(unsigned indent = 0);
-    void dump_as_operand();
+    iterator_range<IList<ir::Param>::iterator> params_iterable()
+        { return make_iterator_range(params.begin(), params.end()); }
 };
 
 class Program {

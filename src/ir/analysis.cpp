@@ -40,28 +40,12 @@ std::vector<ir::Block *> successors(ir::Block *b) {
     return succs;
 }
 
-void CFG::dump(std::ostream &out) {
+void dump_cfg(ir::Function *cfg, std::ostream &out) {
     out << "digraph {\n";
-    for (edge_ty *e : edges) {
-        out << "\t" << e->from->val->get_name()
-            << " -> " << e->to->val->get_name() << std::endl;
+    for (auto b : *cfg) {
+        for (auto succ : successors(b))
+        out << "\t" << b->get_name()
+            << " -> " << succ->get_name() << std::endl;
     }
     out << "}" << std::endl;
-}
-
-CFG make_cfg(ir::Function *f) {
-    CFG cfg(f->get_first_block());
-    CFG::vertex_ty *v = nullptr;
-    for (ir::Block *b : make_iterator_range(++f->begin(), f->end())) {
-        if (!(v = cfg.get_vertex(b))) {
-            v = cfg.add_vertex(b);
-            cfg.add_edge(cfg.get_root(), v);
-        }
-        for (ir::Block *succ : successors(b)) {
-            CFG::vertex_ty *u = cfg.get_vertex(succ);
-            if (!u) { u = cfg.add_vertex(succ); }
-            cfg.add_edge(v, u);
-        }
-    }
-    return cfg;
 }
