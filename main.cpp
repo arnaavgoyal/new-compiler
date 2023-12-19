@@ -14,7 +14,7 @@
 #include "ast/translate.h"
 #include "ir/ir.h"
 #include "codegen/codegen.h"
-#include "ir/analysis.h"
+#include "ir/cfg.h"
 #include "ir/pass.h"
 
 #define DEBUG

@@ -1,4 +1,4 @@
-#include "ir/analysis.h"
+#include "ir/cfg.h"
 #include "utils/iterator.h"
 
 std::vector<ir::Block *> predecessors(ir::Block *b) {
