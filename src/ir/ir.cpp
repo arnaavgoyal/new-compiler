@@ -81,6 +81,11 @@ void DefUser::dump_operands() {
 
 /** ------------------- Block ------------------- */
 
+AutoRenamingSymbolTable<Instr *> &Block::get_symtable(Instr *) {
+    assert(get_parent() && "instr names are uniqued at function scope, so this block must have a parent");
+    return get_parent()->get_symtable(static_cast<Instr *>(nullptr));
+}
+
 std::string Block::add_instr(Instr *i, std::string name_hint) {
 
     if (!name_hint.empty()) {

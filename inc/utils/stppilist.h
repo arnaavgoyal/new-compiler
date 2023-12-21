@@ -103,8 +103,8 @@ public:
     using node_type = STPPIListNode<Inner, Outer>;
 private:
     Outer *container;
-    AutoRenamingSymbolTable<Inner *> symtable;
 
+    AutoRenamingSymbolTable<Inner *> &symtable();
     void set_parent_fields(Inner *i, Outer *p);
     void set_name_fields(Inner *i, std::string &name);
     void set_name_fields(Inner *i, std::string &name, std::string &name_hint);
@@ -117,7 +117,8 @@ public:
      * (the class containing this object).
     */
     STPPIList(Outer *you)
-        : IList<Inner>(new node_type(you), new node_type(you)), container(you) {
+        : IList<Inner>(new node_type(you), new node_type(you)),
+        container(you) {
         static_assert(
             std::is_base_of<STPPIListNode<Inner, Outer>, Inner>::value,
             "Inner must inherit from STPPIListNode<Inner>"
@@ -131,8 +132,6 @@ public:
     Inner *remove(std::string name);
     std::string rename(Inner *i, std::string name_hint);
     Inner *get(std::string name);
-    AutoRenamingSymbolTable<Inner *> &get_symtable() { return symtable; }
-    void set_symtable(AutoRenamingSymbolTable<Inner *> &st) { symtable = st; }
 };
 
 /** ------------------- STPPIListNode impl ------------------- */
@@ -197,6 +196,11 @@ void STPPIListNode<Inner, Outer>::remove_from_parent() {
 /** ------------------- STPPIList impl ------------------- */
 
 template <typename Inner, typename Outer>
+AutoRenamingSymbolTable<Inner *> &STPPIList<Inner, Outer>::symtable() {
+    return container->get_symtable(static_cast<Inner *>(nullptr));
+}
+
+template <typename Inner, typename Outer>
 void STPPIList<Inner, Outer>::set_parent_fields(Inner *i, Outer *p) {
 
     // set its parent
@@ -235,7 +239,7 @@ std::string STPPIList<Inner, Outer>::append(Inner *i) {
 
         // this node needs a name
         // insert into symtable and get rename
-        name = symtable.insert(i->name_hint, i);
+        name = symtable().insert(i->name_hint, i);
 
         // set name to the rename
         set_name_fields(i, name);
@@ -254,7 +258,7 @@ std::string STPPIList<Inner, Outer>::append(Inner *i, std::string name_hint) {
 
     // needs a name ...
     // insert into symtable and get rename
-    std::string name = symtable.insert(name_hint, i);
+    std::string name = symtable().insert(name_hint, i);
 
     // set name hint and name
     set_name_fields(i, name, name_hint);
@@ -276,7 +280,7 @@ std::string STPPIList<Inner, Outer>::append_before(Inner *i, Inner *before) {
 
         // this node needs a name
         // insert into symtable and get rename
-        name = symtable.insert(i->name_hint, i);
+        name = symtable().insert(i->name_hint, i);
 
         // set name to the rename
         set_name_fields(i, name);
@@ -295,7 +299,7 @@ std::string STPPIList<Inner, Outer>::append_before(Inner *i, Inner *before, std:
 
     // needs a name ...
     // insert into symtable and get rename
-    std::string name = symtable.insert(name_hint, i);
+    std::string name = symtable().insert(name_hint, i);
 
     // set name hint and name
     set_name_fields(i, name, name_hint);
@@ -312,7 +316,7 @@ void STPPIList<Inner, Outer>::remove(Inner *i) {
     if (i->has_name()) {
 
         // has a name, so have to remove
-        symtable.remove(i->name);
+        symtable().remove(i->name);
     }
     
     // unset parent
@@ -322,7 +326,7 @@ template <typename Inner, typename Outer>
 Inner *STPPIList<Inner, Outer>::remove(std::string name) {
 
     // remove from symtable, also get the corresponding node
-    Inner *i = symtable.remove(name);
+    Inner *i = symtable().remove(name);
 
     assert(i && "no node with given name");
 
@@ -341,13 +345,13 @@ std::string STPPIList<Inner, Outer>::rename(Inner *i, std::string name_hint) {
 
         // already has a name ...
         // remove the node from symtable
-        Inner *removed = symtable.remove(i->name);
+        Inner *removed = symtable().remove(i->name);
 
         assert(removed == i && "removed Inner does not match given Inner");
     }
 
     // insert into symtable and get actual name
-    std::string name = symtable.insert(name_hint, i);
+    std::string name = symtable().insert(name_hint, i);
 
     // set name and name_hint
     set_name_fields(i, name, name_hint);
@@ -356,7 +360,7 @@ std::string STPPIList<Inner, Outer>::rename(Inner *i, std::string name_hint) {
 }
 template <typename Inner, typename Outer>
 Inner *STPPIList<Inner, Outer>::get(std::string name) {
-    return symtable.get(name);
+    return symtable().get(name);
 }
 
 #endif

@@ -197,6 +197,9 @@ private:
     friend list_ty::node_type;
     list_ty &get_inner_list(Instr *) { return list; }
 
+    friend list_ty;
+    AutoRenamingSymbolTable<Instr *> &get_symtable(Instr *);
+
 protected:
     Block(Block &) = default;
     Block(Block &&) = default;
@@ -541,6 +544,13 @@ public:
 class Function
     : public Global, public STPPIListNode<Function, Program> {
 private:
+    using block_symtable_ty = AutoRenamingSymbolTable<Block *>;
+    using param_symtable_ty = AutoRenamingSymbolTable<Param *>;
+    using instr_symtable_ty = AutoRenamingSymbolTable<Instr *>;
+    block_symtable_ty block_symtable;
+    param_symtable_ty param_symtable;
+    instr_symtable_ty instr_symtable;
+
     using param_list_ty = STPPIList<Param, Function>;
     using block_list_ty = STPPIList<Block, Function>;
     param_list_ty params;
@@ -550,6 +560,12 @@ private:
     block_list_ty &get_inner_list(Block *) { return blocks; }
     friend param_list_ty::node_type;
     param_list_ty &get_inner_list(Param *) { return params; }
+    friend block_list_ty;
+    block_symtable_ty &get_symtable(Block *) { return block_symtable; }
+    friend param_list_ty;
+    param_symtable_ty &get_symtable(Param *) { return param_symtable; }
+    friend Block;
+    instr_symtable_ty &get_symtable(Instr *) { return instr_symtable; }
 
 public:
     Function(Type *return_ty, linkage lty, Program *parent, std::string name_hint);
@@ -576,6 +592,11 @@ class Program {
 private:
     std::string name;
 
+    using gvar_symtable_ty = AutoRenamingSymbolTable<GlobalVar *>;
+    using func_symtable_ty = AutoRenamingSymbolTable<Function *>;
+    gvar_symtable_ty gvar_symtable;
+    func_symtable_ty func_symtable;
+
     using gvar_list_ty = STPPIList<GlobalVar, Program>;
     using func_list_ty = STPPIList<Function, Program>;
     STPPIList<GlobalVar, Program> gvar_list;
@@ -583,9 +604,12 @@ private:
 
     friend gvar_list_ty::node_type;
     gvar_list_ty &get_inner_list(GlobalVar *) { return gvar_list; }
-
     friend func_list_ty::node_type;
     func_list_ty &get_inner_list(Function *) { return func_list; }
+    friend gvar_list_ty;
+    gvar_symtable_ty &get_symtable(GlobalVar *) { return gvar_symtable; }
+    friend func_list_ty;
+    func_symtable_ty &get_symtable(Function *) { return func_symtable; }
 
 public:
     Program(std::string name)
