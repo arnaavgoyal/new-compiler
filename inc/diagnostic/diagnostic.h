@@ -22,7 +22,7 @@ enum class severity {
 enum class id {
 
 #define DIAGNOSTIC(name, severity, str) name,
-#include "error/diagdefs"
+#include "diagnostic/diagdefs"
 
     __end
 };

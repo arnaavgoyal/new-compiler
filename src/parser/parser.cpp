@@ -3,7 +3,7 @@
 #include "lexer/tokentypes.h"
 #include "lexer/lexer.h"
 #include "memory/allocator.h"
-#include "error/error.h"
+#include "diagnostic/diagnostic.h"
 #include <iostream>
 #include <stack>
 #include <iomanip>

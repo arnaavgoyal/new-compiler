@@ -1,4 +1,4 @@
-#include "error/error.h"
+#include "diagnostic/diagnostic.h"
 #include "source/source.h"
 #include "utils/ioformat.h"
 #include <iostream>
@@ -150,7 +150,7 @@ RawDiagnostic get(id diag_id) {
     switch (diag_id) {
 
 #define DIAGNOSTIC(name, sev, str) case id::name: return RawDiagnostic{severity::sev, str};
-#include "error/diagdefs"
+#include "diagnostic/diagdefs"
 
         case id::__end:
         default:

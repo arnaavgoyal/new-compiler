@@ -3,7 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include "memory/allocator.h"
-#include "error/error.h"
+#include "diagnostic/diagnostic.h"
 #include "analyzer/scope.h"
 #include <cassert>
 

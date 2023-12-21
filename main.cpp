@@ -8,7 +8,7 @@
 #include "ast/ast.h"
 #include "parser/parser.h"
 #include "memory/allocator.h"
-#include "error/error.h"
+#include "diagnostic/diagnostic.h"
 #include "analyzer/analyzer.h"
 #include "analyzer/type.h"
 #include "ast/translate.h"
