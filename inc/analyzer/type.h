@@ -21,6 +21,8 @@ namespace type {
     };
 }
 
+class ASTNode;
+
 class Type {
 
     friend class SemanticAnalyzer;
@@ -66,6 +68,8 @@ public:
         /** if type is function, this points to the list of param types */
         std::vector<Type const *> params;
     };
+
+    ASTNode *decl;
 
     bool contains_error : 1;
 

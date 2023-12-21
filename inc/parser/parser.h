@@ -309,6 +309,8 @@ private:
     */
     ASTNode *parse_func_decl();
 
+    ASTNode *parse_stmt_block(bool need_new_scope);
+
     /**
      * Parses a statement given that the current token is the start of the
      * statement. Recursively descends into scoped statement blocks.

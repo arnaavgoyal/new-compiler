@@ -6,6 +6,7 @@
 #include "analyzer/type.h"
 
 class Scope;
+class ASTNode;
 
 class Symbol {
 
@@ -22,6 +23,8 @@ public:
     Type const *type_ptr;
 
     Scope *scope;
+
+    ASTNode *decl;
 
     /**
      * Constructs a symbol with all fields as given.

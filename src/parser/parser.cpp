@@ -958,7 +958,7 @@ ASTNode *Parser::parse_func_decl() {
     analyzer.start_func_define(func_decl, tk.get_src_loc());
 
     // parse func body
-    ASTNode *func_body = parse_stmt();
+    ASTNode *func_body = parse_stmt_block(false);
     func_decl->children.push_back(func_body);
 
     // handle func definition end
@@ -966,6 +966,63 @@ ASTNode *Parser::parse_func_decl() {
     analyzer.end_func_define(&curr_scope, tk.get_src_loc());
 
     return func_decl;
+}
+
+ASTNode *Parser::parse_stmt_block(bool make_new_scope) {
+    assert(tk.get_type() == token::op_leftbrace);
+
+    // cache start loc
+    auto stmt_block_start = tk.get_src_loc();
+
+    // create node
+    ASTNode *block = make_node(
+        ast::stmt_block,
+        nullptr,
+        stmt_block_start,
+        tk.get_type()
+    );
+
+    // consume left brace
+    consume();
+
+    if (make_new_scope) {
+        analyzer.start_scoped_block(&curr_scope, stmt_block_start);
+    }
+
+    // parse stmts
+    ASTNode *parsed = nullptr;
+    while (true) {
+
+        // found end brace
+        if (tk.get_type() == token::op_rightbrace) {
+            break;
+        }
+
+        // parse stmt
+        parsed = parse_stmt();
+
+        if (parsed) {
+            block->children.push_back(parsed);
+        }
+        else {
+            // reached eof without end brace
+            match(token::op_rightbrace);
+        }
+    }
+
+    block->loc.copy_end(tk.get_src_loc());
+
+    // std::cout << "Dumping scope tables:\n";
+    // curr_scope->dump(2);
+
+    if (make_new_scope) {
+        analyzer.end_scoped_block(&curr_scope, tk.get_src_loc());
+    }
+
+    // consume right brace
+    consume();
+
+    return block;
 }
 
 ASTNode *Parser::parse_stmt() {
@@ -984,51 +1041,7 @@ ASTNode *Parser::parse_stmt() {
     // scoped statement block
     else if (tk_type == token::op_leftbrace) {
 
-        // cache start loc
-        loc_cache = tk.get_src_loc();
-
-        // create node
-        res = make_node(
-            ast::stmt_block,
-            nullptr,
-            loc_cache,
-            tk_type
-        );
-
-        // consume left brace
-        consume();
-
-        analyzer.start_scoped_block(&curr_scope, loc_cache);
-
-        // parse stmts
-        ASTNode *parsed = nullptr;
-        while (true) {
-
-            // found end brace
-            if (tk.get_type() == token::op_rightbrace) {
-                break;
-            }
-
-            // parse stmt
-            parsed = parse_stmt();
-            if (parsed) {
-                res->children.push_back(parsed);
-            }
-            else {
-                // reached eof without end brace
-                match(token::op_rightbrace);
-            }
-        }
-
-        res->loc.copy_end(tk.get_src_loc());
-
-        // std::cout << "Dumping scope tables:\n";
-        // curr_scope->dump(2);
-
-        analyzer.end_scoped_block(&curr_scope, tk.get_src_loc());
-
-        // consume right brace
-        consume();
+        parse_stmt_block(true);
 
         // this is to skip the semicolon check
         req_semi = false;
@@ -1129,7 +1142,7 @@ ASTNode *Parser::parse_stmt() {
         match(token::op_leftbrace);
 
         // parse stmt block
-        ASTNode *stmts = parse_stmt();
+        ASTNode *stmts = parse_stmt_block(true);
 
         // add stmt block to loop node
         ifstmt->children.push_back(stmts);
@@ -1174,7 +1187,7 @@ ASTNode *Parser::parse_stmt() {
         match(token::op_leftbrace);
 
         // parse stmt block
-        ASTNode *stmts = parse_stmt();
+        ASTNode *stmts = parse_stmt_block(true);
 
         // add stmt block to loop node
         loop->children.push_back(stmts);

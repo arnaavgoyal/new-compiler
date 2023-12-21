@@ -11,8 +11,6 @@ static void print_loc_prefix(SourceLocation &loc) {
         << ioformat::WHITE
         << SourceManager::get_source_path(loc.src_id)
         << "::" << loc.start_row  << ":" << loc.start_col  << ": "
-        << ioformat::RED
-        << "error: "
         << ioformat::RESET;
 }
 
@@ -34,7 +32,7 @@ static void set_filestream_to_line_start(std::ifstream *stream, SourceLocation &
     }
 }
 
-static void print_loc_highlight(SourceLocation &loc) {
+static void print_loc_highlight(SourceLocation &loc, char const *hc) {
 
     // get source file
     std::ifstream *src = SourceManager::open_source(loc.src_id);
@@ -54,7 +52,7 @@ static void print_loc_highlight(SourceLocation &loc) {
     while (c != '\n' && c != EOF) {
         pos = src->tellg();
         if (pos == loc.start_offset) {
-            std::cout << ioformat::RED;
+            std::cout << hc;
             pre_offset += i;
             flag = true;
         }
@@ -76,7 +74,7 @@ static void print_loc_highlight(SourceLocation &loc) {
     for (unsigned j = 0; j < pre_offset; j++) {
         putchar(' ');
     }
-    std::cout << ioformat::RED;
+    std::cout << hc;
     putchar('^');
     for (unsigned j = 0; j < len; j++) {
         putchar('~');
@@ -90,14 +88,33 @@ static void print_loc_highlight(SourceLocation &loc) {
 
 void DiagnosticHandler::print_diag(Diagnostic &diag) {
 
-    // print preamble
+    // print location prefix
     print_loc_prefix(diag.locs[0]);
+
+    char const *highlight_col = ioformat::GREEN;
+
+    // print the diag severity and choose highlight color
+    switch (diag.sev) {
+    case diag::severity::fatal:
+    case diag::severity::error:
+        highlight_col = ioformat::RED;
+        std::cout << highlight_col
+            << "error: "
+            << ioformat::RESET;
+        break;
+    case diag::severity::note:
+        highlight_col = ioformat::CYAN;
+        std::cout << highlight_col
+            << "note: "
+            << ioformat::RESET;
+        break;
+    }
 
     // print error
     std::cout << ioformat::WHITE << diag.finalstr << ioformat::RESET << std::endl;
 
     // print loc highlight
-    print_loc_highlight(diag.locs[0]);
+    print_loc_highlight(diag.locs[0], highlight_col);
 }
 
 static void fmt(std::string &finalstr, char const *formatstr, char const *formatend, std::vector<std::string> &args) {
@@ -150,25 +167,25 @@ void Diagnostic::fmt() {
 }
 
 void DiagnosticBuilder::finish() {
-    std::cout << "finishing diag\n";
-    std::cout << "  args:\n";
-    for (auto &str : d.args) {
-        std::cout << "    " << str << std::endl;
-    }
-    std::cout << "  locs:\n";
-    for (auto &loc : d.locs) {
-        std::cout << "    ";
-        loc.print();
-        std::cout << std::endl;
-    }
+    // std::cout << "finishing diag\n";
+    // std::cout << "  args:\n";
+    // for (auto &str : d.args) {
+    //     std::cout << "    " << str << std::endl;
+    // }
+    // std::cout << "  locs:\n";
+    // for (auto &loc : d.locs) {
+    //     std::cout << "    ";
+    //     loc.print();
+    //     std::cout << std::endl;
+    // }
     valid = false;
-    std::cout << "  formatting\n";
+    // std::cout << "  formatting\n";
     d.fmt();
-    std::cout << "    done\n";
-    std::cout << "  final: " << d.finalstr << std::endl;
-    std::cout << "  handling\n";
+    // std::cout << "    done\n";
+    // std::cout << "  final: " << d.finalstr << std::endl;
+    // std::cout << "  handling\n";
     DiagnosticHandler::handle(std::move(d));
-    std::cout << "    done\n";
+    // std::cout << "    done\n";
 }
 
 std::vector<Diagnostic> DiagnosticHandler::diags;

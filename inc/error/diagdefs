@@ -15,6 +15,7 @@ DIAGNOSTIC(type_decl_expected_assignment, fatal, "expected '=' after type declar
 // decls
 DIAGNOSTIC(symbol_redeclaration, error, "redeclaration of symbol '%0'")
 DIAGNOSTIC(type_redeclaration, error, "redeclaration of type '%0'")
+DIAGNOSTIC(note_original_declaration, note, "original declaration here:")
 DIAGNOSTIC(use_of_undeclared_type, error, "use of undeclared type '%0'")
 DIAGNOSTIC(pointer_to_function_type_invalid, error, "pointer to function is not a valid type")
 

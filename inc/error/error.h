@@ -16,6 +16,7 @@ namespace diag {
 enum class severity {
     fatal,
     error,
+    note,
 };
 
 enum class id {

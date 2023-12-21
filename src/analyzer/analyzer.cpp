@@ -60,12 +60,14 @@ Symbol const *SemanticAnalyzer::find_symbol_in_any_active_scope(
 Symbol *SemanticAnalyzer::insert_symbol(
     Scope *scope,
     std::string const &name,
-    Type const *type_ptr
+    Type const *type_ptr,
+    ASTNode *decl
 ) {
     Symbol *sym = sym_allocator.alloc();
     sym->name = name;
     sym->type_ptr = type_ptr;
     sym->scope = scope;
+    sym->decl = decl;
     scope->sym_table.insert(std::make_pair(name, sym));
     std::cout << "inserted " << name
         << " of type " << *type_ptr->str
@@ -1026,7 +1028,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     // ErrorHandler::prog_exit();
 
     // redeclaration in current scope
-    if (find_symbol_in_current_scope(ident, *scope)) {
+    if (Symbol const *osym = find_symbol_in_current_scope(ident, *scope)) {
         // ErrorHandler::handle(
         //     error::redeclaration_of_symbol_in_same_scope,
         //     ident_loc,
@@ -1035,10 +1037,9 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         DiagnosticHandler::make(diag::id::symbol_redeclaration, ident_loc)
             .add(*ident)
             .finish();
+        DiagnosticHandler::make(diag::id::note_original_declaration, osym->decl->loc)
+            .finish();
     }
-
-    // add to symbol table
-    Symbol *sym = insert_symbol(*scope, *ident, type);
 
     ASTNode *node = node_allocator.alloc();
     node->set(
@@ -1049,6 +1050,10 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         token::unknown,
         type->contains_error
     );
+
+    // add to symbol table
+    Symbol *sym = insert_symbol(*scope, *ident, type, node);
+
     node->sym = sym;
 
     // enter new scope
@@ -1070,13 +1075,6 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
             break;
         }
 
-        // add to symbol table
-        sym = insert_symbol(
-            *scope,
-            *params[i].first,
-            type->params[i]
-        );
-
         // make node
         param = node_allocator.alloc();
         param->set(
@@ -1087,6 +1085,15 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
             token::identifier,
             type->params[i]->contains_error
         );
+
+        // add to symbol table
+        sym = insert_symbol(
+            *scope,
+            *params[i].first,
+            type->params[i],
+            param
+        );
+
         param->sym = sym;
 
         // add to decl node
@@ -1140,8 +1147,11 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
         type->contains_error
     );
 
+    std::cout << "\n";
+    (*scope)->dump();
+
     // ensure no redeclaration
-    if (find_symbol_in_current_scope(ident, *scope)) {
+    if (auto osym = find_symbol_in_current_scope(ident, *scope)) {
         // ErrorHandler::handle(
         //     error::redeclaration_of_symbol_in_same_scope,
         //     ident_loc,
@@ -1150,11 +1160,17 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
         DiagnosticHandler::make(diag::id::symbol_redeclaration, ident_loc)
             .add(*ident)
             .finish();
+        DiagnosticHandler::make(diag::id::note_original_declaration, osym->decl->loc)
+            .finish();
         decl->has_error = true;
     }
 
-    Symbol *sym = insert_symbol(*scope, *ident, type);
+    Symbol *sym = insert_symbol(*scope, *ident, type, decl);
     decl->sym = sym;
+
+    std::cout << "\n";
+    (*scope)->dump();
+    std::cout << "\n";
 
     ASTNode *res = decl;
     return res;
@@ -1183,7 +1199,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
     Type *alias;
 
     // ensure no redeclaration
-    if (find_type_in_current_scope(ident, *scope)) {
+    if (auto oty = find_type_in_current_scope(ident, *scope)) {
         // ErrorHandler::handle(
         //     error::redeclaration_of_symbol_in_same_scope,
         //     ident_loc,
@@ -1191,6 +1207,8 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
         // );
         DiagnosticHandler::make(diag::id::type_redeclaration, ident_loc)
             .add(*ident)
+            .finish();
+        DiagnosticHandler::make(diag::id::note_original_declaration, oty->decl->loc)
             .finish();
         err = true;
         alias = error_type;
@@ -1216,6 +1234,10 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
         token::identifier,
         err
     );
+
+    if (alias != error_type) {
+        alias->decl = stmt;
+    }
 
     return stmt;
 }

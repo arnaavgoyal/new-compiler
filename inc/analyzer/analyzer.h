@@ -98,7 +98,8 @@ private:
     Symbol *insert_symbol(
         Scope *scope,
         std::string const &name,
-        Type const *type_ptr
+        Type const *type_ptr,
+        ASTNode *decl
     );
 
     Type const *find_type_in_current_scope(std::string const *ident, Scope *scope);
