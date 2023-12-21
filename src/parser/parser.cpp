@@ -278,7 +278,6 @@ ASTNode *Parser::parse_prefix() {
     ASTNode *res;
     op::kind op;
     SourceLocation op_loc;
-    token::token_type op_type;
     switch (type) {
 
         // parenthesized expr
@@ -1257,7 +1256,7 @@ bool Parser::parse(ASTNode **ref) {
 
     // normal
     else {
-        while (temp = parse_stmt()) {
+        while ((temp = parse_stmt())) {
             root->children.push_back(temp);
         }
     }

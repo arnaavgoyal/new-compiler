@@ -130,8 +130,8 @@ public:
 
 class DefUser : public Def {
 private:
-    std::vector<Use> operands;
     unsigned num_ops;
+    std::vector<Use> operands;
 
 protected:
     DefUser(DefUser &) = default;

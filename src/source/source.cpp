@@ -97,27 +97,27 @@ std::vector<std::string> SourceManager::source_paths = std::vector<std::string>(
 
 SourceID SourceManager::add_source(std::string const &path) {
     source_paths.push_back(path);
-    return (source_paths.size() - 1);
+    return (source_paths.size());
 }
 
 std::ifstream *SourceManager::open_source(SourceID const &src_id) {
-    if (src_id.id < 0) {
+    if (src_id.id == 0) {
         return nullptr;
     }
-    else if (src_id.id >= source_paths.size()) {
+    else if (src_id.id > source_paths.size()) {
         printf("SourceManager --- FATAL ERROR\n");
         exit(EXIT_FAILURE);
     }
-    return new std::ifstream(source_paths[src_id.id], std::ios::binary);
+    return new std::ifstream(source_paths[src_id.id - 1], std::ios::binary);
 }
 
 std::string SourceManager::get_source_path(SourceID const &src_id) {
-    if (src_id.id < 0) {
+    if (src_id.id == 0) {
         return std::string("invalid");
     }
-    else if (src_id.id >= source_paths.size()) {
+    else if (src_id.id > source_paths.size()) {
         printf("SourceManager --- FATAL ERROR\n");
         exit(EXIT_FAILURE);
     }
-    return source_paths[src_id.id];
+    return source_paths[src_id.id - 1];
 }

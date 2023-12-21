@@ -89,11 +89,9 @@ AutoRenamingSymbolTable<Instr *> &Block::get_symtable(Instr *) {
 std::string Block::add_instr(Instr *i, std::string name_hint) {
 
     if (!name_hint.empty()) {
-        list.append(i, name_hint);
+        return list.append(i, name_hint);
     }
-    else {
-        list.append(i);
-    }
+    return list.append(i);
 }
 
 void Block::remove_instr(Instr *instr) {

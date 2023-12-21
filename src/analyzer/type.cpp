@@ -41,6 +41,8 @@ case token::kw_##TYTK: return get_##TYTK##_type();
         default:
             assert(false && "should be unreachable");
     }
+    
+    return nullptr;
 }
 
 }

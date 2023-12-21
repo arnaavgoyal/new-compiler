@@ -119,7 +119,7 @@ ir::Function *ASTTranslator::t_func(ASTNode *fdecl, ir::Program *p) {
     for (unsigned i = 0; i < params.size(); i++) {
         auto sa = t_lvar(fdecl->children[i]);
         sa->set_name(sa->get_name() + ".addr");
-        auto wi = new ir::WriteInstr(params[i], sa, curr_block);
+        new ir::WriteInstr(params[i], sa, curr_block);
     }
     
     // generate ir for the function body
@@ -205,6 +205,8 @@ ir::Def *ASTTranslator::t_stmt(ASTNode *node) {
         default:
             UNREACHABLE
     }
+
+    return nullptr;
 }
 
 ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode *vdecl) {
@@ -305,6 +307,8 @@ ir::Def *ASTTranslator::t_binop(ASTNode *binop) {
             std::cout << binop->op << std::endl;
             UNREACHABLE
     }
+
+    return nullptr;
 }
 
 ir::CallInstr *ASTTranslator::t_call(ASTNode *cexpr) {
@@ -356,7 +360,6 @@ ir::Def *ASTTranslator::t_unop(ASTNode *unop) {
     // generate ir for the inner expr
     Type *ast_inner_ty = (Type *)unop->children[0]->type;
     ir::Def *d = t_stmt(unop->children[0]);
-    ir::Def *e;
 
     switch (unop->op) {
         case op::addr:
@@ -394,6 +397,8 @@ ir::Def *ASTTranslator::t_unop(ASTNode *unop) {
         default:
             UNREACHABLE
     }
+
+    return nullptr;
 }
 
 ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty) {
@@ -457,7 +462,7 @@ ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 
         // it does not have a terminator, so we have to branch back
         // to the normal control flow path
-        ir::BranchInstr *br_if_to_done = new ir::BranchInstr(doneblock, if_cfpath_endblock);
+        new ir::BranchInstr(doneblock, if_cfpath_endblock);
     }
 
     ir::Block *nextblock = doneblock;
@@ -471,7 +476,7 @@ ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 
             // it does not have a terminator, so we have to branch back
             // to the normal control flow path
-            ir::BranchInstr *br_else_to_done = new ir::BranchInstr(doneblock, else_cfpath_endblock);
+            new ir::BranchInstr(doneblock, else_cfpath_endblock);
         }
 
         nextblock = elseblock;
@@ -479,7 +484,7 @@ ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 
     // branch from the start block into the if block or the next block (else or done)
     // based on the condition
-    ir::BranchInstr *br_if_to_next = new ir::BranchInstr(cond, ifblock, nextblock, startblock);
+    new ir::BranchInstr(cond, ifblock, nextblock, startblock);
 
     // set the curr block to the new end block (which represents the natural
     // end of the current control flow path)
@@ -490,19 +495,43 @@ ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 }
 
 ir::Def *ASTTranslator::t_loop(ASTNode *lnode) {
+
+    // get the function
     ir::Function *f = curr_block->get_parent();
+
+    // the loop condition block
     ir::Block *loopcond = new ir::Block(f, "loopcond");
-    ir::BranchInstr *curr_to_cond = new ir::BranchInstr(loopcond, curr_block);
+
+    // branch from the current block to the loop condition block
+    new ir::BranchInstr(loopcond, curr_block);
+
+    // move to the loop cond block
     curr_block = loopcond;
+
+    // generate the condition bool
     ir::Def *cond_inner = t_cond(lnode->children[0]);
+
+    // the loop body starting block
     ir::Block *loopbody = new ir::Block(f, "loopbody");
+
+    // move to the loop body
     curr_block = loopbody;
+
+    // generate the ast loop body into the loop body block
     for (ASTNode *stmt : lnode->children[1]->children) {
         t_stmt(stmt);
     }
+
+    // the loop end block
     ir::Block *loopend = new ir::Block(f, "loopend");
-    auto condbr = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
-    auto jmp = new ir::BranchInstr(loopcond, curr_block);
+
+    // the branch from the loop condition block to the loopbody and loopend
+    new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+
+    // the branch from the end of the loop body back to the loop condition
+    new ir::BranchInstr(loopcond, curr_block);
+
+    // move to the loop end block (this is where ir generation continues after the loop)
     curr_block = loopend;
 
     // TODO: make this return whatever the last value in the loop is

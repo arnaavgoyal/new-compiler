@@ -19,21 +19,19 @@ class SourceID {
     friend class SourceManager;
 
 private:
-
-    int id;
-    SourceID(int id) { this->id = id; }
+    unsigned id;
+    SourceID(unsigned id) { this->id = id; }
 
 public:
-
-    SourceID() { this->id = -1; }
+    SourceID() { this->id = 0; }
 
 };
 
 class SourceLocation {
 public:
 
-    using byte_offset_t = unsigned long int;
-    using rowcol_offset_t = unsigned int;
+    using byte_offset_t = unsigned long;
+    using rowcol_offset_t = unsigned;
 
     /** source file */
     SourceID src_id;
