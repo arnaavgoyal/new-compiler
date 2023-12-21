@@ -32,9 +32,6 @@ private:
     Allocator<Scope> scope_allocator;
 
     /**  */
-    Type *error_type;
-
-    /**  */
     ASTNode *error_node;
 
     /**  */
@@ -117,7 +114,7 @@ public:
         SourceLocation loc
     );
 
-    Type *analyze_function_type(
+    FunctionType *analyze_function_type(
         Scope **scope,
         std::vector<Type *> param_types,
         Type *return_type,
@@ -125,25 +122,25 @@ public:
         SourceLocation end_loc
     );
 
-    Type *analyze_typename(
+    AliasType *analyze_typename(
         Scope **scope,
         std::string *ident,
         SourceLocation loc
     );
 
-    Type *analyze_pointer_type(
+    PointerType *analyze_pointer_type(
         Scope **scope,
         Type *pointee,
         SourceLocation pointer_modifier_loc
     );
 
-    Type *analyze_array_type(
+    ArrayType *analyze_array_type(
         Scope **scope,
         Type *array_of,
         SourceLocation array_modifier_loc
     );
 
-    Type *analyze_primitive_type(
+    PrimitiveType *analyze_primitive_type(
         token::token_type prim,
         SourceLocation loc
     );

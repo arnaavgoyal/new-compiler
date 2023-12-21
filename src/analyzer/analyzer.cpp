@@ -128,15 +128,14 @@ SemanticAnalyzer::SemanticAnalyzer(
     str_allocator(str_allocator),
     primitive_keywords(primitives) {
 
-    // get error type
-    error_type = Type::get_error_type();
-
     // create error node
     error_node = node_allocator.alloc();
     error_node->kind = ast::error;
     error_node->str = str_allocator.alloc();
     *(std::string *)error_node->str = std::string("<error-node>");
-    error_node->type = error_type;
+    error_node->type = Type::get_error_type();
+
+    AliasType::set_error_node(error_node);
 
     // IRRELEVANT NOW
     // // add all primitive types
@@ -176,7 +175,7 @@ Type *get_most_recent_non_alias(Type *ty) {
     return ty;
 }
 
-Type *SemanticAnalyzer::analyze_function_type(
+FunctionType *SemanticAnalyzer::analyze_function_type(
     Scope **scope,
     std::vector<Type *> param_types,
     Type *return_type,
@@ -282,7 +281,7 @@ Type *SemanticAnalyzer::analyze_function_type(
     }
 }
 
-Type *SemanticAnalyzer::analyze_typename(
+AliasType *SemanticAnalyzer::analyze_typename(
     Scope **scope,
     std::string *ident,
     SourceLocation loc
@@ -296,14 +295,15 @@ Type *SemanticAnalyzer::analyze_typename(
         DiagnosticHandler::make(diag::id::use_of_undeclared_type, loc)
             .add(*ident)
             .finish();
-        return error_type;
+        return AliasType::get_error_type();
     }
 
     // type exists
-    return (Type *)type;
+    assert(type->get_kind() == typekind::alias_t);
+    return static_cast<AliasType *>(type);
 }
 
-Type *SemanticAnalyzer::analyze_pointer_type(
+PointerType *SemanticAnalyzer::analyze_pointer_type(
     Scope **scope,
     Type *pointee,
     SourceLocation pointer_modifier_loc
@@ -332,7 +332,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
         // );
         DiagnosticHandler::make(diag::id::pointer_to_function_type_invalid, pointer_modifier_loc)
             .finish();
-        return error_type;
+        return PointerType::get_error_type();
     }
 
     // create str rep
@@ -380,7 +380,7 @@ Type *SemanticAnalyzer::analyze_pointer_type(
     return type;
 }
 
-Type *SemanticAnalyzer::analyze_array_type(
+ArrayType *SemanticAnalyzer::analyze_array_type(
     Scope **scope,
     Type *array_of,
     SourceLocation array_modifier_loc
@@ -391,7 +391,7 @@ Type *SemanticAnalyzer::analyze_array_type(
     DiagnosticHandler::make(diag::id::nyi, array_modifier_loc)
         .add("array types")
         .finish();
-    return error_type;
+    return ArrayType::get_error_type();
 }
 
 ASTNode *SemanticAnalyzer::analyze_cast_expr(
@@ -414,7 +414,7 @@ ASTNode *SemanticAnalyzer::analyze_cast_expr(
     return cast_node;
 }
 
-Type *SemanticAnalyzer::analyze_primitive_type(
+PrimitiveType *SemanticAnalyzer::analyze_primitive_type(
     token::token_type prim,
     SourceLocation loc
 ) {
@@ -456,7 +456,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 
         // type compare
         if (lhs->type->get_canonical() != rhs->type->get_canonical()) {
-            op_type = error_type;
+            op_type = Type::get_error_type();
             err = true;
             // ErrorHandler::handle(
             //     error::incompatible_operand_type,
@@ -478,7 +478,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 
         // type compare
         if (lhs->type->get_canonical() != rhs->type->get_canonical()) {
-            op_type = error_type;
+            op_type = Type::get_error_type();
             err = true;
             // ErrorHandler::handle(
             //     error::incompatible_operand_type,
@@ -503,7 +503,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
                 .add("logical binary operations")
                 .finish();
 
-        op_type = error_type;
+        op_type = Type::get_error_type();
         err = true;
     }
 
@@ -572,7 +572,7 @@ ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
                     .add(expr->type->stringify())
                     .finish();
                 err = true;
-                ty = error_type;
+                ty = Type::get_error_type();
             }
             // the lvalue must be of integral type
             if (!expr->type->is_integral()) {
@@ -581,7 +581,7 @@ ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
                     .add(expr->type->stringify())
                     .finish();
                 err = true;
-                ty = error_type;
+                ty = Type::get_error_type();
             }
             break;
         default:
@@ -634,7 +634,7 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
             .finish();
         node->set(
             ast::call_expr,
-            error_type,
+            Type::get_error_type(),
             nullptr,
             call_loc,
             token::op_leftparen,
@@ -662,7 +662,7 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
             break;
         }
         arg = args[i];
-        if (arg->type == error_type) {
+        if (arg->type == Type::get_error_type()) {
             error = true;
         }
         else if (arg->type->get_canonical() != paramtypes[i]->get_canonical()) {
@@ -758,7 +758,7 @@ ASTNode *SemanticAnalyzer::analyze_ref_expr(
 
     // no symbol
     if (res == nullptr) {
-        sym_type = error_type;
+        sym_type = Type::get_error_type();
         err = true;
         // ErrorHandler::handle(
         //     error::referenced_ident_is_undefined,
@@ -883,7 +883,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
             }
             // resulting value is pointer type
             // TODO: how do I get uniqued pointer type to expr type from here?
-            ty = error_type;
+            ty = Type::get_error_type();
             break;
         case op::indirect:
             // the expr must be of pointer type
@@ -893,7 +893,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
                     .add(ty->stringify())
                     .finish();
                 err = true;
-                ty = error_type;
+                ty = Type::get_error_type();
             }
             else {
                 ty = static_cast<PointerType *>(ty)->get_pointee();
@@ -920,7 +920,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
                     .add(ty->stringify())
                     .finish();
                 err = true;
-                ty = error_type;
+                ty = Type::get_error_type();
             }
             break;
         default:
@@ -1146,7 +1146,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
         DiagnosticHandler::make(diag::id::note_original_declaration, static_cast<AliasType *>(oty)->get_decl()->loc)
             .finish();
         err = true;
-        alias = error_type;
+        alias = Type::get_error_type();
     }
     else {
 

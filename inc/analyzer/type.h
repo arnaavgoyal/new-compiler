@@ -225,6 +225,8 @@ protected:
 public:
     Type *get_pointee() { return pointee; }
     std::string stringify() override { return std::string("*") + pointee->stringify(); }
+
+    static PointerType *get_error_type();
 };
 
 class ArrayType : public Type {
@@ -239,6 +241,8 @@ protected:
 public:
     Type *get_element_ty() { return element; }
     std::string stringify() override { return std::string("[]") + element->stringify(); }
+
+    static ArrayType *get_error_type();
 };
 
 class AliasType : public Type {
@@ -248,6 +252,8 @@ private:
     Type *aliasee;
     ASTNode *decl;
 
+    static ASTNode *error_node;
+
 protected:
     AliasType(Type *canonical, std::string str, Type *aliasee, ASTNode *decl)
         : Type(typekind::alias_t, canonical, aliasee->has_error()), str(str), aliasee(aliasee), decl(decl) { }
@@ -256,6 +262,9 @@ public:
     Type *get_aliasee() { return aliasee; }
     ASTNode *get_decl() { return decl; }
     std::string stringify() override { return str; }
+
+    static void set_error_node (ASTNode *en) { error_node = en; }
+    static AliasType *get_error_type();
 };
 
 class FunctionType : public Type {
@@ -294,6 +303,8 @@ public:
         str.append(return_ty->stringify());
         return str;
     }
+
+    static FunctionType *get_error_type();
 };
 
 }

@@ -41,8 +41,29 @@ case token::kw_##TYTK: return get_##TYTK##_type();
         default:
             assert(false && "should be unreachable");
     }
-    
+
     return nullptr;
+}
+
+PointerType *PointerType::get_error_type() {
+    static std::unique_ptr<PointerType> ptr(new PointerType(nullptr, Type::get_error_type()));
+    return ptr.get();
+}
+
+ArrayType *ArrayType::get_error_type() {
+    static std::unique_ptr<ArrayType> ptr(new ArrayType(nullptr, Type::get_error_type()));
+    return ptr.get();
+}
+
+ASTNode *AliasType::error_node = nullptr;
+AliasType *AliasType::get_error_type() {
+    static std::unique_ptr<AliasType> ptr(new AliasType(Type::get_error_type(), "<error-alias>", Type::get_error_type(), error_node));
+    return ptr.get();
+}
+
+FunctionType *FunctionType::get_error_type() {
+    static std::unique_ptr<FunctionType> ptr(new FunctionType(nullptr, Type::get_error_type(), std::vector<Type *>()));
+    return ptr.get();
 }
 
 }
