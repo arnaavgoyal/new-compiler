@@ -53,16 +53,16 @@ private:
     void consume();
 
     /**
-     * Reports a syntax error and stops the parsing process.
+     * Aborts the current parse. Only call when a fatal error has been found.
      * DOES NOT RETURN.
-     * 
-     * @param msg the expected syntax
     */
-    void syntax_error(char const *msg);
+    [[noreturn]]
+    void fatal_abort();
 
     /**
      * Matches the current token with the expected token type. If they do
-     * not match, queues a missing error with the error handler.
+     * not match, queues an error with the diagnostics handler, then
+     * triggers a fatal abort.
      * 
      * @param expected the expected type of token to match
     */

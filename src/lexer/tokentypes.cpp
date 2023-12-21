@@ -39,6 +39,16 @@ char const *token::get_operator_string(token_type t) {
     return nullptr;
 }
 
+char const *token::get_print_string(token_type t) {
+    if (is_keyword(t)) {
+        return get_keyword_string(t);
+    }
+    if (is_operator(t)) {
+        return get_operator_string(t);
+    }
+    return get_token_string(t);
+}
+
 bool token::is_literal(token_type t) {
     return (t == character_literal || t == numeric_literal || t == string_literal);
 }

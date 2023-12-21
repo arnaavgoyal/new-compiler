@@ -11,6 +11,7 @@
 #include "analyzer/analyzer.h"
 #include "analyzer/op.h"
 #include <setjmp.h>
+#include <cassert>
 
 //#define DEBUG
 
@@ -30,12 +31,7 @@ void Parser::consume() {
     lexer.lex(tk);
 }
 
-void Parser::syntax_error(char const *msg) {
-    ErrorHandler::handle(
-        error::missing,
-        tk.get_src_loc(),
-        msg
-    );
+void Parser::fatal_abort() {
     longjmp(env, 1);
 }
 
@@ -50,10 +46,12 @@ void Parser::match(token::token_type expected) {
     if (tk.get_type() == expected) {
         return;
     }
+    
+    DiagnosticHandler::make(diag::id::expected_token, tk.get_src_loc())
+        .add(kw ? token::get_keyword_string(expected) : token::get_operator_string(expected))
+        .finish();
 
-    syntax_error(
-        kw ? token::get_keyword_string(expected) : token::get_operator_string(expected)
-    );
+    fatal_abort();
 }
 
 // void Parser::skip_to(token::token_type type) {
@@ -376,7 +374,7 @@ ASTNode *Parser::parse_prefix() {
             op = op::lnot;
             goto finally;
         case token::op_asterisk:
-            op = op::deref;
+            op = op::indirect;
             goto finally;
         case token::op_amp:
             op = op::addr;
@@ -398,7 +396,9 @@ ASTNode *Parser::parse_prefix() {
         default:
             
             // error -- no expr
-            syntax_error("expression");
+            DiagnosticHandler::make(diag::id::expected_expression, tk.get_src_loc())
+                .finish();
+            fatal_abort();
             break;
     }
 
@@ -573,8 +573,7 @@ std::vector<ASTNode *> Parser::parse_call_args() {
             
             // error - something else
             default:
-                std::cout << "call arg, unknown\n";
-                syntax_error("')'");
+                match(token::op_rightparen);
         }
     }
 
@@ -651,7 +650,7 @@ Type *Parser::parse_type() {
                         default:
                             
                             // parse error
-                            syntax_error("')'");
+                            match(token::op_rightparen);
                             break;
                     }
                 }
@@ -720,9 +719,7 @@ Type *Parser::parse_type() {
             consume();
 
             // expects right bracket
-            if (tk.get_type() != token::op_rightbracket) {
-                syntax_error("']'");
-            }
+            match(token::op_rightbracket);
 
             // update bracket loc
             loc_cache.copy_end(tk.get_src_loc());
@@ -760,7 +757,9 @@ Type *Parser::parse_type() {
 
             // error type
             else {
-                syntax_error("type");
+                DiagnosticHandler::make(diag::id::expected_type, tk.get_src_loc())
+                    .finish();
+                fatal_abort();
             }
 
             break;
@@ -784,13 +783,20 @@ ASTNode *Parser::parse_var_decl() {
     // so parse type
     type = parse_type();
 
+    std::string const *ident = nullptr;
+    bool err = false;
+
     // expects identifier
     if (tk.get_type() != token::identifier) {
-        syntax_error("identifier");
+        DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+            .finish();
+        fatal_abort();
+        ident = new std::string("<error>");
+        err = true;
     }
 
     // save identifier
-    std::string const *ident = tk.get_identifier_str();
+    ident = tk.get_identifier_str();
 
     // save identifier loc
     SourceLocation ident_loc = tk.get_src_loc();
@@ -820,6 +826,7 @@ ASTNode *Parser::parse_var_decl() {
             rhs,
             eqloc
         );
+        if (err) res->has_error = true;
 
         return res;
     }
@@ -854,7 +861,9 @@ ASTNode *Parser::parse_func_decl() {
 
     // expects identifier
     if (tk.get_type() != token::identifier) {
-        syntax_error("identifier");
+        DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+            .finish();
+        fatal_abort();
     }
 
     // save identifier
@@ -874,9 +883,7 @@ ASTNode *Parser::parse_func_decl() {
     std::vector<std::pair<std::string const *, SourceLocation>> params;
 
     // expect left paren
-    if (tk.get_type() != token::op_leftparen) {
-        syntax_error("'('");
-    }
+    match(token::op_leftparen);
 
     // save left paren loc
     SourceLocation lparen_loc = tk.get_src_loc();
@@ -889,15 +896,16 @@ ASTNode *Parser::parse_func_decl() {
 
         // expect identifier
         if (tk.get_type() != token::identifier) {
-            syntax_error("identifier");
+            DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+                .finish();
+            fatal_abort();
         }
-
-        else {
-            // add param to list
-            params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
-            // consume ident
-            consume();
-        }
+        
+        // add param to list
+        params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
+        
+        // consume ident
+        consume();
 
         // next action based on current token
         switch (tk.get_type()) {
@@ -919,14 +927,14 @@ ASTNode *Parser::parse_func_decl() {
             // error - something else
             default:
 
-                syntax_error("')'");
+                match(token::op_rightparen);
                 break;
         }
 
     }
 
     // save right paren loc
-    lparen_loc.copy_end(tk.get_src_loc());
+    auto rparen_loc = tk.get_src_loc();
 
     // consume right paren
     consume();
@@ -938,13 +946,12 @@ ASTNode *Parser::parse_func_decl() {
         ident,
         params,
         ident_loc,
-        lparen_loc
+        lparen_loc,
+        rparen_loc
     );
 
     // expect left brace for definition
-    if (tk.get_type() != token::op_leftbrace) {
-        syntax_error("'{'");
-    }
+    match(token::op_leftbrace);
 
     // handle func definition start
     // this call enters new function scope
@@ -1009,7 +1016,7 @@ ASTNode *Parser::parse_stmt() {
             }
             else {
                 // reached eof without end brace
-                syntax_error("'}'");
+                match(token::op_rightbrace);
             }
         }
 
@@ -1035,7 +1042,9 @@ ASTNode *Parser::parse_stmt() {
 
         // expecting identifier
         if (tk.get_type() != token::identifier) {
-            syntax_error("identifier");
+            DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+                .finish();
+            fatal_abort();
         }
 
         // cache ident loc
@@ -1047,9 +1056,7 @@ ASTNode *Parser::parse_stmt() {
         consume();
 
         // expecting '='
-        if (tk.get_type() != token::op_equal) {
-            syntax_error("'='");
-        }
+        match(token::op_equal);
 
         // consume '='
         consume();

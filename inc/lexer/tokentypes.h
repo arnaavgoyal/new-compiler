@@ -43,6 +43,8 @@ namespace token {
     */
     char const *get_operator_string(token_type t);
 
+    char const *get_print_string(token_type t);
+
     /**
      * Determines if the given token type is a literal token.
     */

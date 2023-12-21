@@ -237,7 +237,8 @@ public:
         std::string const *ident,
         std::vector<std::pair<std::string const *, SourceLocation>> params,
         SourceLocation ident_loc,
-        SourceLocation param_list_loc
+        SourceLocation param_list_start_loc,
+        SourceLocation param_list_end_loc
     );
 
     void start_func_define(

@@ -16,6 +16,7 @@
 #include "codegen/codegen.h"
 #include "ir/cfg.h"
 #include "ir/pass.h"
+#include "utils/ioformat.h"
 
 #define DEBUG
 
@@ -65,34 +66,46 @@ int main(int argc, char **argv) {
     ASTNode *ast = nullptr;
     bool parse_success = parser.parse(&ast);
     ast->print();
-    std::cout << "parse status: " << (parse_success ? "success" : "failure") << std::endl;
-    if (!parse_success) {
-        return 1;
+    std::cout << "\nparse status: ";
+    if (parse_success) {
+        std::cout << ioformat::GREEN << "success" << ioformat::RESET;
     }
+    else {
+        std::cout << ioformat::RED << "failure" << ioformat::RESET;
+    }
+    std::cout << "\n\n";
 
     // dump errors
-    int num_errors = ErrorHandler::dump();
+    // std::cout << "\n-------- ErrorHandler --------\n";
+    // int num_errors = ErrorHandler::dump();
+    // std::cout << "\n-------- DiagnosticHandler --------\n";
+    int num_errors = DiagnosticHandler::dump();
+    std::cout << num_errors << " errors\n\n";
 
     // fail if errors
     if (num_errors) {
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
+    }
+
+    if (!parse_success) {
+        exit(EXIT_FAILURE);
     }
 
     // ---------------- MIDEND ------------------
 
-    // ir::Program *prog = ASTTranslator().translate(ast);
-    // std::cout << std::endl;
-    // prog->dump();
+    ir::Program *prog = ASTTranslator().translate(ast);
+    std::cout << std::endl;
+    //prog->dump();
 
-    // std::ofstream cfgfile("cfg.dot");
-    // dump_cfg(prog->get_function("main"), cfgfile);
-    // cfgfile.close();
+    std::ofstream cfgfile("cfg.dot");
+    dump_cfg(prog->get_function("main"), cfgfile);
+    cfgfile.close();
 
-    // run_stackpromotion(prog->get_function("foo"));
-    // prog->dump();
+    run_stackpromotion(prog->get_function("foo"));
+    //prog->dump();
 
-    // run_stackpromotion(prog->get_function("main"));
-    // prog->dump();
+    run_stackpromotion(prog->get_function("main"));
+    prog->dump();
 
     // ---------------- BACKEND ------------------
 

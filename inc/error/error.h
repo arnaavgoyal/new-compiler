@@ -1,94 +1,105 @@
 #ifndef ERROR_H
 #define ERROR_H
 
-#include "stdlib.h"
+#include <stdlib.h>
 #include "source/source.h"
 #include <vector>
+#include <cassert>
+#include <iostream>
+#include <string.h>
+#include <string>
 
-namespace error {
+struct RawDiagnostic;
 
-    enum error_type {
+namespace diag {
 
-        // syntax errors
-        missing,
+enum class severity {
+    fatal,
+    error,
+};
 
-        // semantic errors
-        redeclaration_of_symbol_in_same_scope,
-        ident_is_not_a_typename,
-        mismatch_between_func_type_and_param_list,
-        type_is_not_callable,
-        argument_type_mismatch,
-        referenced_ident_is_undefined,
-        incompatible_operand_type,
-        pointer_to_function_type,
-        lvalue_required,
-        pointer_type_required,
-        integral_type_required,
+enum class id {
 
-        // dev errors
-        deprecated,
-        nyi
-    };
+#define DIAGNOSTIC(name, severity, str) name,
+#include "error/diagdefs"
+
+    __end
+};
+
+RawDiagnostic get(id diag_id);
 
 }
 
-class ErrorHandler {
+struct RawDiagnostic {
+    diag::severity sev;
+    char const *str;
+};
+
+class Diagnostic {
 private:
-
-    struct Error {
-        error::error_type type;
-        SourceLocation loc;
-        char const *str;
-    };
-
-    /** list of errors */
-    static std::vector<Error> list;
-
-    /**
-     * Prints the error preamble.
-     * @param loc
-    */
-    static void print_error_preamble(SourceLocation &loc);
-
-    /**
-     * Sets the given stream to the start of the current line (i.e. the next
-     * character in the stream is the first char in the line).
-     * 
-     * @param stream
-     * @param loc
-    */
-    static void set_stream_to_line_start(std::ifstream *stream, SourceLocation &loc);
-
-    /**
-     * Prints the pretty location highlight of error at location within
-     * the source code.
-     * @param loc
-    */
-    static void print_loc_highlight(SourceLocation &loc);
-
-    /**
-     * Prints an error.
-    */
-   static void print_error(Error &err);
+    friend class DiagnosticBuilder;
+    friend class DiagnosticHandler;
+    diag::severity sev;
+    char const *formatstr = nullptr;
+    std::string finalstr;
+    std::vector<std::string> args;
+    std::vector<SourceLocation> locs;
 
 public:
+    Diagnostic() = default;
+    void fmt();
+};
 
-    /**
-     * Handles an error.
-     * 
-     * @param type the type of error
-     * @param loc the location of the error
-     * @param missing string to print for what is missing
-    */
-    static void handle(error::error_type type, SourceLocation loc, char const *str);
+class DiagnosticBuilder {
+private:
+    Diagnostic d;
+    bool valid = true;
 
-    /**
-     * Dumps all queued errors.
-    */
+public:
+    DiagnosticBuilder(diag::id id) {
+        auto rd = diag::get(id);
+        d.sev = rd.sev;
+        d.formatstr = rd.str;
+    }
+    DiagnosticBuilder &add(SourceLocation loc) {
+        assert(valid);
+        d.locs.push_back(loc);
+        return *this;
+    }
+    DiagnosticBuilder &add(std::string str) {
+        assert(valid);
+        d.args.push_back(str);
+        return *this;
+    }
+    DiagnosticBuilder &add(char const *str) {
+        assert(valid);
+        d.args.push_back(str);
+        return *this;
+    }
+    void finish();
+};
+
+class DiagnosticHandler {
+private:
+    static std::vector<Diagnostic> diags;
+
+    friend DiagnosticBuilder;
+    static void handle(Diagnostic &&d) {
+        diags.push_back(std::move(d));
+        // if (d.sev == diag::severity::fatal) {
+        //     prog_exit();
+        // }
+    }
+
+public:
+    static DiagnosticBuilder make(diag::id id, SourceLocation caretloc) {
+        auto db = DiagnosticBuilder(id);
+        db.add(caretloc);
+        return db;
+    }
+    static void print_diag(Diagnostic &diag);
     static int dump();
-
-    static void prog_exit() { dump(); exit(EXIT_FAILURE); }
-
+    static void prog_exit();
 };
 
 #endif

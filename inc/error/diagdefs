@@ -1,0 +1,58 @@
+#ifndef DIAGNOSTIC
+#define DIAGNOSTIC(name, severity, str)
+#endif
+
+// syntax
+
+DIAGNOSTIC(expected_expression, error, "expected expression")
+DIAGNOSTIC(expected_token, error, "expected '%0'")
+DIAGNOSTIC(expected_type, error, "expected type")
+DIAGNOSTIC(decl_expected_identifier, fatal, "expected identifier for declaration")
+DIAGNOSTIC(type_decl_expected_assignment, fatal, "expected '=' after type declaration")
+
+// semantic
+
+// decls
+DIAGNOSTIC(symbol_redeclaration, error, "redeclaration of symbol '%0'")
+DIAGNOSTIC(type_redeclaration, error, "redeclaration of type '%0'")
+DIAGNOSTIC(use_of_undeclared_type, error, "use of undeclared type '%0'")
+DIAGNOSTIC(pointer_to_function_type_invalid, error, "pointer to function is not a valid type")
+
+// func decls
+DIAGNOSTIC(func_decl_too_few_parameters, error, "too few parameters declared for function '%0' of type '%1' (expected %2, got %3)")
+DIAGNOSTIC(func_decl_too_many_parameters, error, "too many parameters declared for function '%0' of type '%1' (expected %2, got %3)")
+
+// call exprs
+DIAGNOSTIC(noncallable_expression, error, "expression is not callable (type is '%0')")
+DIAGNOSTIC(call_expr_too_few_arguments, error, "too few arguments to function of type '%2' (expected %0, got %1)")
+DIAGNOSTIC(call_expr_too_many_arguments, error, "too many arguments to function of type '%2' (expected %0, got %1)")
+DIAGNOSTIC(call_expr_typecheck_argument, error, "argument type mismatch (expected '%0', got '%1')")
+
+// ref exprs
+DIAGNOSTIC(use_of_undeclared_symbol, error, "use of undeclared symbol '%0'")
+
+// indirection
+DIAGNOSTIC(indirection_typecheck, error, "indirection requires operand of pointer type (got '%0')")
+
+// address-of
+DIAGNOSTIC(address_of_typecheck, error, "address-of requires lvalue operand (got rvalue of type '%0')")
+
+// logical not
+DIAGNOSTIC(logical_not_typecheck, error, "logical not requires operand of integral type (got '%0')")
+
+// unary negate
+DIAGNOSTIC(unary_negate_typecheck, error, "unary negate requires operand of integral type (got '%0')")
+
+// side-effecting unary ops (pre/postfix incr/decrement)
+DIAGNOSTIC(side_effecting_unary_typecheck_lvalue, error, "pre/postfix incr/decrement requires lvalue operand (got rvalue of type '%0')")
+DIAGNOSTIC(side_effecting_unary_typecheck_integral, error, "pre/postfix incr/decrement requires operand of integral type (got '%0')")
+
+// binary operators
+DIAGNOSTIC(binary_op_typecheck, error, "incompatible operands to binary operator '%0' ('%1' and '%2')")
+
+// dev
+
+DIAGNOSTIC(deprecated, error, "%0 are deprecated")
+DIAGNOSTIC(nyi, error, "%0 are not yet implemented")
+
+#undef DIAGNOSTIC

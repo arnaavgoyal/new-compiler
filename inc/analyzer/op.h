@@ -73,7 +73,7 @@ namespace op {
         //  grouping
         group,
         // indirection
-        deref,
+        indirect,
 
         __misc_high_bound,
     };

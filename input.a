@@ -2,11 +2,17 @@ def (*i8) i32
 foo(str) {
     return 0;
 }
-def (i32, *i8) i32
+
+type myty = i32;
+//type myty = hehehe;
+
+def (i32, **i8) i32
 main(argc, argv) {
     var *i8 str = *argv;
+    //var []*()i32 str;
+    //str++;
     var i32 val = 0;
-    str = *argv;
+    //str = *argv;
     while (val) {
         val = foo(str);
         if (val) {

@@ -72,11 +72,20 @@ public:
     std::string const *get_literal_str() { return str; }
     char const *get_operator_str() { return token::get_operator_string(type); }
     char const *get_keyword_str() { return token::get_keyword_string(type); }
+    char const *get_str() {
+        if (token::is_keyword(type)) {
+            return token::get_keyword_string(type); 
+        }
+        if (token::is_operator(type)) {
+            return token::get_operator_string(type);
+        }
+        return str->c_str();
+    }
 
     /**
      * Gets token name as string for debugging purposes.
     */
-    char const *get_print_str();
+    char const *get_token_str();
 
 };
 

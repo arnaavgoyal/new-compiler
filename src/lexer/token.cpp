@@ -16,6 +16,6 @@ void Token::clear() {
     str = nullptr;
 }
 
-char const *Token::get_print_str() {
+char const *Token::get_token_str() {
     return token::get_token_string(type);
 }

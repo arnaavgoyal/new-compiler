@@ -3,10 +3,10 @@
 #include "utils/ioformat.h"
 #include <iostream>
 #include <iomanip>
+#include <ctype.h>
+#include <utility>
 
-std::vector<ErrorHandler::Error> ErrorHandler::list = std::vector<Error>();
-
-void ErrorHandler::print_error_preamble(SourceLocation &loc) {
+static void print_loc_prefix(SourceLocation &loc) {
     std::cout 
         << ioformat::WHITE
         << SourceManager::get_source_path(loc.src_id)
@@ -16,7 +16,7 @@ void ErrorHandler::print_error_preamble(SourceLocation &loc) {
         << ioformat::RESET;
 }
 
-void ErrorHandler::set_stream_to_line_start(std::ifstream *stream, SourceLocation &loc) {
+static void set_filestream_to_line_start(std::ifstream *stream, SourceLocation &loc) {
     if (loc.start_row == 1) {
         stream->seekg(0, std::ios::beg);
         while (isspace(stream->peek())) {
@@ -34,20 +34,20 @@ void ErrorHandler::set_stream_to_line_start(std::ifstream *stream, SourceLocatio
     }
 }
 
-void ErrorHandler::print_loc_highlight(SourceLocation &loc) {
+static void print_loc_highlight(SourceLocation &loc) {
 
     // get source file
     std::ifstream *src = SourceManager::open_source(loc.src_id);
 
     // set stream to line start
-    set_stream_to_line_start(src, loc);
+    set_filestream_to_line_start(src, loc);
 
     // print code highlight
-    int pre_offset = 8;
-    int len = 0;
-    int i = 0;
+    unsigned pre_offset = 8;
+    unsigned len = 0;
+    unsigned i = 0;
     std::cout << std::setfill(' ') << std::setw(5) << loc.start_row << " | ";
-    int pos;
+    unsigned pos;
     bool flag = false;
     //::cout << loc.end_offset - loc.start_offset << std::endl;
     int c = src->peek();
@@ -73,12 +73,12 @@ void ErrorHandler::print_loc_highlight(SourceLocation &loc) {
     std::cout << std::endl;
 
     // print underline
-    for (int j = 0; j < pre_offset; j++) {
+    for (unsigned j = 0; j < pre_offset; j++) {
         putchar(' ');
     }
     std::cout << ioformat::RED;
     putchar('^');
-    for (int j = 0; j < len; j++) {
+    for (unsigned j = 0; j < len; j++) {
         putchar('~');
     }
     std::cout << ioformat::RESET << std::endl;
@@ -88,54 +88,99 @@ void ErrorHandler::print_loc_highlight(SourceLocation &loc) {
     delete src;
 }
 
-void ErrorHandler::print_error(Error &err) {
+void DiagnosticHandler::print_diag(Diagnostic &diag) {
+
     // print preamble
-    print_error_preamble(err.loc);
+    print_loc_prefix(diag.locs[0]);
 
     // print error
-    switch (err.type) {
-
-        case error::missing:
-            std::cout << "expected " << ioformat::GREEN << err.str << ioformat::RESET;
-            break;
-
-        case error::ident_is_not_a_typename:
-            std::cout << ioformat::GREEN << err.str << ioformat::RESET << " is not a typename";
-            break;
-
-        case error::deprecated:
-            std::cout << ioformat::CYAN << err.str << ioformat::RESET << " is deprecated";
-            break;
-        case error::nyi:
-            std::cout << ioformat::BLUE << err.str << ioformat::RESET << " are not yet implemented";
-            break;
-
-        default:
-            std::cout << ioformat::WHITE << err.str << ioformat::RESET;
-            break;
-    }
-    
-    std::cout << std::endl;
+    std::cout << ioformat::WHITE << diag.finalstr << ioformat::RESET << std::endl;
 
     // print loc highlight
-    print_loc_highlight(err.loc);
+    print_loc_highlight(diag.locs[0]);
 }
 
-void ErrorHandler::handle(error::error_type type, SourceLocation loc, char const *str) {
-
-    // add error to list
-    Error err = {type, loc, str};
-    list.push_back(err);
-
-    //print_error(err);
-}
-
-int ErrorHandler::dump() {
-
-    // print all errors
-    for (std::vector<Error>::iterator i = list.begin(); i != list.end(); i++) {
-        print_error(*i);
+static void fmt(std::string &finalstr, char const *formatstr, char const *formatend, std::vector<std::string> &args) {
+start:
+    auto formatstart = formatstr;
+    while (*formatstr != '%' && formatstr != formatend) {
+        formatstr++;
+    }
+    finalstr.append(formatstart, formatstr - formatstart);
+    if (formatstr == formatend) {
+        return;
     }
 
-    return list.size();
+    assert(*formatstr == '%' && "not at end of format string but also not at a '%'?");
+
+    formatstr++;
+
+    assert(isdigit(*formatstr) && "char after '%' is not a digit");
+
+    unsigned char idx = *formatstr - '0';
+    finalstr.append(args[idx]);
+
+    formatstr++;
+
+    if (formatstr != formatend) {
+        goto start;
+    }
+}
+
+namespace diag {
+
+RawDiagnostic get(id diag_id) {
+    switch (diag_id) {
+
+#define DIAGNOSTIC(name, sev, str) case id::name: return RawDiagnostic{severity::sev, str};
+#include "error/diagdefs"
+
+        case id::__end:
+        default:
+            break;
+    }
+    assert(false && "unreachable");
+    return RawDiagnostic();
+}
+
+}
+
+void Diagnostic::fmt() {
+    ::fmt(finalstr, formatstr, formatstr + strlen(formatstr), args);
+}
+
+void DiagnosticBuilder::finish() {
+    std::cout << "finishing diag\n";
+    std::cout << "  args:\n";
+    for (auto &str : d.args) {
+        std::cout << "    " << str << std::endl;
+    }
+    std::cout << "  locs:\n";
+    for (auto &loc : d.locs) {
+        std::cout << "    ";
+        loc.print();
+        std::cout << std::endl;
+    }
+    valid = false;
+    std::cout << "  formatting\n";
+    d.fmt();
+    std::cout << "    done\n";
+    std::cout << "  final: " << d.finalstr << std::endl;
+    std::cout << "  handling\n";
+    DiagnosticHandler::handle(std::move(d));
+    std::cout << "    done\n";
+}
+
+std::vector<Diagnostic> DiagnosticHandler::diags;
+
+int DiagnosticHandler::dump() {
+    for (Diagnostic &diag : diags) {
+        print_diag(diag);
+    }
+    return diags.size();
+}
+
+void DiagnosticHandler::prog_exit() {
+    dump();
+    exit(EXIT_FAILURE);
 }

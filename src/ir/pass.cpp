@@ -427,7 +427,7 @@ static bool eligible(ir::SAllocInstr *sa, DJG &djg, std::set<DJGVertex *> &alpha
 
 static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &djg) {
 
-    std::cout << "starting stackpromote for " << sa->get_name() << std::endl;
+    //std::cout << "starting stackpromote for " << sa->get_name() << std::endl;
 
     // naming stopgap until uniqued names are fixed
     // unsigned counter = 1;
@@ -449,32 +449,32 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
         // visit curr
         ir::Block *b = curr->block;
-        std::cout << "  visiting " << b->get_name() << std::endl;
+        //std::cout << "  visiting " << b->get_name() << std::endl;
 
         // if b is in the iterated dominance frontier
         if (idf.contains(b)) {
-            std::cout << "    idf" << std::endl;
+            //std::cout << "    idf" << std::endl;
 
             // insert an empty phi node
             auto phi = new ir::PhiInstr(sa->get_alloc_ty(), b, sa->get_name() /* + std::to_string(counter++) */);
-            std::cout << "    inserted phi" << std::endl;
+            //std::cout << "    inserted phi" << std::endl;
 
             // use the phi as this block's most recent def
             most_recents[b] = phi;
-            std::cout << "    updated most recent" << std::endl;
+            //std::cout << "    updated most recent" << std::endl;
 
             std::vector<ir::Block *> needs;
             for (auto pred : predecessors(b)) {
                 auto rec = most_recents[pred];
                 if (rec) {
-                    std::cout << "    adding alternative from " << pred->get_name() << std::endl;
+                    //std::cout << "    adding alternative from " << pred->get_name() << std::endl;
                     phi->add_alternative(pred, rec);
-                    std::cout << "      done" << std::endl;
+                    //std::cout << "      done" << std::endl;
                 }
                 else {
-                    std::cout << "    adding def from " << pred->get_name() << " as a need" << std::endl;
+                    //std::cout << "    adding def from " << pred->get_name() << " as a need" << std::endl;
                     needs.push_back(pred);
-                    std::cout << "      done" << std::endl;
+                    //std::cout << "      done" << std::endl;
                 }
             }
 
@@ -488,18 +488,18 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
             // propagate the most recent def from idom(b)
             most_recents[b] = most_recents[curr->in_d_edge->from->block];
-            std::cout << "    propagated ";
+            //std::cout << "    propagated ";
             if (most_recents[b]) {
-                most_recents[b]->dump_as_operand();
-                std::cout << " <" << most_recents[b] << ">";
+                //most_recents[b]->dump_as_operand();
+                //std::cout << " <" << most_recents[b] << ">";
             }
             else {
-                std::cout << "null";
+                //std::cout << "null";
             }
-            std::cout << " from " << curr->in_d_edge->from->block->get_name() << std::endl;
+            //std::cout << " from " << curr->in_d_edge->from->block->get_name() << std::endl;
         }
 
-        std::cout << "    rectifying reads/writes" << std::endl;
+        //std::cout << "    rectifying reads/writes" << std::endl;
 
         // visit each instr in order
         for (auto i : *b) {
@@ -518,8 +518,8 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 ir::Def *mrdef = most_recents[b];
                 assert(mrdef && "no most recent def?");
 
-                std::cout << "    mrdef to replace " << i->get_name() << " : ";
-                mrdef->dump();
+                //std::cout << "    mrdef to replace " << i->get_name() << " : ";
+                //mrdef->dump();
 
                 // then replace all uses of instr with the def
                 for (auto u : i->uses_iterable()) {
@@ -550,10 +550,10 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 most_recents[b] = inner;
             }
         }
-        
-        std::cout << "    most_recent = ";
-        most_recents[b]->dump_as_operand();
-        std::cout << " <" << most_recents[b] << ">" << std::endl;
+
+        //std::cout << "    most_recent = ";
+        //most_recents[b]->dump_as_operand();
+        //std::cout << " <" << most_recents[b] << ">" << std::endl;
 
         // add new (not found before) vertices
         for (auto e : curr->out_edges) {
@@ -586,25 +586,25 @@ void run_stackpromotion(ir::Function *f) {
             ir::SAllocInstr *sa = static_cast<ir::SAllocInstr *>(i);
             std::set<DJGVertex *> alpha;
             if (eligible(sa, djg, alpha)) {
-                std::cout << "alpha for " << ioformat::YELLOW << sa->get_name()
-                    << ioformat::RESET << " is { ";
-                print_internally_separated_list(
-                    alpha.begin(),
-                    alpha.end(),
-                    ", ",
-                    [](DJGVertex *v) { std::cout << v->block->get_name(); }
-                );
-                std::cout << " }\n";
+                //std::cout << "alpha for " << ioformat::YELLOW << sa->get_name()
+                //    << ioformat::RESET << " is { ";
+                // print_internally_separated_list(
+                //     alpha.begin(),
+                //     alpha.end(),
+                //     ", ",
+                //     [](DJGVertex *v) { std::cout << v->block->get_name(); }
+                // );
+                //std::cout << " }\n";
                 std::set<ir::Block *> idf = compute_idf(djg, alpha);
-                std::cout << "idf for " << ioformat::YELLOW << sa->get_name()
-                    << ioformat::RESET << " is { ";
-                print_internally_separated_list(
-                    idf.begin(),
-                    idf.end(),
-                    ", ",
-                    [](ir::Block *b) { std::cout << b->get_name(); }
-                );
-                std::cout << " }\n";
+                //std::cout << "idf for " << ioformat::YELLOW << sa->get_name()
+                //    << ioformat::RESET << " is { ";
+                // print_internally_separated_list(
+                //     idf.begin(),
+                //     idf.end(),
+                //     ", ",
+                //     [](ir::Block *b) { std::cout << b->get_name(); }
+                // );
+                //std::cout << " }\n";
                 //continue;
                 stackpromote(sa, idf, djg);
                 //return;

@@ -78,7 +78,12 @@ ir::Program *ASTTranslator::t_program(ASTNode const *ast) {
             case ast::var_decl:
                 t_gvar(node, p);
                 break;
+            case ast::typedef_stmt:
+                // aliasing means nothing in ir,
+                // so ignore this
+                break;
             default:
+                //node->print();
                 UNREACHABLE
         }
     }
@@ -325,7 +330,7 @@ ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
             d = t_rval(d, t_type(a->type));
         }
         args.push_back(d);
-        d->dump();
+        //d->dump();
     }
 
     // get the callee function
@@ -358,7 +363,7 @@ ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref) {
 
 ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
 
-    std::cout << "\nUNOP------------\n";
+    //std::cout << "\nUNOP------------\n";
 
     // generate ir for the inner expr
     Type *ast_inner_ty = (Type *)unop->children[0]->type;
@@ -369,12 +374,12 @@ ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
         case op::addr:
             // idk how to impl this rn
             NYI(addr)
-        case op::deref: {
-            unop->print_ast(unop, "  ");
+        case op::indirect: {
+            //unop->print_ast(unop, "  ");
             if (ci_lval) {
                 d = t_rval(d, ir::PrimitiveType::get_ptr_type());
             }
-            d->dump(2);
+            //d->dump(2);
             ci_lval = true;
             return d;
         }
@@ -525,7 +530,7 @@ ir::Def *ASTTranslator::t_cond(ASTNode const *expr) {
         return irexpr;
     }
     assert(irexpr->get_type()->is_integral_type() && "only integral types can be coerced to boolean");
-    irexpr->dump();
+    //irexpr->dump();
     return new ir::ICmpInstr(
         ir::cmpkind::neq,
         irexpr,

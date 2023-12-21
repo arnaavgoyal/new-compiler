@@ -124,8 +124,6 @@ SemanticAnalyzer::SemanticAnalyzer(
     str_allocator(str_allocator),
     primitive_keywords(primitives) {
 
-    std::string *str;
-
     // get error type
     error_type = Type::get_error_type();
 
@@ -345,7 +343,10 @@ Type *SemanticAnalyzer::analyze_typename(
 
     // type does not exist
     if (type == nullptr) {
-        ErrorHandler::handle(error::ident_is_not_a_typename, loc, ident->c_str());
+        // ErrorHandler::handle(error::ident_is_not_a_typename, loc, ident->c_str());
+        DiagnosticHandler::make(diag::id::use_of_undeclared_type, loc)
+            .add(*ident)
+            .finish();
         return error_type;
     }
 
@@ -374,11 +375,13 @@ Type *SemanticAnalyzer::analyze_pointer_type(
 
     // make sure is not func type
     if (pointee->kind == type::function_type) {
-        ErrorHandler::handle(
-            error::pointer_to_function_type,
-            pointer_modifier_loc,
-            "cannot make pointers to function types"
-        );
+        // ErrorHandler::handle(
+        //     error::pointer_to_function_type,
+        //     pointer_modifier_loc,
+        //     "cannot make pointers to function types"
+        // );
+        DiagnosticHandler::make(diag::id::pointer_to_function_type_invalid, pointer_modifier_loc)
+            .finish();
         return error_type;
     }
 
@@ -451,8 +454,12 @@ Type *SemanticAnalyzer::analyze_array_type(
     SourceLocation array_modifier_loc
 ) {
     // TODO: implement
-    ErrorHandler::handle(error::nyi, array_modifier_loc, "array types");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, array_modifier_loc, "array types");
+    // ErrorHandler::prog_exit();
+    DiagnosticHandler::make(diag::id::nyi, array_modifier_loc)
+        .add("array types")
+        .finish();
+    return error_type;
 }
 
 ASTNode *SemanticAnalyzer::analyze_cast_expr(
@@ -479,10 +486,7 @@ Type *SemanticAnalyzer::analyze_primitive_type(
     token::token_type prim,
     SourceLocation loc
 ) {
-    if (!token::is_primitive_type(prim)) {
-        std::cout << "analyze_primitive_type() called with non-primitive type\n";
-        ErrorHandler::prog_exit();
-    }
+    assert(token::is_primitive_type(prim) && "analyze_primitive_type() called with non-primitive type?");
 
     // THIS IS ALSO IRRELEVANT NOW
     // // this must be valid because the set of primitives is given
@@ -522,11 +526,16 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
         if (lhs->type->canonical != rhs->type->canonical) {
             op_type = error_type;
             err = true;
-            ErrorHandler::handle(
-                error::incompatible_operand_type,
-                op_loc,
-                "incompat val op types"
-            );
+            // ErrorHandler::handle(
+            //     error::incompatible_operand_type,
+            //     op_loc,
+            //     "incompat val op types"
+            // );
+            DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
+                .add(token::get_operator_string(tok))
+                .add(*lhs->type->str)
+                .add(*rhs->type->str)
+                .finish();
         }
         else {
             op_type = lhs->type;
@@ -539,11 +548,16 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
         if (lhs->type->canonical != rhs->type->canonical) {
             op_type = error_type;
             err = true;
-            ErrorHandler::handle(
-                error::incompatible_operand_type,
-                op_loc,
-                "relational op incompat operand type"
-            );
+            // ErrorHandler::handle(
+            //     error::incompatible_operand_type,
+            //     op_loc,
+            //     "relational op incompat operand type"
+            // );
+            DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
+                .add(token::get_operator_string(tok))
+                .add(*lhs->type->str)
+                .add(*rhs->type->str)
+                .finish();
         }
         else {
             op_type = Type::get_i8_type();
@@ -552,7 +566,10 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 
     else if (op::is_log_op(op)) {
 
-        ErrorHandler::handle(error::nyi, op_loc, "logical bin ops");
+        // ErrorHandler::handle(error::nyi, op_loc, "logical bin ops");
+        DiagnosticHandler::make(diag::id::nyi, total_op_loc)
+                .add("logical binary operations")
+                .finish();
 
         op_type = error_type;
         err = true;
@@ -566,7 +583,12 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 
     else if (op::is_lval_op(op)) {
         if (rhs->type->canonical != lhs->type->canonical) {
-            ErrorHandler::handle(error::incompatible_operand_type, total_op_loc, "assignee must be of equivalent type to rhs");
+            // ErrorHandler::handle(error::incompatible_operand_type, total_op_loc, "assignee must be of equivalent type to rhs");
+            DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
+                .add(token::get_operator_string(tok))
+                .add(*lhs->type->str)
+                .add(*rhs->type->str)
+                .finish();
             err = true;
         }
         op_type = lhs->type;
@@ -604,19 +626,30 @@ ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
     // ErrorHandler::prog_exit();
 
     bool err = expr->has_error;
+    auto errloc = loc;
+    errloc.copy_start(expr->loc);
+    auto ty = expr->type;
 
     switch (op) {
         case op::postincr:
         case op::postdecr:
             // the expr must be of lvalue type
             if (!expr->is_lvalue) {
-                ErrorHandler::handle(error::lvalue_required, loc, "postfix in/decrement cannot be applied to non-lvalue values");
+                // ErrorHandler::handle(error::lvalue_required, loc, "postfix in/decrement cannot be applied to non-lvalue values");
+                DiagnosticHandler::make(diag::id::side_effecting_unary_typecheck_lvalue, errloc)
+                    .add(*expr->type->str)
+                    .finish();
                 err = true;
+                ty = error_type;
             }
             // the lvalue must be of integral type
             if (!expr->type->is_integral) {
-                ErrorHandler::handle(error::integral_type_required, loc, "postfix in/decrement cannot be applied to non-integral types");
+                // ErrorHandler::handle(error::integral_type_required, loc, "postfix in/decrement cannot be applied to non-integral types");
+                DiagnosticHandler::make(diag::id::side_effecting_unary_typecheck_integral, errloc)
+                    .add(*expr->type->str)
+                    .finish();
                 err = true;
+                ty = error_type;
             }
             break;
         default:
@@ -628,7 +661,7 @@ ASTNode *SemanticAnalyzer::analyze_postfix_op_expr(
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::unary_op,
-        expr->type,
+        ty,
         nullptr,
         loc,
         tk,
@@ -659,11 +692,14 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
 
     // verify func type
     if (callable->kind != type::function_type) {
-        ErrorHandler::handle(
-            error::type_is_not_callable,
-            expr->loc,
-            "does not have type that is callable"
-        );
+        // ErrorHandler::handle(
+        //     error::type_is_not_callable,
+        //     expr->loc,
+        //     "does not have type that is callable"
+        // );
+        DiagnosticHandler::make(diag::id::noncallable_expression, expr->loc)
+            .add(*expr->type->str)
+            .finish();
         node->set(
             ast::call_expr,
             error_type,
@@ -676,50 +712,51 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
         return node;
     }
 
-    int num_args = callable->params.size();
-
-    // verify args
-    if (args.size() != num_args) {
-        error = true;
-
-        ErrorHandler::handle(
-            error::mismatch_between_func_type_and_param_list,
-            call_end_loc,
-            "wrong number of args"
-        );
-
-        node->set(
-            ast::call_expr,
-            error_type,
-            nullptr,
-            call_start_loc,
-            token::op_leftparen,
-            true
-        );
-
-        for (int i = 0; i < args.size(); i++) {
-            node->children.push_back(args[i]);
-        }
-        return node;
-    }
+    unsigned num_params = callable->params.size();
 
     // verify arg types
     ASTNode const *arg;
     std::vector<Type const *> const paramtypes = callable->params;
-    for (int i = 0; i < num_args; i++) {
+    unsigned i;
+    for (i = 0; i < num_params; i++) {
+        if (i == args.size()) {
+            // too few args
+            std::cout << *expr->type->str << std::endl;
+            DiagnosticHandler::make(diag::id::call_expr_too_few_arguments, call_end_loc)
+                .add(std::to_string(num_params))
+                .add(std::to_string(args.size()))
+                .add(*expr->type->str)
+                .finish();
+            break;
+        }
         arg = args[i];
         if (arg->type == error_type) {
             error = true;
         }
         else if (arg->type->canonical != paramtypes[i]->canonical) {
             error = true;
-            ErrorHandler::handle(
-                error::argument_type_mismatch,
-                arg->loc,
-                "argument has wrong type"
-            );
+            // ErrorHandler::handle(
+            //     error::argument_type_mismatch,
+            //     arg->loc,
+            //     "argument has wrong type"
+            // );
+            DiagnosticHandler::make(diag::id::call_expr_typecheck_argument, arg->loc)
+                .add(*paramtypes[i]->str)
+                .add(*arg->type->str)
+                .finish();
         }
         node->children.push_back(args[i]);
+    }
+
+    if (i < args.size()) {
+        // too many args
+        SourceLocation errloc = args[i]->loc;
+        errloc.copy_end(args.back()->loc);
+        DiagnosticHandler::make(diag::id::call_expr_too_many_arguments, errloc)
+            .add(std::to_string(num_params))
+            .add(std::to_string(args.size()))
+            .add(*expr->type->str)
+            .finish();
     }
 
     node->set(
@@ -741,8 +778,14 @@ ASTNode *SemanticAnalyzer::analyze_subscript_expr(
     SourceLocation subscript_end_loc
 ) {
     // TODO: implement
-    ErrorHandler::handle(error::nyi, subscript_start_loc, "array subscripts");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, subscript_start_loc, "array subscripts");
+    // ErrorHandler::prog_exit();
+    auto errloc = subscript_start_loc;
+    errloc.copy_end(subscript_end_loc);
+    DiagnosticHandler::make(diag::id::nyi, errloc)
+        .add("subscript expressions")
+        .finish();
+    return error_node;
 }
 
 ASTNode *SemanticAnalyzer::analyze_paren_expr(
@@ -785,11 +828,14 @@ ASTNode *SemanticAnalyzer::analyze_ref_expr(
     if (res == nullptr) {
         sym_type = error_type;
         err = true;
-        ErrorHandler::handle(
-            error::referenced_ident_is_undefined,
-            loc,
-            "identifier is undefined"
-        );
+        // ErrorHandler::handle(
+        //     error::referenced_ident_is_undefined,
+        //     loc,
+        //     "identifier is undefined"
+        // );
+        DiagnosticHandler::make(diag::id::use_of_undeclared_symbol, loc)
+            .add(*ident)
+            .finish();
     }
     else {
         sym_type = res->type_ptr;
@@ -815,8 +861,12 @@ ASTNode *SemanticAnalyzer::analyze_character_literal(
     SourceLocation loc
 ) {
     // TODO: implement
-    ErrorHandler::handle(error::nyi, loc, "character literals");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, loc, "character literals");
+    // ErrorHandler::prog_exit();
+    DiagnosticHandler::make(diag::id::nyi, loc)
+        .add("character literals")
+        .finish();
+    return error_node;
 }
 
 ASTNode *SemanticAnalyzer::analyze_numeric_literal(
@@ -847,8 +897,12 @@ ASTNode *SemanticAnalyzer::analyze_string_literal(
     SourceLocation loc
 ) {
     // TODO: implement
-    ErrorHandler::handle(error::nyi, loc, "string literals");
-    ErrorHandler::prog_exit();
+    // ErrorHandler::handle(error::nyi, loc, "string literals");
+    // ErrorHandler::prog_exit();
+    DiagnosticHandler::make(diag::id::nyi, loc)
+        .add("string literals")
+        .finish();
+    return error_node;
 }
 
 ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
@@ -861,18 +915,26 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
     bool err = expr->has_error;
     Type const *ty = expr->type;
     bool lval = false;
+    auto errloc = loc;
+    errloc.copy_end(expr->loc);
 
     switch (op) {
         case op::preincr:
         case op::predecr:
             // the expr must be lvalue
             if (!expr->is_lvalue) {
-                ErrorHandler::handle(error::lvalue_required, loc, "prefix in/decrement cannot be applied to non-lvalue values");
+                // ErrorHandler::handle(error::lvalue_required, loc, "prefix in/decrement cannot be applied to non-lvalue values");
+                DiagnosticHandler::make(diag::id::side_effecting_unary_typecheck_lvalue, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
             }
             // the lvalue must be of integral type
             if (!expr->type->is_integral) {
-                ErrorHandler::handle(error::integral_type_required, loc, "prefix in/decrement cannot be applied to non-integral types");
+                // ErrorHandler::handle(error::integral_type_required, loc, "prefix in/decrement cannot be applied to non-integral types");
+                DiagnosticHandler::make(diag::id::side_effecting_unary_typecheck_integral, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
             }
             // resulting value is an lval
@@ -881,27 +943,38 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
         case op::addr:
             // the expr must be lvalue
             if (!expr->is_lvalue) {
-                ErrorHandler::handle(error::lvalue_required, loc, "a non-lvalue value does not have an address");
+                // ErrorHandler::handle(error::lvalue_required, loc, "a non-lvalue value does not have an address");
+                DiagnosticHandler::make(diag::id::address_of_typecheck, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
             }
             // resulting value is pointer type
             // TODO: how do I get uniqued pointer type to expr type from here?
-            ErrorHandler::handle(error::nyi, loc, "address-of operator");
-            ErrorHandler::prog_exit();
+            ty = error_type;
             break;
-        case op::deref:
+        case op::indirect:
             // the expr must be of pointer type
             if (expr->type->kind != type::pointer_type) {
-                ErrorHandler::handle(error::pointer_type_required, loc, "value of non-pointer type cannot be dereferenced");
+                // ErrorHandler::handle(error::pointer_type_required, loc, "value of non-pointer type cannot be dereferenced");
+                DiagnosticHandler::make(diag::id::indirection_typecheck, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
+                ty = error_type;
             }
-            ty = expr->type->points_to;
+            else {
+                ty = ty->points_to;
+            }
             lval = true;
             break;
         case op::lnot:
             // expr must be of integral type
-            if (!expr->type->is_integral) {
-                ErrorHandler::handle(error::integral_type_required, loc, "logical not cannot be applied to non-integral types");
+            if (!ty->is_integral) {
+                // ErrorHandler::handle(error::integral_type_required, loc, "logical not cannot be applied to non-integral types");
+                DiagnosticHandler::make(diag::id::logical_not_typecheck, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
             }
             // resulting value is bool
@@ -909,11 +982,14 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
             break;
         case op::neg:
             // expr must be of integral type
-            if (!expr->type->is_integral) {
-                ErrorHandler::handle(error::integral_type_required, loc, "negation cannot be applied to non-integral types");
+            if (!ty->is_integral) {
+                // ErrorHandler::handle(error::integral_type_required, loc, "negation cannot be applied to non-integral types");
+                DiagnosticHandler::make(diag::id::unary_negate_typecheck, errloc)
+                    .add(*ty->str)
+                    .finish();
                 err = true;
+                ty = error_type;
             }
-            ty = expr->type;
             break;
         default:
             assert(false && "should be unreachable");
@@ -943,27 +1019,22 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
     std::string const *ident,
     std::vector<std::pair<std::string const *, SourceLocation>> params,
     SourceLocation ident_loc,
-    SourceLocation param_list_loc
+    SourceLocation param_list_start_loc,
+    SourceLocation param_list_end_loc
 ) {
     // ErrorHandler::handle(error::nyi, ident_loc, "function declarations");
     // ErrorHandler::prog_exit();
 
-    // param num mismatch
-    if (type->params.size() != params.size()) {
-        ErrorHandler::handle(
-            error::mismatch_between_func_type_and_param_list,
-            param_list_loc,
-            "wrong number of parameters"
-        );
-    }
-
     // redeclaration in current scope
     if (find_symbol_in_current_scope(ident, *scope)) {
-        ErrorHandler::handle(
-            error::redeclaration_of_symbol_in_same_scope,
-            ident_loc,
-            "redeclared symbol"
-        );
+        // ErrorHandler::handle(
+        //     error::redeclaration_of_symbol_in_same_scope,
+        //     ident_loc,
+        //     "redeclared symbol"
+        // );
+        DiagnosticHandler::make(diag::id::symbol_redeclaration, ident_loc)
+            .add(*ident)
+            .finish();
     }
 
     // add to symbol table
@@ -985,7 +1056,19 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
 
     // add params
     ASTNode *param;
-    for (int i = 0; i < params.size(); i++) {
+    unsigned i;
+    for (i = 0; i < type->params.size(); i++) {
+
+        if (i == params.size()) {
+            // too few params
+            DiagnosticHandler::make(diag::id::func_decl_too_few_parameters, param_list_end_loc)
+                .add(*ident)
+                .add(*type->str)
+                .add(std::to_string(type->params.size()))
+                .add(std::to_string(params.size()))
+                .finish();
+            break;
+        }
 
         // add to symbol table
         sym = insert_symbol(
@@ -1008,6 +1091,18 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
 
         // add to decl node
         node->children.push_back(param);
+    }
+
+    if (i < params.size()) {
+        // too many params
+        auto errloc = params[i].second;
+        errloc.copy_end(params.back().second);
+        DiagnosticHandler::make(diag::id::func_decl_too_many_parameters, errloc)
+            .add(*ident)
+            .add(*type->str)
+            .add(std::to_string(type->params.size()))
+            .add(std::to_string(params.size()))
+            .finish();
     }
 
     return (node);
@@ -1047,11 +1142,14 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
 
     // ensure no redeclaration
     if (find_symbol_in_current_scope(ident, *scope)) {
-        ErrorHandler::handle(
-            error::redeclaration_of_symbol_in_same_scope,
-            ident_loc,
-            ident->c_str()
-        );
+        // ErrorHandler::handle(
+        //     error::redeclaration_of_symbol_in_same_scope,
+        //     ident_loc,
+        //     ident->c_str()
+        // );
+        DiagnosticHandler::make(diag::id::symbol_redeclaration, ident_loc)
+            .add(*ident)
+            .finish();
         decl->has_error = true;
     }
 
@@ -1086,11 +1184,14 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
 
     // ensure no redeclaration
     if (find_type_in_current_scope(ident, *scope)) {
-        ErrorHandler::handle(
-            error::redeclaration_of_symbol_in_same_scope,
-            ident_loc,
-            ident->c_str()
-        );
+        // ErrorHandler::handle(
+        //     error::redeclaration_of_symbol_in_same_scope,
+        //     ident_loc,
+        //     ident->c_str()
+        // );
+        DiagnosticHandler::make(diag::id::type_redeclaration, ident_loc)
+            .add(*ident)
+            .finish();
         err = true;
         alias = error_type;
     }
