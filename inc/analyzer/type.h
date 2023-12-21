@@ -5,6 +5,7 @@
 #include <vector>
 #include "lexer/tokentypes.h"
 #include <map>
+#include <cassert>
 
 namespace type {
     enum kind {
@@ -106,6 +107,75 @@ public:
     static Type *get_f64_type();
     static Type *get_void_type();
     static Type *get_prim(token::token_type);
+    static Type *get_error_type();
+};
+
+class NType {
+private:
+    type::kind kind;
+    NType *canonical;
+
+protected:
+    NType(type::kind kind, NType *canonical) : kind(kind), canonical(canonical) {
+        if (!canonical) {
+            this->canonical = this;
+        }
+    }
+
+public:
+    type::kind get_kind() { return kind; }
+    NType *get_canonical() { return canonical; }
+};
+
+class PointerType : public NType {
+private:
+    NType *pointee;
+
+protected:
+    PointerType(NType *pointee, PointerType *canonical)
+        : NType(type::pointer_type, canonical), pointee(pointee) { }
+
+public:
+    NType *get_pointee() { return pointee; }
+};
+
+class ArrayType : public NType {
+private:
+    NType *element;
+
+protected:
+    ArrayType(NType *element_ty, ArrayType *canonical)
+        : NType(type::array_type, canonical), element(element_ty) { }
+
+public:
+    NType *get_element_ty() { return element; }
+};
+
+class AliasType : public NType {
+private:
+    std::string str;
+    NType *aliasee;
+
+protected:
+    AliasType(std::string str, NType *aliasee, NType *canonical)
+        : NType(type::alias_type, canonical), str(str), aliasee(aliasee) { }
+
+public:
+    NType *get_aliasee() { return aliasee; }
+};
+
+class FunctionType : public NType {
+private:
+    NType *return_ty;
+    std::vector<NType *> params;
+
+protected:
+    FunctionType(NType *return_ty, std::vector<NType *> params, NType *canonical)
+        : NType(type::function_type, canonical), return_ty(return_ty), params(params) { }
+
+public:
+    NType *get_return_ty() { return return_ty; }
+    std::vector<NType *> get_params() { return params; }
 };
 
 #endif

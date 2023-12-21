@@ -65,7 +65,6 @@ Type *Type::get_void_type() {
     static std::unique_ptr<Type> ty(new Type(str, type::primitive_type, false));
     return ty.get();
 }
-
 Type *Type::get_prim(token::token_type tk) {
     assert(token::is_primitive_type(tk) && "get_prim called with non-primitive token type");
     switch (tk) {
@@ -90,4 +89,9 @@ case token::kw_##TYTK: return get_##TYTK##_type();
         default:
             assert(false && "should be unreachable");
     }
+}
+Type *Type::get_error_type() {
+    static std::string *str = new std::string("<error-type>");
+    static std::unique_ptr<Type> ty(new Type(str, type::error_type, true));
+    return ty.get();
 }

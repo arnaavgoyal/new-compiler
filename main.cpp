@@ -65,7 +65,10 @@ int main(int argc, char **argv) {
     ASTNode *ast = nullptr;
     bool parse_success = parser.parse(&ast);
     ast->print();
-    std::cout << parse_success << std::endl;
+    std::cout << "parse status: " << (parse_success ? "success" : "failure") << std::endl;
+    if (!parse_success) {
+        return 1;
+    }
 
     // dump errors
     int num_errors = ErrorHandler::dump();
@@ -77,19 +80,19 @@ int main(int argc, char **argv) {
 
     // ---------------- MIDEND ------------------
 
-    ir::Program *prog = ASTTranslator().translate(ast);
-    std::cout << std::endl;
-    prog->dump();
+    // ir::Program *prog = ASTTranslator().translate(ast);
+    // std::cout << std::endl;
+    // prog->dump();
 
-    std::ofstream cfgfile("cfg.dot");
-    dump_cfg(prog->get_function("main"), cfgfile);
-    cfgfile.close();
+    // std::ofstream cfgfile("cfg.dot");
+    // dump_cfg(prog->get_function("main"), cfgfile);
+    // cfgfile.close();
 
-    run_stackpromotion(prog->get_function("foo"));
-    prog->dump();
+    // run_stackpromotion(prog->get_function("foo"));
+    // prog->dump();
 
-    run_stackpromotion(prog->get_function("main"));
-    prog->dump();
+    // run_stackpromotion(prog->get_function("main"));
+    // prog->dump();
 
     // ---------------- BACKEND ------------------
 

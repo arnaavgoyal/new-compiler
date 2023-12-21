@@ -126,14 +126,8 @@ SemanticAnalyzer::SemanticAnalyzer(
 
     std::string *str;
 
-    // create error type
-    error_type = type_allocator.alloc();
-    error_type->kind = type::error_type;
-    error_type->canonical = error_type;
-    str = str_allocator.alloc();
-    str->assign("<error-type>");
-    error_type->str = str;
-    error_type->contains_error = true;
+    // get error type
+    error_type = Type::get_error_type();
 
     // create error node
     error_node = node_allocator.alloc();
@@ -516,6 +510,8 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     // ErrorHandler::prog_exit();
 
     Type const *op_type;
+    SourceLocation total_op_loc = lhs->loc;
+    total_op_loc.copy_end(rhs->loc);
 
     // propagate potential error state
     bool err = lhs->has_error || rhs->has_error;
@@ -569,6 +565,10 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     }
 
     else if (op::is_lval_op(op)) {
+        if (rhs->type->canonical != lhs->type->canonical) {
+            ErrorHandler::handle(error::incompatible_operand_type, total_op_loc, "assignee must be of equivalent type to rhs");
+            err = true;
+        }
         op_type = lhs->type;
     }
 
@@ -583,7 +583,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
         ast::binary_op,
         op_type,
         nullptr,
-        op_loc,
+        total_op_loc,
         tok,
         err
     );
@@ -919,7 +919,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
             assert(false && "should be unreachable");
     }
 
-    loc.copy_start(expr->loc);
+    loc.copy_end(expr->loc);
 
     ASTNode *node = node_allocator.alloc();
     node->set(

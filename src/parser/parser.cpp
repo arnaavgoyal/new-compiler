@@ -108,6 +108,7 @@ ASTNode *Parser::left_assoc_bin_op(
 
             // get result of right side (higher prec)
             rhs = (this->*higher_prec)();
+            //op_loc.copy_end(tk.get_src_loc());
 
             // get the operation kind
             op_kind = ops[it - types.begin()];
@@ -147,6 +148,7 @@ ASTNode *Parser::right_assoc_bin_op(
 
         // get result of rhs (same prec)
         rhs = right_assoc_bin_op(higher_prec, types, ops);
+        //op_loc.copy_end(tk.get_src_loc());
 
         // get corresponding op
         op_kind = ops[it - types.begin()];
