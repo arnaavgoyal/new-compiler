@@ -430,7 +430,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
     std::cout << "starting stackpromote for " << sa->get_name() << std::endl;
 
     // naming stopgap until uniqued names are fixed
-    unsigned counter = 1;
+    // unsigned counter = 1;
 
     // bfs structures
     std::deque<DJG::vertex_ty *> working;
@@ -456,7 +456,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
             std::cout << "    idf" << std::endl;
 
             // insert an empty phi node
-            auto phi = new ir::PhiInstr(sa->get_alloc_ty(), b, sa->get_name() + std::to_string(counter++));
+            auto phi = new ir::PhiInstr(sa->get_alloc_ty(), b, sa->get_name() /* + std::to_string(counter++) */);
             std::cout << "    inserted phi" << std::endl;
 
             // use the phi as this block's most recent def
@@ -467,17 +467,16 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
             for (auto pred : predecessors(b)) {
                 auto rec = most_recents[pred];
                 if (rec) {
-                    std::cout << "      adding alternative from " << pred->get_name() << std::endl;
+                    std::cout << "    adding alternative from " << pred->get_name() << std::endl;
                     phi->add_alternative(pred, rec);
-                    std::cout << "        done" << std::endl;
+                    std::cout << "      done" << std::endl;
                 }
                 else {
-                    std::cout << "      adding def from " << pred->get_name() << " as a need" << std::endl;
+                    std::cout << "    adding def from " << pred->get_name() << " as a need" << std::endl;
                     needs.push_back(pred);
-                    std::cout << "        done" << std::endl;
+                    std::cout << "      done" << std::endl;
                 }
             }
-            std::cout << "    filled phi and populated needs" << std::endl;
 
             if (needs.size() > 0) {
                 unfinished_phis.push_back(std::make_pair(phi, needs));
@@ -486,7 +485,6 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
         // b is not in idf
         else {
-            std::cout << "    non-idf" << std::endl;
 
             // propagate the most recent def from idom(b)
             most_recents[b] = most_recents[curr->in_d_edge->from->block];
@@ -499,60 +497,63 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 std::cout << "null";
             }
             std::cout << " from " << curr->in_d_edge->from->block->get_name() << std::endl;
-
-            // visit each instr in order
-            for (auto i : *b) {
-
-                // determine which instrs in b are relevant
-                if (std::find_if(sa->uses_begin(), sa->uses_end(),
-                    [=](ir::Use *const &u) { return i == u->get_user(); }) == sa->uses_end()) {
-
-                    // irrelevant instr
-                    continue;
-                }
-
-                // if instr is read
-                if (i->get_instr_kind() == ir::instr::read) {
-
-                    // get the most recent def of sa for b
-                    ir::Def *mrdef = most_recents[b];
-                    assert(mrdef && "no most recent def?");
-                    std::cout << "    mrdef to replace " << i->get_name() << " : ";
-                    mrdef->dump();
-
-                    // then replace all uses of instr with the def
-                    for (auto u : i->uses_iterable()) {
-                        u->set_def(mrdef);
-                    }
-
-                    // finally, remove instr
-                    i->remove_from_parent();
-                }
-
-                // if instr is write
-                else {
-
-                    assert(i->get_instr_kind() == ir::instr::write && "instr that uses SAllocInstr which isnt read or write?");
-
-                    // remove the instr (the var will be used via the inner
-                    // def, aka, the one that was being written)
-                    i->remove_from_parent();
-
-                    // rename the inner def
-                    ir::Def *inner = static_cast<ir::WriteInstr *>(i)->get_val();
-                    
-                    if (auto casted = dynamic_cast<ir::Instr *>(inner)) {
-                        casted->set_name(sa->get_name() + std::to_string(counter++));
-                    }
-
-                    // then update the most recent def for b
-                    most_recents[b] = inner;
-                }
-            }
-            std::cout << "    most_recent = ";
-            most_recents[b]->dump_as_operand();
-            std::cout << " <" << most_recents[b] << ">" << std::endl;
         }
+
+        std::cout << "    rectifying reads/writes" << std::endl;
+
+        // visit each instr in order
+        for (auto i : *b) {
+
+            // determine which instrs in b are relevant
+            if (std::find_if(sa->uses_begin(), sa->uses_end(),
+                [=](ir::Use *const &u) { return i == u->get_user(); }) == sa->uses_end()) {
+                // irrelevant instr
+                continue;
+            }
+
+            // if instr is read
+            if (i->get_instr_kind() == ir::instr::read) {
+
+                // get the most recent def of sa for b
+                ir::Def *mrdef = most_recents[b];
+                assert(mrdef && "no most recent def?");
+
+                std::cout << "    mrdef to replace " << i->get_name() << " : ";
+                mrdef->dump();
+
+                // then replace all uses of instr with the def
+                for (auto u : i->uses_iterable()) {
+                    u->set_def(mrdef);
+                }
+
+                // finally, remove instr
+                i->remove_from_parent();
+            }
+
+            // if instr is write
+            else {
+
+                assert(i->get_instr_kind() == ir::instr::write && "instr that uses SAllocInstr which isnt read or write?");
+                
+                // remove the instr (the var will be used via the inner
+                // def, aka, the one that was being written)
+                i->remove_from_parent();
+                
+                // rename the inner def
+                ir::Def *inner = static_cast<ir::WriteInstr *>(i)->get_val();
+                
+                if (auto casted = dynamic_cast<ir::Instr *>(inner)) {
+                    casted->set_name(sa->get_name() /* + std::to_string(counter++) */);
+                }
+
+                // then update the most recent def for b
+                most_recents[b] = inner;
+            }
+        }
+        
+        std::cout << "    most_recent = ";
+        most_recents[b]->dump_as_operand();
+        std::cout << " <" << most_recents[b] << ">" << std::endl;
 
         // add new (not found before) vertices
         for (auto e : curr->out_edges) {
