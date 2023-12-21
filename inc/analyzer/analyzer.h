@@ -11,37 +11,7 @@
 #include <string>
 #include "analyzer/scope.h"
 
-template <typename T>
-class AnalyzedGeneric {
-
-    friend class SemanticAnalyzer;
-
-private:
-public:
-    T contents;
-
-    AnalyzedGeneric(T t, bool err = false)
-        { contents = t; }
-
-
-
-    AnalyzedGeneric() { }
-
-    AnalyzedGeneric(AnalyzedGeneric const &other) {
-        contents = other.contents;
-    }
-
-    AnalyzedGeneric const &operator=(AnalyzedGeneric const &other) {
-        contents = other.contents;
-        return *this;
-    }
-
-};
-
-typedef AnalyzedGeneric<ASTNode *> AnalyzerResult;
-typedef AnalyzedGeneric<ASTNode *> AnalyzedStmt;
-typedef AnalyzedGeneric<ASTNode *> AnalyzedExpr;
-typedef AnalyzedGeneric<Type const *> AnalyzedType;
+namespace fe {
 
 class SemanticAnalyzer {
 private:
@@ -71,7 +41,7 @@ private:
     std::vector<token::token_type> primitive_keywords;
 
     /**  */
-    std::vector<Type const *> primitive_types;
+    std::vector<Type *> primitive_types;
 
     Scope *gscope;
 
@@ -93,17 +63,17 @@ private:
     */
     void exit_current_scope(Scope **curr);
     
-    Symbol const *find_symbol_in_current_scope(std::string const *ident, Scope *scope);
-    Symbol const *find_symbol_in_any_active_scope(std::string const *ident, Scope *scope);
+    Symbol *find_symbol_in_current_scope(std::string *ident, Scope *scope);
+    Symbol *find_symbol_in_any_active_scope(std::string *ident, Scope *scope);
     Symbol *insert_symbol(
         Scope *scope,
         std::string const &name,
-        Type const *type_ptr,
+        Type *type_ptr,
         ASTNode *decl
     );
 
-    Type const *find_type_in_current_scope(std::string const *ident, Scope *scope);
-    Type const *find_type_in_any_active_scope(std::string const *ident, Scope *scope);
+    Type *find_type_in_current_scope(std::string *ident, Scope *scope);
+    Type *find_type_in_any_active_scope(std::string *ident, Scope *scope);
     void insert_type(
         Scope *scope,
         std::string const &key,
@@ -143,7 +113,7 @@ public:
 
     ASTNode *analyze_cast_expr(
         ASTNode *casted_expr,
-        Type const *cast_type,
+        Type *cast_type,
         SourceLocation loc
     );
 
@@ -157,7 +127,7 @@ public:
 
     Type *analyze_typename(
         Scope **scope,
-        std::string const *ident,
+        std::string *ident,
         SourceLocation loc
     );
 
@@ -206,22 +176,22 @@ public:
 
     ASTNode *analyze_ref_expr(
         Scope **scope,
-        std::string const *ident,
+        std::string *ident,
         SourceLocation loc
     );
 
     ASTNode *analyze_character_literal(
-        std::string const *char_lit,
+        std::string *char_lit,
         SourceLocation loc
     );
 
     ASTNode *analyze_numeric_literal(
-        std::string const *num_lit,
+        std::string *num_lit,
         SourceLocation loc
     );
 
     ASTNode *analyze_string_literal(
-        std::string const *str_lit,
+        std::string *str_lit,
         SourceLocation loc
     );
 
@@ -235,8 +205,8 @@ public:
     ASTNode *analyze_func_decl(
         Scope **scope,
         Type *type,
-        std::string const *ident,
-        std::vector<std::pair<std::string const *, SourceLocation>> params,
+        std::string *ident,
+        std::vector<std::pair<std::string *, SourceLocation>> params,
         SourceLocation ident_loc,
         SourceLocation param_list_start_loc,
         SourceLocation param_list_end_loc
@@ -255,14 +225,14 @@ public:
     ASTNode *analyze_var_decl(
         Scope **scope,
         Type *type,
-        std::string const *ident,
+        std::string *ident,
         SourceLocation ident_loc
     );
 
     ASTNode *analyze_var_decl(
         Scope **scope,
         Type *type,
-        std::string const *ident,
+        std::string *ident,
         SourceLocation ident_loc,
         ASTNode *rhs,
         SourceLocation eqloc
@@ -271,7 +241,7 @@ public:
     ASTNode *analyze_type_alias(
         Scope **scope,
         Type *type,
-        std::string const *ident,
+        std::string *ident,
         SourceLocation ident_loc
     );
 
@@ -304,5 +274,7 @@ public:
     );
 
 };
+
+}
 
 #endif

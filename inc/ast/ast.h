@@ -8,9 +8,9 @@
 #include "analyzer/type.h"
 #include "analyzer/op.h"
 
-class Symbol;
+namespace fe {
 
-class ASTNode;
+class Symbol;
 
 namespace ast {
 
@@ -96,11 +96,11 @@ private:
 public:
     ast::node_type kind;
 
-    std::vector<ASTNode const *> children;
+    std::vector<ASTNode *> children;
 
-    Type const *type;
+    Type *type;
 
-    std::string const *str;
+    std::string *str;
 
     SourceLocation loc;
 
@@ -116,8 +116,8 @@ public:
 
     ASTNode(
         ast::node_type kind,
-        Type const *type,
-        std::string const *str,
+        Type *type,
+        std::string *str,
         SourceLocation loc,
         token::token_type tok,
         bool has_error
@@ -125,21 +125,21 @@ public:
 
     void set(
         ast::node_type kind,
-        Type const *type,
-        std::string const *str,
+        Type *type,
+        std::string *str,
         SourceLocation loc,
         token::token_type tok,
         bool has_error
     );
 
-    void print_ast(ASTNode const *tree, std::string str) const;
+    void print_ast(ASTNode *tree, std::string str);
 
 
 
-    ASTNode() : children(std::vector<ASTNode const *>())
+    ASTNode() : children(std::vector<ASTNode *>())
         { kind = ast::error; type = nullptr; str = nullptr; }
 
-    void print() const;
+    void print();
 
 };
 
@@ -169,6 +169,8 @@ private:
 class FuncDecl : public Decl {
 
 };
+
+}
 
 }
 

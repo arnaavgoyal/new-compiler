@@ -15,9 +15,11 @@
 
 //#define DEBUG
 
+namespace fe {
+
 ASTNode *Parser::make_node(
     ast::node_type kind,
-    std::string const *str,
+    std::string *str,
     SourceLocation loc,
     token::token_type tok
 ) {
@@ -783,7 +785,7 @@ ASTNode *Parser::parse_var_decl() {
     // so parse type
     type = parse_type();
 
-    std::string const *ident = nullptr;
+    std::string *ident = nullptr;
     bool err = false;
 
     // expects identifier
@@ -867,7 +869,7 @@ ASTNode *Parser::parse_func_decl() {
     }
 
     // save identifier
-    std::string const *ident = tk.get_identifier_str();
+    std::string *ident = tk.get_identifier_str();
 
     // save identifier loc
     SourceLocation ident_loc = tk.get_src_loc();
@@ -880,7 +882,7 @@ ASTNode *Parser::parse_func_decl() {
     //   2: (ident)
     //   3: (ident, ident, ... , ident)
 
-    std::vector<std::pair<std::string const *, SourceLocation>> params;
+    std::vector<std::pair<std::string *, SourceLocation>> params;
 
     // expect left paren
     match(token::op_leftparen);
@@ -1063,7 +1065,7 @@ ASTNode *Parser::parse_stmt() {
         // cache ident loc
         loc_cache = tk.get_src_loc();
 
-        std::string const *ident = tk.get_identifier_str();
+        std::string *ident = tk.get_identifier_str();
 
         // consume identifier
         consume();
@@ -1261,4 +1263,6 @@ bool Parser::parse(ASTNode **ref) {
     }
 
     return true;
+}
+
 }

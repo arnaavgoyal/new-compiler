@@ -21,10 +21,12 @@ static void print_err_loc_preamble(SourceLocation loc) {
 
 /** ------------------- ASTNode ------------------- */
 
+namespace fe {
+
 void ASTNode::set(
     ast::node_type kind,
-    Type const *type,
-    std::string const *str,
+    Type *type,
+    std::string *str,
     SourceLocation loc,
     token::token_type tok,
     bool has_error
@@ -37,7 +39,7 @@ void ASTNode::set(
     this->has_error = has_error;
 }
 
-void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
+void ASTNode::print_ast(ASTNode *tree, std::string str) {
 
     if (tree != nullptr) {
 
@@ -132,9 +134,9 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
             if (tree->type != nullptr) {
                 std::cout
                     << ioformat::GREEN
-                    << *(tree->type->get_str())
+                    << tree->type->stringify()
                     << ioformat::BLUE << " "
-                    << *(tree->type->canonical->get_str());
+                    << tree->type->get_canonical()->stringify();
             }
 
             if (tree->is_lvalue) {
@@ -173,8 +175,10 @@ void ASTNode::print_ast(ASTNode const *tree, std::string str) const {
     }
 }
 
-void ASTNode::print() const {
+void ASTNode::print() {
     std::cout << "root" << std::endl;
     std::string s(" ");
     print_ast(this, s);
+}
+
 }

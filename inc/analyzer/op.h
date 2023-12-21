@@ -1,6 +1,8 @@
 #ifndef OP_H
 #define OP_H
 
+namespace fe {
+
 namespace op {
 
     enum kind {
@@ -82,6 +84,8 @@ namespace op {
     inline bool is_log_op(kind o) { return o > __logical_low_bound && o < __logical_high_bound; }
     inline bool is_val_op(kind o) { return o > __arithmetic_low_bound && o < __arithmetic_high_bound; }
     inline bool is_rel_op(kind o) { return o > __relational_low_bound && o < __relational_high_bound; }
+
+}
 
 }
 

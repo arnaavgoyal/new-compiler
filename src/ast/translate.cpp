@@ -9,58 +9,43 @@
 #define UNREACHABLE assert(false && "should be unreachable");
 #define NYI(WHAT) assert(false && "NYI" #WHAT);
 
-ir::Type *ASTTranslator::t_type(Type const *ty) {
+namespace fe {
+
+ir::Type *ASTTranslator::t_type(Type *ty) {
     ir::Type *nt = nullptr;
-    switch (ty->canonical->kind) {
-        case type::pointer_type:
-            nt = ir::PrimitiveType::get_ptr_type();
-            break;
-        case type::primitive_type:
+    auto tykind = ty->get_canonical()->get_kind();
+    if (tykind == typekind::pointer_t) nt = ir::PrimitiveType::get_ptr_type();
 
 #define PRIM_TYPE_IF_CASE(TYKW) \
-if (ty->canonical == Type::get_##TYKW##_type()) { \
-    nt =  ir::PrimitiveType::get_##TYKW##_type(); \
-}
+if (tykind == typekind::TYKW##_t) nt =  ir::PrimitiveType::get_##TYKW##_type();
 #define PRIM_TYPE_ELSE_IF_CASE(TYKW) \
 else PRIM_TYPE_IF_CASE(TYKW)
 
-            PRIM_TYPE_IF_CASE(u8)
-            PRIM_TYPE_ELSE_IF_CASE(i8)
-            PRIM_TYPE_ELSE_IF_CASE(u16)
-            PRIM_TYPE_ELSE_IF_CASE(i16)
-            PRIM_TYPE_ELSE_IF_CASE(u32)
-            PRIM_TYPE_ELSE_IF_CASE(i32)
-            PRIM_TYPE_ELSE_IF_CASE(u64)
-            PRIM_TYPE_ELSE_IF_CASE(i64)
-            PRIM_TYPE_ELSE_IF_CASE(f32)
-            PRIM_TYPE_ELSE_IF_CASE(f64)
-            PRIM_TYPE_ELSE_IF_CASE(void)
+    PRIM_TYPE_ELSE_IF_CASE(u8)
+    PRIM_TYPE_ELSE_IF_CASE(i8)
+    PRIM_TYPE_ELSE_IF_CASE(u16)
+    PRIM_TYPE_ELSE_IF_CASE(i16)
+    PRIM_TYPE_ELSE_IF_CASE(u32)
+    PRIM_TYPE_ELSE_IF_CASE(i32)
+    PRIM_TYPE_ELSE_IF_CASE(u64)
+    PRIM_TYPE_ELSE_IF_CASE(i64)
+    PRIM_TYPE_ELSE_IF_CASE(f32)
+    PRIM_TYPE_ELSE_IF_CASE(f64)
+    PRIM_TYPE_ELSE_IF_CASE(void)
 
 #undef PRIM_TYPE_ELSE_IF_CASE
 #undef PRIM_TYPE_IF_CASE
 
-            else {
-                assert(false && "type has kind type::primitive_type but doesnt match any primitives?");
-            }
-            break;
-        case type::alias_type:
-            assert(false && "canonical type with kind type::alias_type?");
-            break;
-        case type::array_type:
-            assert(false && "array type NYI");
-            break;
-        case type::function_type:
-        case type::error_type:
-        default:
-            UNREACHABLE
-    }
+    else if (tykind == typekind::alias_t) assert(false && "canonical type with kind type::alias_type?");
+    else if (tykind == typekind::array_t) assert(false && "array type NYI");
+    else UNREACHABLE
 
     //std::cout << *ty->str << " = " << nt->stringify() << std::endl;
 
     return nt;
 }
 
-ir::Program *ASTTranslator::t_program(ASTNode const *ast) {
+ir::Program *ASTTranslator::t_program(ASTNode *ast) {
 
     assert(ast->kind == ast::translation_unit && "translation requires an AST rooted at a translation unit");
     
@@ -68,7 +53,7 @@ ir::Program *ASTTranslator::t_program(ASTNode const *ast) {
     ir::Program *p = new ir::Program("input");
 
     // generate ir
-    for (ASTNode const *node : ast->children) {
+    for (ASTNode *node : ast->children) {
 
         // only var and func decls can be here
         switch (node->kind) {
@@ -91,16 +76,19 @@ ir::Program *ASTTranslator::t_program(ASTNode const *ast) {
     return p;
 }
 
-ir::GlobalVar *ASTTranslator::t_gvar(ASTNode const *vdecl, ir::Program *p) {
+ir::GlobalVar *ASTTranslator::t_gvar(ASTNode *vdecl, ir::Program *p) {
     assert(vdecl->str && "should have a str representation");
     return new ir::GlobalVar(t_type(vdecl->type), ir::linkage::external, p, false, *vdecl->str);
 }
 
-ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
+ir::Function *ASTTranslator::t_func(ASTNode *fdecl, ir::Program *p) {
 
+    assert(fdecl->type->get_kind() == typekind::function_t);
+
+    FunctionType *ftype = static_cast<FunctionType *>(fdecl->type);
     // make a new function
     ir::Function *f = new ir::Function(
-        t_type(fdecl->type->returns->canonical),
+        t_type(ftype->get_return_ty()->get_canonical()),
         ir::linkage::external,
         p,
         *fdecl->str
@@ -109,10 +97,10 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
 
     // make the params
     std::vector<ir::Param *> params;
-    for (unsigned i = 0; i < fdecl->type->params.size(); i++) {
+    for (unsigned i = 0; i < ftype->get_params().size(); i++) {
         params.push_back(
             new ir::Param(
-                t_type(fdecl->type->params[i]->canonical),
+                t_type(ftype->get_params()[i]->get_canonical()),
                 f,
                 i,
                 *fdecl->children[i]->str
@@ -142,7 +130,7 @@ ir::Function *ASTTranslator::t_func(ASTNode const *fdecl, ir::Program *p) {
 
 
 
-ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
+ir::Def *ASTTranslator::t_stmt(ASTNode *node) {
 
     ir::Def *res;
     ci_lval = false;
@@ -177,7 +165,7 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
         case ast::param_decl:
             UNREACHABLE
         case ast::paren_expr:
-            for (ASTNode const *c : node->children) {
+            for (ASTNode *c : node->children) {
                 res = t_stmt(c);
             }
             return res;
@@ -195,7 +183,7 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
             return new ir::ReturnInstr(i, curr_block);
         }
         case ast::stmt_block:
-            for (ASTNode const *c : node->children) {
+            for (ASTNode *c : node->children) {
                 res = t_stmt(c);
             }
             return res;
@@ -219,7 +207,7 @@ ir::Def *ASTTranslator::t_stmt(ASTNode const *node) {
     }
 }
 
-ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl) {
+ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode *vdecl) {
 
     // get the type
     ir::Type *ty = t_type(vdecl->type);
@@ -250,7 +238,7 @@ ir::SAllocInstr *ASTTranslator::t_lvar(ASTNode const *vdecl) {
     return sa;
 }
 
-ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode const *expr) {
+ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode *expr) {
 
     assert(ci_lval && "assignment to non-lval value");
 
@@ -264,7 +252,7 @@ ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode const *expr) {
     );
 }
 
-ir::Def *ASTTranslator::t_binop(ASTNode const *binop) {
+ir::Def *ASTTranslator::t_binop(ASTNode *binop) {
 
     switch (binop->op) {
         case op::add:
@@ -319,11 +307,11 @@ ir::Def *ASTTranslator::t_binop(ASTNode const *binop) {
     }
 }
 
-ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
+ir::CallInstr *ASTTranslator::t_call(ASTNode *cexpr) {
 
     // generate ir for the arguments
     std::vector<ir::Def *> args;
-    for (ASTNode const *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
+    for (ASTNode *a : iterator_range(cexpr->children.begin() + 1, cexpr->children.end())) {
         ir::Def *d;
         d = t_stmt(a);
         if (ci_lval) {
@@ -347,7 +335,7 @@ ir::CallInstr *ASTTranslator::t_call(ASTNode const *cexpr) {
  * the def returned is the pointer to the location in memory where it resides.
  * aka, its salloc instr.
 */
-ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref) {
+ir::SAllocInstr * ASTTranslator::t_ref(ASTNode *ref) {
 
     // get the scope of the symbol being referenced
     Scope *ast_scope = ref->sym->scope;
@@ -361,7 +349,7 @@ ir::SAllocInstr * ASTTranslator::t_ref(ASTNode const *ref) {
     return ist_it.operator*().second;
 }
 
-ir::Def *ASTTranslator::t_unop(ASTNode const *unop) {
+ir::Def *ASTTranslator::t_unop(ASTNode *unop) {
 
     //std::cout << "\nUNOP------------\n";
 
@@ -413,7 +401,7 @@ ir::ReadInstr *ASTTranslator::t_rval(ir::Def *lval, ir::Type *ty) {
     return new ir::ReadInstr(ty, lval, curr_block, nullptr, "tmp");
 }
 
-ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt) {
+ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 
     // get cond
     ir::Def *cond = t_cond(ifstmt->children[0]);
@@ -426,7 +414,7 @@ ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt) {
 
     // add all inner stmts
     curr_block = ifblock;
-    for (ASTNode const *child : ifstmt->children[1]->children) {
+    for (ASTNode *child : ifstmt->children[1]->children) {
         t_stmt(child);
     }
 
@@ -501,7 +489,7 @@ ir::Def *ASTTranslator::t_if(ASTNode const *ifstmt) {
     return doneblock;
 }
 
-ir::Def *ASTTranslator::t_loop(ASTNode const *lnode) {
+ir::Def *ASTTranslator::t_loop(ASTNode *lnode) {
     ir::Function *f = curr_block->get_parent();
     ir::Block *loopcond = new ir::Block(f, "loopcond");
     ir::BranchInstr *curr_to_cond = new ir::BranchInstr(loopcond, curr_block);
@@ -509,7 +497,7 @@ ir::Def *ASTTranslator::t_loop(ASTNode const *lnode) {
     ir::Def *cond_inner = t_cond(lnode->children[0]);
     ir::Block *loopbody = new ir::Block(f, "loopbody");
     curr_block = loopbody;
-    for (ASTNode const *stmt : lnode->children[1]->children) {
+    for (ASTNode *stmt : lnode->children[1]->children) {
         t_stmt(stmt);
     }
     ir::Block *loopend = new ir::Block(f, "loopend");
@@ -521,7 +509,7 @@ ir::Def *ASTTranslator::t_loop(ASTNode const *lnode) {
     return loopend;
 }
 
-ir::Def *ASTTranslator::t_cond(ASTNode const *expr) {
+ir::Def *ASTTranslator::t_cond(ASTNode *expr) {
     ir::Def *irexpr = t_stmt(expr);
     if (ci_lval) {
         irexpr = t_rval(irexpr, t_type(expr->type));
@@ -539,6 +527,8 @@ ir::Def *ASTTranslator::t_cond(ASTNode const *expr) {
         nullptr,
         "tmp"
     );
+}
+
 }
 
 #undef NYI

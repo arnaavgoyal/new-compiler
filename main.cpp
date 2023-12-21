@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
     
     // Make all necessary allocators
     Allocator<std::string> str_alloc;
-    Allocator<ASTNode> node_alloc;
-    Allocator<Type> type_alloc;
-    Allocator<std::vector<Type *>> vec_alloc;
+    Allocator<fe::ASTNode> node_alloc;
+    Allocator<fe::Type> type_alloc;
+    Allocator<std::vector<fe::Type *>> vec_alloc;
 
     // Add source to source manager
     SourceID src_id = SourceManager::add_source(argv[1]);
@@ -51,19 +51,19 @@ int main(int argc, char **argv) {
     std::vector<token::token_type> primitives = token::get_types_list();
 
     // Make semantic analyzer
-    SemanticAnalyzer analyzer(
+    fe::SemanticAnalyzer analyzer(
         str_alloc,
         primitives
     );
 
     // Make parser
-    Parser parser(
+    fe::Parser parser(
         lexer,
         analyzer
     );
 
     // parse
-    ASTNode *ast = nullptr;
+    fe::ASTNode *ast = nullptr;
     bool parse_success = parser.parse(&ast);
     ast->print();
     std::cout << "\nparse status: ";
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
 
     // ---------------- MIDEND ------------------
 
-    ir::Program *prog = ASTTranslator().translate(ast);
+    ir::Program *prog = fe::ASTTranslator().translate(ast);
     std::cout << std::endl;
     //prog->dump();
 

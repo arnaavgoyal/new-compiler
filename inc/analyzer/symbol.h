@@ -5,6 +5,8 @@
 #include "lexer/tokentypes.h"
 #include "analyzer/type.h"
 
+namespace fe {
+
 class Scope;
 class ASTNode;
 
@@ -20,7 +22,7 @@ public:
     /**
      * pointer to the type of this symbol
     */
-    Type const *type_ptr;
+    Type *type_ptr;
 
     Scope *scope;
 
@@ -30,8 +32,8 @@ public:
      * Constructs a symbol with all fields as given.
     */
     Symbol(
-        std::string const &name,
-        Type const *type_ptr
+        std::string &name,
+        Type *type_ptr
     ) :
         name(name),
         type_ptr(type_ptr)
@@ -45,12 +47,14 @@ public:
     /**
      * Prevent copying to maintain uniqueness of symbols.
     */
-    Symbol(Symbol const &other) = delete;
-    Symbol &operator=(Symbol const &other) = delete;
+    Symbol(Symbol &other) = delete;
+    Symbol &operator=(Symbol &other) = delete;
 
-    std::string const &get_name() const { return name; }
-    Type const *get_type_ptr() const { return type_ptr; }
+    std::string const &get_name() { return name; }
+    Type *get_type_ptr() { return type_ptr; }
 
 };
+
+}
 
 #endif

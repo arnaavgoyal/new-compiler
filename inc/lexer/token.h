@@ -68,8 +68,8 @@ public:
 
     token::token_type get_type() { return type; }
     SourceLocation get_src_loc() { return loc; }
-    std::string const *get_identifier_str() { return str; }
-    std::string const *get_literal_str() { return str; }
+    std::string *get_identifier_str() { return str; }
+    std::string *get_literal_str() { return str; }
     char const *get_operator_str() { return token::get_operator_string(type); }
     char const *get_keyword_str() { return token::get_keyword_string(type); }
     char const *get_str() {

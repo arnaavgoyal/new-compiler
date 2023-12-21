@@ -7,6 +7,8 @@
 #include <string>
 #include <iostream>
 
+namespace fe {
+
 class Scope {
 public:
 
@@ -25,14 +27,14 @@ public:
         for (auto p : sym_table) {
             std::cout
                 << indstr << "sym "
-                << *p.second->get_type_ptr()->get_str()
+                << p.second->get_type_ptr()->stringify()
                 << " " << p.second->get_name()
                 << std::endl;
         }
         for (auto p : type_table) {
             std::cout
                 << indstr << "type "
-                << *p.second->get_str() << std::endl;
+                << p.second->stringify() << std::endl;
         }
         return ind + 2;
     }
@@ -41,16 +43,18 @@ public:
         for (auto p : sym_table) {
             std::cout
                 << "sym "
-                << *p.second->get_type_ptr()->get_str()
+                << p.second->get_type_ptr()->stringify()
                 << " " << p.second->get_name()
                 << std::endl;
         }
         for (auto p : type_table) {
             std::cout
                 << "type "
-                << *p.second->get_str() << std::endl;
+                << p.second->stringify() << std::endl;
         }
     }
 };
+
+}
 
 #endif

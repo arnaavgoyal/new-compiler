@@ -11,6 +11,8 @@
 #include "analyzer/scope.h"
 #include <setjmp.h>
 
+namespace fe {
+
 class Parser {
 private:
 
@@ -41,7 +43,7 @@ private:
 
     ASTNode *make_node(
         ast::node_type kind,
-        std::string const *str,
+        std::string *str,
         SourceLocation loc,
         token::token_type tok
     );
@@ -348,5 +350,7 @@ public:
     bool parse(ASTNode **ref);
     
 };
+
+}
 
 #endif
