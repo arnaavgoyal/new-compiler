@@ -77,6 +77,8 @@ private:
         Type *value
     );
 
+    bool typecheck_assignment(ASTNode *lhs, ASTNode *rhs);
+
 public:
 
     SemanticAnalyzer(

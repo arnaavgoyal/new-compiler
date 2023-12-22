@@ -52,6 +52,16 @@ DIAGNOSTIC(side_effecting_unary_typecheck_integral, error, "pre/postfix incr/dec
 // binary operators
 DIAGNOSTIC(binary_op_typecheck, error, "incompatible operands to binary operator '%0' ('%1' and '%2')")
 
+// assignment typecheck
+DIAGNOSTIC(warn_assignment_signed_to_unsigned, warning, "value of signed type '%0' assigned to unsigned type '%1'")
+DIAGNOSTIC(warn_assignment_unsigned_to_signed, warning, "value of unsigned type '%0' assigned to signed type '%1'")
+DIAGNOSTIC(warn_assignment_implicit_upcast, warning, "value of type '%0' assigned to larger type '%1'")
+DIAGNOSTIC(warn_assignment_pointer_to_pointer_cast, warning, "value of pointer type '%0' assigned to different pointer type '%1'")
+DIAGNOSTIC(assignment_requires_explicit_downcast, error, "assignment requires explicit truncating cast of value to '%0' from '%1'")
+
+// integral literals
+DIAGNOSTIC(integral_literal_too_big, error, "integral literal '%0' is too large for any integral type")
+
 // dev
 
 DIAGNOSTIC(deprecated, error, "%0 are deprecated")

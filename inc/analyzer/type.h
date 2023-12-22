@@ -114,6 +114,8 @@
 //     static Type *get_error_type();
 // };
 
+#define POINTER_SIZE_IN_BYTES 8
+
 namespace fe {
 
 class ASTNode;
@@ -132,10 +134,23 @@ enum class typekind {
 
             // integral
             _integral_start,
-            u8_t,  i8_t,
-            u16_t, i16_t,
-            u32_t, i32_t,
-            u64_t, i64_t,
+
+                // unsigned
+                _unsigned_start,
+                u8_t,
+                u16_t,
+                u32_t,
+                u64_t,
+                _unsigned_end,
+
+                // signed
+                _signed_start,
+                i8_t,
+                i16_t,
+                i32_t,
+                i64_t,
+                _signed_end,
+
             _integral_end,
 
             // floating point
@@ -160,33 +175,49 @@ enum class typekind {
 class Type {
 private:
     typekind kind;
+    unsigned size; // size in bytes
     Type *canonical;
     bool error;
 
 protected:
-    Type(typekind kind, Type *canonical, bool error)
-        : kind(kind), canonical(canonical), error(error) {
+    Type(typekind kind, unsigned sz, Type *canonical, bool error)
+        : kind(kind), size(sz), canonical(canonical), error(error) {
+        
         if (!canonical) {
+            // if canonical is nullptr then this type is canonical
+            //   and therefore is its own canonical type
             this->canonical = this;
         }
+
+        assert(this->size == this->canonical->size && "a type and its canonical type must have the same size");
     }
     void set_error() { error = true; }
 
 private:
     // error type constructor
-    Type() : Type(typekind::error_t, this, true) { }
+    Type() : Type(typekind::error_t, 0, this, true) { }
 
 public:
     typekind get_kind() { return kind; }
+    unsigned get_size() { return size; }
     Type *get_canonical() { return canonical; }
     bool has_error() { return error; }
-    bool is_primitive() { return kind > typekind::_primitive_start && kind < typekind::_primitive_end; }
-    bool is_numeric() { return kind > typekind::_numeric_start && kind < typekind::_numeric_end; }
-    bool is_integral() { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
-    bool is_fp() { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
     virtual std::string stringify() { return "<error-type>"; };
 
     static Type *get_error_type();
+    static bool is_primitive(typekind kind) { return kind > typekind::_primitive_start && kind < typekind::_primitive_end; }
+    static bool is_numeric(typekind kind) { return kind > typekind::_numeric_start && kind < typekind::_numeric_end; }
+    static bool is_integral(typekind kind) { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
+    static bool is_unsigned(typekind kind) { return kind > typekind::_unsigned_start && kind < typekind::_unsigned_end; }
+    static bool is_signed(typekind kind) { return kind > typekind::_signed_start && kind < typekind::_signed_end; }
+    static bool is_fp(typekind kind) { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
+
+    bool is_primitive() { return Type::is_primitive(kind); }
+    bool is_numeric() { return Type::is_numeric(kind); }
+    bool is_integral() { return Type::is_integral(kind); }
+    bool is_unsigned() { return Type::is_unsigned(kind); }
+    bool is_signed() { return Type::is_signed(kind); }
+    bool is_fp() { return Type::is_fp(kind); }
 };
 
 class PrimitiveType : public Type {
@@ -194,8 +225,8 @@ private:
     token::token_type tok;
 
 protected:
-    PrimitiveType(typekind kind, token::token_type tok)
-        : Type(kind, this, false), tok(tok) { assert(token::is_keyword(tok)); }
+    PrimitiveType(typekind kind, unsigned size, token::token_type tok)
+        : Type(kind, size, this, false), tok(tok) { assert(token::is_keyword(tok)); }
     std::string stringify() override { return token::get_keyword_string(tok); }
 
 public:
@@ -220,7 +251,7 @@ private:
 
 protected:
     PointerType(PointerType *canonical, Type *pointee)
-        : Type(typekind::pointer_t, canonical, pointee->has_error()), pointee(pointee) { }
+        : Type(typekind::pointer_t, POINTER_SIZE_IN_BYTES, canonical, pointee->has_error()), pointee(pointee) { }
 
 public:
     Type *get_pointee() { return pointee; }
@@ -233,10 +264,11 @@ class ArrayType : public Type {
 private:
     friend SemanticAnalyzer;
     Type *element;
+    unsigned num;
 
 protected:
-    ArrayType(ArrayType *canonical, Type *element_ty)
-        : Type(typekind::array_t, canonical, element_ty->has_error()), element(element_ty) { }
+    ArrayType(ArrayType *canonical, Type *element_ty, unsigned num_elements)
+        : Type(typekind::array_t, element_ty->get_size() * num, canonical, element_ty->has_error()), element(element_ty) { }
 
 public:
     Type *get_element_ty() { return element; }
@@ -255,8 +287,8 @@ private:
     static ASTNode *error_node;
 
 protected:
-    AliasType(Type *canonical, std::string str, Type *aliasee, ASTNode *decl)
-        : Type(typekind::alias_t, canonical, aliasee->has_error()), str(str), aliasee(aliasee), decl(decl) { }
+    AliasType(Type *aliasee, std::string str, ASTNode *decl)
+        : Type(typekind::alias_t, aliasee->get_size(), aliasee->get_canonical(), aliasee->has_error()), str(str), aliasee(aliasee), decl(decl) { }
 
 public:
     Type *get_aliasee() { return aliasee; }
@@ -275,7 +307,7 @@ private:
 
 protected:
     FunctionType(Type *canonical, Type *return_ty, std::vector<Type *> params)
-        : Type(typekind::function_t, canonical, false), return_ty(return_ty), params(std::move(params)) {
+        : Type(typekind::function_t, POINTER_SIZE_IN_BYTES, canonical, false), return_ty(return_ty), params(std::move(params)) {
         if (return_ty->has_error()) {
             set_error();
             return;

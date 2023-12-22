@@ -298,7 +298,10 @@ lex_start:
         case 'u':
             src->unget();
             lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u16)) == 0) {
+            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u8)) == 0) {
+                type = token::kw_u8;
+            }
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u16)) == 0) {
                 type = token::kw_u16;
             }
             else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u32)) == 0) {

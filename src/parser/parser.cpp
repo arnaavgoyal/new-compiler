@@ -424,6 +424,7 @@ ASTNode *Parser::parse_cast() {
 
     // parse type
     Type *ty = parse_type();
+    std::cout << ty->stringify() << std::endl;
 
     // update sloc
     sloc.copy_end(prev_tk_loc);

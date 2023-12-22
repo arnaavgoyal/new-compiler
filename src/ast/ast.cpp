@@ -129,10 +129,10 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
             else if (token::is_operator(tree->tok)) {
                 std::cout << token::get_operator_string(tree->tok);
             }
-            std::cout << "' ";
+            std::cout << "'";
 
             if (tree->type != nullptr) {
-                std::cout
+                std::cout << " "
                     << ioformat::GREEN
                     << tree->type->stringify()
                     << ioformat::BLUE << " "

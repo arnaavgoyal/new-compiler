@@ -6,6 +6,8 @@
 #include "diagnostic/diagnostic.h"
 #include "analyzer/scope.h"
 #include <cassert>
+#include <cstdlib>
+#include <bitset>
 
 namespace fe {
 
@@ -119,6 +121,117 @@ void SemanticAnalyzer::insert_type(
     Type *value
 ) {
     scope->type_table.insert(std::make_pair(key, value));
+}
+
+bool SemanticAnalyzer::typecheck_assignment(ASTNode *lhs, ASTNode *rhs) {
+
+    // typechecks are done on canonical types
+    auto cfrom = rhs->type->get_canonical();
+    auto cto = lhs->type->get_canonical();
+
+    bool compat = true;
+
+    // they are the same types
+    if (cfrom == cto) {
+        // we don't have to do anything
+    }
+
+    // both are integral types
+    else if (cfrom->is_integral() && cto->is_integral()) {
+
+        // compatible types, but ...
+
+        if (cfrom->is_signed() && cto->is_unsigned()) {
+
+            // unsigned 'to' = signed 'from'
+            // if 'from' is negative, its value will be clobbered when assigned to 'to'
+            
+            // emit warning
+            DiagnosticHandler::make(diag::id::warn_assignment_signed_to_unsigned, rhs->loc)
+                .add(cfrom->stringify())
+                .add(cto->stringify())
+                .finish();
+        }
+
+        // downcast
+        if (cfrom->get_size() > cto->get_size()) {
+
+            // downcasts are valid but must be done with explicit casts
+            DiagnosticHandler::make(diag::id::assignment_requires_explicit_downcast, rhs->loc)
+                .add(cto->stringify())
+                .add(cfrom->stringify())
+                .finish();
+            
+            compat = false;
+        }
+
+        // upcast
+        else if (cfrom->get_size() < cto->get_size()) {
+
+            // upcasts are valid and can be done implicitly
+
+            // for integral literals ...
+            if (rhs->kind == ast::int_lit) {
+                // upcast silently to avoid tons of worthless warnings
+            }
+
+            // for anything else ...
+            else {
+                // emit a warning
+                DiagnosticHandler::make(diag::id::warn_assignment_implicit_upcast, rhs->loc)
+                    .add(cfrom->stringify())
+                    .add(cto->stringify())
+                    .finish();
+            }
+        }
+
+        // types are same size
+        else {
+
+            if (cfrom->is_unsigned() && cto->is_signed()) {
+
+                // signed 'to' = unsigned 'from', where each type is the same size
+                // if 'from' is positive and large, its value may be truncated when assigned to 'to'
+
+                // emit warning
+                DiagnosticHandler::make(diag::id::warn_assignment_unsigned_to_signed, rhs->loc)
+                    .add(cfrom->stringify())
+                    .add(cto->stringify())
+                    .finish();
+            }
+        }
+    }
+
+    // both are floating point types
+    else if (cfrom->is_fp() && cto->is_fp()) {
+        DiagnosticHandler::make(diag::id::nyi, rhs->loc)
+            .add("fp-to-fp casts")
+            .finish();
+
+        compat = false;
+    }
+
+    // both are pointer types
+    else if (cfrom->get_kind() == typekind::pointer_t && cto->get_kind() == typekind::pointer_t) {
+        
+        // these differ at some point in their types.
+        // pointer-to-pointer casts are valid, but warn
+        DiagnosticHandler::make(diag::id::warn_assignment_pointer_to_pointer_cast, rhs->loc)
+            .add(cfrom->stringify())
+            .add(cto->stringify())
+            .finish();
+    }
+
+    else {
+        // idk what this could be
+        DiagnosticHandler::make(diag::id::nyi, rhs->loc)
+            .add("unknown-to-unknown type checks")
+            .finish();
+        
+        compat = false;
+    }
+
+    return compat;
 }
 
 SemanticAnalyzer::SemanticAnalyzer(
@@ -456,44 +569,30 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
 
         // type compare
         if (lhs->type->get_canonical() != rhs->type->get_canonical()) {
-            op_type = Type::get_error_type();
             err = true;
-            // ErrorHandler::handle(
-            //     error::incompatible_operand_type,
-            //     op_loc,
-            //     "incompat val op types"
-            // );
             DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
                 .add(token::get_operator_string(tok))
                 .add(lhs->type->stringify())
                 .add(rhs->type->stringify())
                 .finish();
         }
-        else {
-            op_type = lhs->type;
-        }
+        
+        op_type = lhs->type;
     }
 
     else if (op::is_rel_op(op)) {
 
         // type compare
         if (lhs->type->get_canonical() != rhs->type->get_canonical()) {
-            op_type = Type::get_error_type();
             err = true;
-            // ErrorHandler::handle(
-            //     error::incompatible_operand_type,
-            //     op_loc,
-            //     "relational op incompat operand type"
-            // );
             DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
                 .add(token::get_operator_string(tok))
                 .add(lhs->type->stringify())
                 .add(rhs->type->stringify())
                 .finish();
         }
-        else {
-            op_type = PrimitiveType::get_i8_type();
-        }
+
+        op_type = PrimitiveType::get_i8_type();
     }
 
     else if (op::is_log_op(op)) {
@@ -514,13 +613,7 @@ ASTNode *SemanticAnalyzer::analyze_binary_op_expr(
     }
 
     else if (op::is_lval_op(op)) {
-        if (rhs->type->get_canonical() != lhs->type->get_canonical()) {
-            // ErrorHandler::handle(error::incompatible_operand_type, total_op_loc, "assignee must be of equivalent type to rhs");
-            DiagnosticHandler::make(diag::id::binary_op_typecheck, total_op_loc)
-                .add(token::get_operator_string(tok))
-                .add(lhs->type->stringify())
-                .add(rhs->type->stringify())
-                .finish();
+        if (!typecheck_assignment(lhs, rhs)) {
             err = true;
         }
         op_type = lhs->type;
@@ -811,10 +904,47 @@ ASTNode *SemanticAnalyzer::analyze_numeric_literal(
     // assume no overflow and default size i32 for now
     // TODO: size check and dynamic type assignment
 
+    // the str rep of this int lit should never be negative
+    assert(isdigit(num_lit->operator[](0)));
+
+    uint64_t val = std::strtoull(num_lit->c_str(), nullptr, 0);
+
+    // value does not fit in 64 bits
+    if (val == ULLONG_MAX && errno == ERANGE) {
+        DiagnosticHandler::make(diag::id::integral_literal_too_big, loc)
+            .add(*num_lit)
+            .finish();
+    }
+
+    std::cout << "int lit <" << *num_lit << ">\n  " << std::bitset<64>(val) << std::endl;
+
+    // by default set as 8 bits (smallest integral type)
+    Type *ty = PrimitiveType::get_u8_type();
+
+    // test the most significant 32 bits
+    if (val >> 32) {
+        // requires 64 bits
+        ty = PrimitiveType::get_u64_type();
+    }
+
+    // test the most significant 16 bits of the least significant 32 bits
+    else if (static_cast<uint32_t>(val) >> 16) {
+        // requires 32 bits
+        ty = PrimitiveType::get_u32_type();
+    }
+
+    // test the most significant 8 bits of the least significant 16 bits
+    else if (static_cast<uint16_t>(val) >> 8) {
+        // requires 16 bits
+        ty = PrimitiveType::get_u16_type();
+    }
+
+    // else, the default 8 bit type can contain the value
+
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::int_lit,
-        analyze_primitive_type(token::kw_i32, loc), // SPAGHETTI CODE AT ITS FINEST
+        ty,
         num_lit,
         loc,
         token::numeric_literal,
@@ -887,7 +1017,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
             break;
         case op::indirect:
             // the expr must be of pointer type
-            if (expr->type->get_kind() != typekind::pointer_t) {
+            if (ty->get_canonical()->get_kind() != typekind::pointer_t) {
                 // ErrorHandler::handle(error::pointer_type_required, loc, "value of non-pointer type cannot be dereferenced");
                 DiagnosticHandler::make(diag::id::indirection_typecheck, errloc)
                     .add(ty->stringify())
@@ -896,7 +1026,7 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
                 ty = Type::get_error_type();
             }
             else {
-                ty = static_cast<PointerType *>(ty)->get_pointee();
+                ty = static_cast<PointerType *>(ty->get_canonical())->get_pointee();
             }
             lval = true;
             break;
@@ -915,12 +1045,13 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
         case op::neg:
             // expr must be of integral type
             if (!ty->is_integral()) {
-                // ErrorHandler::handle(error::integral_type_required, loc, "negation cannot be applied to non-integral types");
                 DiagnosticHandler::make(diag::id::unary_negate_typecheck, errloc)
                     .add(ty->stringify())
                     .finish();
                 err = true;
                 ty = Type::get_error_type();
+
+                // FIXME: check for signedness and type capacity after negation
             }
             break;
         default:
@@ -1119,6 +1250,8 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
 ) {
     ASTNode *decl_node = analyze_var_decl(scope, type, ident, ident_loc);
     decl_node->children.push_back(rhs);
+    bool res = typecheck_assignment(decl_node, rhs);
+    if (res) decl_node->has_error = true;
     return decl_node;
 }
 
@@ -1151,7 +1284,7 @@ ASTNode *SemanticAnalyzer::analyze_type_alias(
     else {
 
         // add alias to type table
-        alias = new AliasType(type->get_canonical(), *ident, type, stmt);
+        alias = new AliasType(type, *ident, stmt);
 
         insert_type(*scope, *ident, alias);
     }

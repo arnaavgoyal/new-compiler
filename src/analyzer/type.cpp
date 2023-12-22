@@ -9,13 +9,25 @@ Type *Type::get_error_type() {
     return ptr.get();
 }
 
-#define PRIMTYPE(which) \
+#define PRIMTYPE(which, bytes) \
 PrimitiveType *PrimitiveType::get_##which##_type() { \
-    static std::unique_ptr<PrimitiveType> ptr(new PrimitiveType(typekind::which##_t, token::kw_##which)); \
+    static std::unique_ptr<PrimitiveType> ptr(new PrimitiveType(typekind::which##_t, bytes, token::kw_##which)); \
     return ptr.get(); \
 }
-#define TYPE(which) PRIMTYPE(which)
-#include "lexer/tokendefs"
+
+    PRIMTYPE(u8,   1)
+    PRIMTYPE(i8,   1)
+    PRIMTYPE(u16,  2)
+    PRIMTYPE(i16,  2)
+    PRIMTYPE(u32,  4)
+    PRIMTYPE(i32,  4)
+    PRIMTYPE(u64,  8)
+    PRIMTYPE(i64,  8)
+    PRIMTYPE(f32,  4)
+    PRIMTYPE(f64,  8)
+    PRIMTYPE(void, 0)
+
+#undef PRIMTYPE
 
 PrimitiveType *PrimitiveType::get_prim(token::token_type tk) {
     assert(token::is_primitive_type(tk) && "get_prim called with non-primitive token type");
@@ -51,13 +63,13 @@ PointerType *PointerType::get_error_type() {
 }
 
 ArrayType *ArrayType::get_error_type() {
-    static std::unique_ptr<ArrayType> ptr(new ArrayType(nullptr, Type::get_error_type()));
+    static std::unique_ptr<ArrayType> ptr(new ArrayType(nullptr, Type::get_error_type(), 0));
     return ptr.get();
 }
 
 ASTNode *AliasType::error_node = nullptr;
 AliasType *AliasType::get_error_type() {
-    static std::unique_ptr<AliasType> ptr(new AliasType(Type::get_error_type(), "<error-alias>", Type::get_error_type(), error_node));
+    static std::unique_ptr<AliasType> ptr(new AliasType(Type::get_error_type(), "<error-alias>", error_node));
     return ptr.get();
 }
 

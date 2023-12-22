@@ -92,26 +92,29 @@ void DiagnosticHandler::print_diag(Diagnostic &diag) {
     print_loc_prefix(diag.locs[0]);
 
     char const *highlight_col = ioformat::GREEN;
+    char const *diag_ty_str = nullptr;
 
     // print the diag severity and choose highlight color
     switch (diag.sev) {
     case diag::severity::fatal:
     case diag::severity::error:
         highlight_col = ioformat::RED;
-        std::cout << highlight_col
-            << "error: "
-            << ioformat::RESET;
+        diag_ty_str = "error";
+        break;
+    case diag::severity::warning:
+        highlight_col = ioformat::PURPLE;
+        diag_ty_str = "warning";
         break;
     case diag::severity::note:
         highlight_col = ioformat::CYAN;
-        std::cout << highlight_col
-            << "note: "
-            << ioformat::RESET;
+        diag_ty_str = "note";
         break;
     }
 
     // print error
-    std::cout << ioformat::WHITE << diag.finalstr << ioformat::RESET << std::endl;
+    std::cout << highlight_col << diag_ty_str << ": "
+            << ioformat::WHITE << diag.finalstr
+            << ioformat::RESET << std::endl;
 
     // print loc highlight
     print_loc_highlight(diag.locs[0], highlight_col);
@@ -194,7 +197,7 @@ unsigned DiagnosticHandler::dump() {
     unsigned num_errors = 0;
     for (Diagnostic &diag : diags) {
         print_diag(diag);
-        if (diag.sev <= diag::severity::error) {
+        if (diag.sev < diag::severity::_uncompilable) {
             num_errors++;
         }
     }

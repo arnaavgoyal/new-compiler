@@ -14,9 +14,14 @@ struct RawDiagnostic;
 namespace diag {
 
 enum class severity {
+
     fatal,
     error,
-    note,
+
+    _uncompilable,
+
+    warning,
+    note
 };
 
 enum class id {
