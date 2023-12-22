@@ -940,6 +940,8 @@ ASTNode *Parser::parse_func_decl() {
     // consume right paren
     consume();
 
+    std::cout << "func decl " << *ident << " w/ type " << type->stringify() << std::endl;
+
     // analyze func decl
     ASTNode *func_decl = analyzer.analyze_func_decl(
         &curr_scope,
@@ -967,6 +969,46 @@ ASTNode *Parser::parse_func_decl() {
     analyzer.end_func_define(&curr_scope, tk.get_src_loc());
 
     return func_decl;
+}
+
+ASTNode *Parser::parse_type_decl() {
+    assert(tk.get_type() == token::kw_type);
+
+    // consume keyword
+    consume();
+
+    // expecting identifier
+    if (tk.get_type() != token::identifier) {
+        DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+            .finish();
+        fatal_abort();
+    }
+
+    // cache ident loc
+    auto loc_cache = tk.get_src_loc();
+    std::string *ident = tk.get_identifier_str();
+
+    // consume identifier
+    consume();
+
+    // expecting '='
+    match(token::op_equal);
+
+    // consume '='
+    consume();
+
+    // parse type
+    Type *temp = parse_type();
+
+    // notify analyzer
+    auto res = analyzer.analyze_type_alias(
+        &curr_scope,
+        temp,
+        ident,
+        loc_cache
+    );
+
+    return res;
 }
 
 ASTNode *Parser::parse_stmt_block(bool make_new_scope) {
@@ -1042,7 +1084,7 @@ ASTNode *Parser::parse_stmt() {
     // scoped statement block
     else if (tk_type == token::op_leftbrace) {
 
-        parse_stmt_block(true);
+        res = parse_stmt_block(true);
 
         // this is to skip the semicolon check
         req_semi = false;
@@ -1051,40 +1093,8 @@ ASTNode *Parser::parse_stmt() {
     // typedef
     else if (tk_type == token::kw_type) {
 
-        // consume keyword
-        consume();
-
-        // expecting identifier
-        if (tk.get_type() != token::identifier) {
-            DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
-                .finish();
-            fatal_abort();
-        }
-
-        // cache ident loc
-        loc_cache = tk.get_src_loc();
-
-        std::string *ident = tk.get_identifier_str();
-
-        // consume identifier
-        consume();
-
-        // expecting '='
-        match(token::op_equal);
-
-        // consume '='
-        consume();
-
-        // parse type
-        Type *temp = parse_type();
-
-        // notify analyzer
-        res = (ASTNode *)analyzer.analyze_type_alias(
-            &curr_scope,
-            temp,
-            ident,
-            loc_cache
-        );
+        // parse
+        res = parse_type_decl();
     }
 
     // return statement
@@ -1100,7 +1110,7 @@ ASTNode *Parser::parse_stmt() {
         ASTNode *temp = parse_expr();
 
         // analyze return stmt
-        res = (ASTNode *)analyzer.analyze_return_stmt(temp);
+        res = analyzer.analyze_return_stmt(temp);
     }
 
     // var decl
@@ -1202,7 +1212,7 @@ ASTNode *Parser::parse_stmt() {
     else {
 
         // parse expr
-        res = (ASTNode *)parse_expr();
+        res = parse_expr();
     }
 
     // require semicolon at end of stmt
@@ -1212,6 +1222,88 @@ ASTNode *Parser::parse_stmt() {
     }
 
     return res;
+}
+
+bool Parser::parse_entry() {
+
+    // top level scope is the translation unit
+    tunit = node_allocator.alloc();
+    tunit->set(
+        ast::translation_unit,
+        nullptr,
+        nullptr,
+        SourceLocation(),
+        token::unknown,
+        false
+    );
+
+    // setup jmp buf for syntax error
+    if (setjmp(env)) {
+        return false;
+    }
+
+    // parsing at global scope.
+    // global scope is not an execution context, so the
+    //   only valid statements at this point are declarations
+    //   (vars, funcs, and types)
+
+    bool done = false;
+    token::token_type tkty;
+    while (!done) {
+        
+        tkty = tk.get_type();
+
+        // var decl
+        if (tkty == token::kw_var) {
+
+            // just parse and add the var decl
+            tunit->children.push_back(parse_var_decl());
+
+            // deal with semi
+            match(token::op_semicolon);
+            consume();
+        }
+
+        // func decl
+        else if (tkty == token::kw_def) {
+
+            // a func decl is the first valid execution context
+            //   but the func decl parse function takes care of this.
+            // so just parse and add...
+            tunit->children.push_back(parse_func_decl());
+        }
+
+        // type decl
+        else if (tkty == token::kw_type) {
+
+            // parse and add the type decl
+            tunit->children.push_back(parse_type_decl());
+
+            // deal with semi
+            match(token::op_semicolon);
+            consume();
+        }
+
+        // end of program (eof)
+        else if (tkty == token::eof) {
+
+            // exit parsing
+            break;
+        }
+
+        // unknown -- invalid
+        else {
+            
+            // report error
+            DiagnosticHandler::make(diag::id::expected_declaration_in_non_execution_context, tk.get_src_loc())
+                .finish();
+
+            // abort
+            fatal_abort();
+        }
+    }
+
+    return true;
 }
 
 /** ------------------- PUBLIC ------------------- */
@@ -1237,31 +1329,14 @@ Parser::~Parser() {
 }
 
 bool Parser::parse(ASTNode **ref) {
-    ASTNode *root = node_allocator.alloc();
-    root->set(
-        ast::translation_unit,
-        nullptr,
-        nullptr,
-        SourceLocation(),
-        token::unknown,
-        false
-    );
-    ASTNode *temp;
-    *ref = root;
 
-    // syntax error
-    if (setjmp(env)) {
-        return false;
-    }
+    // parse
+    bool res = parse_entry();
 
-    // normal
-    else {
-        while ((temp = parse_stmt())) {
-            root->children.push_back(temp);
-        }
-    }
+    // return the ast
+    *ref = tunit;
 
-    return true;
+    return res;
 }
 
 }

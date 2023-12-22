@@ -4,6 +4,7 @@
 
 // syntax
 
+DIAGNOSTIC(expected_declaration_in_non_execution_context, error, "expected declaration (top level scope is not a valid execution context)")
 DIAGNOSTIC(expected_expression, error, "expected expression")
 DIAGNOSTIC(expected_token, error, "expected '%0'")
 DIAGNOSTIC(expected_type, error, "expected type")

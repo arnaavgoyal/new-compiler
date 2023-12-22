@@ -190,11 +190,15 @@ void DiagnosticBuilder::finish() {
 
 std::vector<Diagnostic> DiagnosticHandler::diags;
 
-int DiagnosticHandler::dump() {
+unsigned DiagnosticHandler::dump() {
+    unsigned num_errors = 0;
     for (Diagnostic &diag : diags) {
         print_diag(diag);
+        if (diag.sev <= diag::severity::error) {
+            num_errors++;
+        }
     }
-    return diags.size();
+    return num_errors;
 }
 
 void DiagnosticHandler::prog_exit() {

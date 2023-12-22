@@ -293,12 +293,16 @@ public:
     std::vector<Type *> get_params() { return params; }
     std::string stringify() override {
         std::string str("(");
+        bool hp = false;
         for (auto &param : params) {
             str.append(param->stringify());
             str.append(", ");
+            hp = true;
         }
-        str.pop_back();
-        str.pop_back();
+        if (hp) {
+            str.pop_back();
+            str.pop_back();
+        }
         str.append(")");
         str.append(return_ty->stringify());
         return str;

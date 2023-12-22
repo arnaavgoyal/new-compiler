@@ -7,12 +7,17 @@ foo(str) {
 type myty = i32;
 type myty = hehehe;
 
+var i32 glob = 0;
+
+def () void glob() { }
+
 def (i32, **i8) i32
 main(argc, argv) {
     var *i8 str = *argv;
     //var []*()i32 str;
     //str++;
     var i32 val = 0;
+    *str = 5;
     //str = *argv;
     while (val) {
         val = foo(str);

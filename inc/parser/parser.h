@@ -39,6 +39,8 @@ private:
     /** The env for longjmp back to runner on syntax error*/
     jmp_buf env;
 
+    ASTNode *tunit = nullptr;
+
     /** ------------------- UTILS ------------------- */
 
     ASTNode *make_node(
@@ -311,6 +313,8 @@ private:
     */
     ASTNode *parse_func_decl();
 
+    ASTNode *parse_type_decl();
+
     ASTNode *parse_stmt_block(bool need_new_scope);
 
     /**
@@ -320,6 +324,8 @@ private:
      * @return the parsed statement
     */
     ASTNode *parse_stmt();
+
+    bool parse_entry();
 
 public:
 

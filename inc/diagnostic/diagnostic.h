@@ -99,7 +99,7 @@ public:
         return db;
     }
     static void print_diag(Diagnostic &diag);
-    static int dump();
+    static unsigned dump();
     static void prog_exit();
 };
 
