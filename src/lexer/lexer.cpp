@@ -317,6 +317,9 @@ lex_start:
             if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_var)) == 0) {
                 type = token::kw_var;
             }
+            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_void)) == 0) {
+                type = token::kw_void;
+            }
             else {
                 type = token::identifier;
             }
