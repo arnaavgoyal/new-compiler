@@ -29,8 +29,8 @@ void Def::dump_as_operand() {
 
 /** ------------------- DefUser ------------------- */
 
-DefUser::DefUser(Type *ty, unsigned num_ops)
-    : Def(ty), num_ops(num_ops), operands(num_ops) {
+DefUser::DefUser(defkind kind, Type *ty, unsigned num_ops)
+    : Def(kind, ty), num_ops(num_ops), operands(num_ops) {
     // operands = new Use[num_ops];
     // for (unsigned i = 0; i < num_ops; i++) {
     //     operands[i].idx = i;
@@ -172,7 +172,7 @@ void ICmpInstr::dump(unsigned indent) {
 }
 
 CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, Instr *before, std::string name_hint)
-    : Instr(callee->get_type(), 1 + callee->num_params(), instr::call, parent, before, name_hint) {
+    : Instr(defkind::call, callee->get_type(), 1 + callee->num_params(), parent, before, name_hint) {
     assert(callee->num_params() == args.size());
     set_operand(0, callee);
     auto it = callee->params_begin();
@@ -186,7 +186,7 @@ CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, I
 }
 
 BranchInstr::BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent)
-    : Instr(PrimitiveType::get_void_type(), 3, instr::branch, true, parent) {
+    : Instr(defkind::branch, PrimitiveType::get_void_type(), 3, true, parent) {
     assert(cond->get_type() == PrimitiveType::get_i1_type() && "cond must be of i1 type");
     set_operand(0, jmp_true);
     set_operand(1, cond);
@@ -194,7 +194,7 @@ BranchInstr::BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *pa
     conditional = true;
 }
 BranchInstr::BranchInstr(Block *jmp, Block *parent)
-    : Instr(PrimitiveType::get_void_type(), 1, instr::branch, true, parent) {
+    : Instr(defkind::branch, PrimitiveType::get_void_type(), 1, true, parent) {
     set_operand(0, jmp);
     conditional = false;
 }
@@ -240,8 +240,8 @@ void IDowncastInstr::dump(unsigned indent) {
 }
 
 
-BinaryOpInstr::BinaryOpInstr(ir::instr opc, Def *x, Def *y, Block *parent, Instr *before, std::string name_hint)
-    : Instr(x->get_type(), 2, opc, parent, before, name_hint) {
+BinaryOpInstr::BinaryOpInstr(defkind opc, Def *x, Def *y, Block *parent, Instr *before, std::string name_hint)
+    : Instr(opc, x->get_type(), 2, parent, before, name_hint) {
     assert(x->get_type() == y->get_type() && "both x and y must have same type");
     set_operand(0, x);
     set_operand(1, y);
@@ -272,7 +272,7 @@ void Param::dump_as_operand() {
 }
 
 Function::Function(Type *return_ty, linkage lty, Program *parent, std::string name_hint)
-    : Global(return_ty, lty), params(this), blocks(this) {
+    : Global(defkind::function, return_ty, lty), params(this), blocks(this) {
     assert(!name_hint.empty() && "functions must be named");
     set_name(name_hint);
     set_parent(parent);

@@ -11,7 +11,7 @@ std::vector<ir::Block *> predecessors(ir::Block *b) {
     //std::cout << "preds for " << b->get_name() << std::endl;
     for (ir::Use *u : b->uses_iterable()) {
         auto instr = static_cast<ir::Instr *>(u->get_user());
-        if (instr->get_instr_kind() == ir::instr::branch) {
+        if (instr->get_kind() == ir::defkind::branch) {
             preds.push_back(instr->get_parent());
             //std::cout << "  found pred: " << instr->get_parent()->get_name() << "\n";
             //u->get_user()->dump(4);
@@ -30,7 +30,7 @@ std::vector<ir::Block *> successors(ir::Block *b) {
     ir::Instr *term = b->get_last_instr();
     assert(term->is_terminator() && "block is ill-formed -- no terminator instruction");
     std::vector<ir::Block *> succs;
-    if (term->get_instr_kind() == ir::instr::branch) {
+    if (term->get_kind() == ir::defkind::branch) {
         ir::BranchInstr *bi = static_cast<ir::BranchInstr *>(term);
         succs.push_back(bi->get_jmp_true());
         if (bi->is_conditional()) {

@@ -25,52 +25,63 @@ enum class linkage {
     external,
 };
 
-enum class instr {
+enum class defkind {
 
-// control flow
+    param,
+    block,
 
-    // return
-    ret,
-    // branch
-    branch,
+    // constant
+    _constant_start,
 
-// memory
+        integral_constant,
 
-    // stack mem alloc
-    salloc,
-    // read mem
-    read,
-    // write mem
-    write,
-    // index a ptr
-    ptridx,
+        // global
+        globalvar,
+        function,
 
-// typecasting
+    _constant_end,
 
-    // typecast between types of same size
-    typecast,
-    // integral upcast (smaller -> bigger)
-    iupcast,
-    // integral downcast (bigger -> smaller)
-    idowncast,
 
-// binary operations
+    // instruction
+    _instr_start,
 
-    __binop_start,
-    iadd,
-    isub,
-    imul,
-    idiv,
-    __binop_end,
+        // return
+        ret,
+        // branch
+        branch,
 
-// other
+        // stack mem alloc
+        salloc,
+        // read mem
+        read,
+        // write mem
+        write,
+        // index a ptr
+        ptridx,
 
-    // compare integral types
-    icmp,
-    // call a function
-    call,
-    // ssa phi function
-    phi
+        // typecast between types of same size
+        typecast,
+        // integral upcast (smaller -> bigger)
+        iupcast,
+        // integral downcast (bigger -> smaller)
+        idowncast,
+
+        // binary operations
+        _binop_start,
+        iadd,
+        isub,
+        imul,
+        idiv,
+        _binop_end,
+
+        // compare integral types
+        icmp,
+        // call a function
+        call,
+        // ssa phi function
+        phi,
+    
+    _instr_end,
 };
 
 enum class cmpkind {
@@ -104,20 +115,24 @@ public:
 
 class Def {
 private:
+    defkind kind;
     Type *type;
     IList<Use> list;
 
 protected:
     Def(Def &) = default;
     Def(Def &&) = default;
-    Def(Type *ty) : type(ty) { }
+    Def(defkind kind, Type *ty) : kind(kind), type(ty) { }
 
 public:
+    defkind get_kind() { return kind; }
     Type *get_type() { return type; }
     void add_use(Use *use);
     void remove_use(Use *use);
     virtual void dump(unsigned indent = 0);
     virtual void dump_as_operand();
+
+    bool is_instr() { return kind > defkind::_instr_start && kind < defkind::_instr_end; }
 
     // iterators
     IList<Use>::iterator uses_begin() { return list.begin(); }
@@ -136,7 +151,7 @@ private:
 protected:
     DefUser(DefUser &) = default;
     DefUser(DefUser &&) = default;
-    DefUser(Type *ty, unsigned num_ops);
+    DefUser(defkind kind, Type *ty, unsigned num_ops);
 
 public:
     unsigned get_num_ops() { return operands.size(); }
@@ -206,7 +221,7 @@ protected:
 
 public:
     Block(Function *parent, std::string name_hint = "")
-        : Def(ir::PrimitiveType::get_block_type()), list(this) {
+        : Def(defkind::block, ir::PrimitiveType::get_block_type()), list(this) {
         if (!name_hint.empty()) {
             set_name(name_hint);
         }
@@ -230,26 +245,24 @@ public:
 class Instr : public DefUser, public STPPIListNode<Instr, Block> {
 private:
     static constexpr char const *const STR_REPR = "<instr>";
-    instr kind;
     bool term;
 
 protected:
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
-    Instr(Type *ty, unsigned num_ops, instr kind, bool term,
+    Instr(defkind kind, Type *ty, unsigned num_ops, bool term,
         Block *parent = nullptr, Instr *before = nullptr,
         std::string name_hint = "")
-        : DefUser(ty, num_ops), kind(kind), term(term) {
+        : DefUser(kind, ty, num_ops), term(term) {
         if (parent) { set_parent(parent); }
         if (!name_hint.empty()) { set_name(name_hint); }
     }
-    Instr(Type *ty, unsigned num_ops, instr kind,
+    Instr(defkind kind, Type *ty, unsigned num_ops,
         Block *parent = nullptr, Instr *before = nullptr,
         std::string name_hint = "")
-        : Instr(ty, num_ops, kind, false, parent, before, name_hint) { }
+        : Instr(kind, ty, num_ops, false, parent, before, name_hint) { }
 
 public:
-    instr get_instr_kind() { return kind; }
     void dump(unsigned indent = 0);
     void dump_as_operand();
     virtual std::string get_str_repr() { return STR_REPR; }
@@ -265,7 +278,7 @@ public:
     
 public:
     ReturnInstr(Def *retval, Block *parent)
-        : Instr(retval->get_type(), 1, instr::ret, true, parent) { set_operand(0, retval); }
+        : Instr(defkind::ret, retval->get_type(), 1, true, parent) { set_operand(0, retval); }
 };
 
 class BranchInstr : public Instr {
@@ -305,7 +318,7 @@ private:
 
 public:
     SAllocInstr(Type *alloc_type, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 0, instr::salloc, parent, before, name_hint),
+        : Instr(defkind::salloc, PrimitiveType::get_ptr_type(), 0, parent, before, name_hint),
         alloc_ty(alloc_type) { }
     Type *get_alloc_ty() { return alloc_ty; }
     void dump(unsigned indent = 0);
@@ -320,7 +333,7 @@ public:
 
 public:
     ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(val_type, 1, instr::read, parent, before, name_hint) {
+        : Instr(defkind::read, val_type, 1, parent, before, name_hint) {
         assert(mem_ptr->get_type() == PrimitiveType::get_ptr_type() && "mem_ptr must be of pointer type");
         set_operand(0, mem_ptr);
     }
@@ -336,7 +349,7 @@ public:
 
 public:
     WriteInstr(Def *val, Def *mem, Block *parent = nullptr)
-        : Instr(PrimitiveType::get_void_type(), 2, instr::write, parent) {
+        : Instr(defkind::write, PrimitiveType::get_void_type(), 2, parent) {
         set_operand(0, val);
         set_operand(1, mem);
     }
@@ -352,7 +365,7 @@ public:
 
 public:
     PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_ptr_type(), 2, instr::ptridx, parent, before, name_hint) {
+        : Instr(defkind::ptridx, PrimitiveType::get_ptr_type(), 2, parent, before, name_hint) {
         assert(ptr_val->get_type() == PrimitiveType::get_ptr_type() && "ptr_val must be of pointer type");
         set_operand(0, ptr_val);
         set_operand(1, idx_val);
@@ -368,7 +381,7 @@ public:
 
 public:
     TypecastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(ty, 1, instr::iupcast, parent, before, name_hint) {
+        : Instr(defkind::iupcast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
         // TODO: check for invalid cast (types are different sizes)
     }
@@ -384,7 +397,7 @@ public:
 
 public:
     IUpcastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(ty, 1, instr::iupcast, parent, before, name_hint) {
+        : Instr(defkind::iupcast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
         // TODO: check for invalid upcast
     }
@@ -400,7 +413,7 @@ public:
 
 public:
     IDowncastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(ty, 1, instr::idowncast, parent, before, name_hint) {
+        : Instr(defkind::idowncast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
         // TODO: check for invalid downcast
     }
@@ -419,7 +432,7 @@ private:
 
 public:
     ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
-        : Instr(PrimitiveType::get_i1_type(), 2, instr::icmp, parent, before, name_hint), kind(kind) {
+        : Instr(defkind::icmp, PrimitiveType::get_i1_type(), 2, parent, before, name_hint), kind(kind) {
         assert(x->get_type() == y->get_type() && "operands must be of equivalent type");
         assert(x->get_type()->is_integral_type() && "operands must be of integral type");
         set_operand(0, x);
@@ -448,7 +461,7 @@ public:
 
 public:
     PhiInstr(Type *ty, Block *parent = nullptr, std::string name_hint = "")
-        : Instr(ty, 0, ir::instr::phi, nullptr, nullptr, name_hint) {
+        : Instr(defkind::phi, ty, 0, nullptr, nullptr, name_hint) {
         if (parent) {
             insert_before(parent->get_first_instr());
         }
@@ -462,7 +475,7 @@ public:
 
 class BinaryOpInstr : public Instr {
 public:
-    BinaryOpInstr(instr opc, Def *x1, Def *x2, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
+    BinaryOpInstr(defkind opc, Def *x1, Def *x2, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
 };
 
 /** ------------------- Constants ------------------- */
@@ -471,7 +484,7 @@ class Constant : public Def {
 protected:
     Constant(Constant &) = default;
     Constant(Constant &&) = default;
-    Constant(Type *ty) : Def(ty) { }
+    Constant(defkind kind, Type *ty) : Def(kind, ty) { }
 };
 
 class IntegralConstant : public Constant {
@@ -486,7 +499,7 @@ private:
     IntegralConstant(IntegralConstant &) = delete;
     IntegralConstant(IntegralConstant &&) = delete;
     IntegralConstant(Type *ty, uint64_t num_value)
-        : Constant(ty), value(num_value) { }
+        : Constant(defkind::integral_constant, ty), value(num_value) { }
 
 public:
     static IntegralConstant *get(Type *ty, uint64_t value);
@@ -503,7 +516,7 @@ private:
     linkage lty;
 
 protected:
-    Global(Type *ty, linkage lty) : Constant(ty), lty(lty) { }
+    Global(defkind kind, Type *ty, linkage lty) : Constant(kind, ty), lty(lty) { }
 
 public:
     linkage get_linkage() { return lty; }
@@ -516,7 +529,7 @@ private:
 
 public:
     GlobalVar(Type *ty, linkage lty, Program *parent, bool is_const, std::string name_hint)
-        : Global(ty, lty), is_const(is_const) {
+        : Global(defkind::globalvar, ty, lty), is_const(is_const) {
         assert(!name_hint.empty() && "global variables must be named");
         set_name(name_hint);
         set_parent(parent);
@@ -531,7 +544,7 @@ class Param : public Def, public STPPIListNode<Param, Function> {
 
 public:
     Param(Type *ty, Function *func, unsigned idx, std::string name_hint = "")
-        : Def(ty), param_of(func), idx(idx) {
+        : Def(defkind::param, ty), param_of(func), idx(idx) {
         if (!name_hint.empty()) {
             set_name(name_hint);
         }

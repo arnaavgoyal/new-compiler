@@ -6,7 +6,7 @@ SRCDIR := src
 PROJECT := compiler.exe
 
 CPP := g++
-CPPFLAGS := -Wall -g -MMD -c -I inc -std=c++20
+CPPFLAGS := -Wall -g -MMD -c -I inc -std=c++20 -fno-rtti
 
 SOURCES := $(wildcard *.cpp) $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/*/*.cpp)
 OBJECTS := $(SOURCES:%.cpp=%.o)

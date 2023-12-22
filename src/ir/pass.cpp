@@ -413,10 +413,10 @@ static bool eligible(ir::SAllocInstr *sa, DJG &djg, std::set<DJGVertex *> &alpha
     // std::cout << "eligibility of " << sa->get_name() << ": ";
     for (ir::Use *u : sa->uses_iterable()) {
         ir::Instr *i = static_cast<ir::Instr *>(u->get_user());
-        if (i->get_instr_kind() == ir::instr::write) {
+        if (i->get_kind() == ir::defkind::write) {
             alpha.insert(djg.get_vertex(i->get_parent()));
         }
-        else if (i->get_instr_kind() != ir::instr::read) {
+        else if (i->get_kind() != ir::defkind::read) {
             // std::cout << "ineligible :(\n";
             return false;
         }
@@ -501,18 +501,18 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
         //std::cout << "    rectifying reads/writes" << std::endl;
 
-        // visit each instr in order
+        // visit each defkind in order
         for (auto i : *b) {
 
             // determine which instrs in b are relevant
             if (std::find_if(sa->uses_begin(), sa->uses_end(),
                 [=](ir::Use *const &u) { return i == u->get_user(); }) == sa->uses_end()) {
-                // irrelevant instr
+                // irrelevant defkind
                 continue;
             }
 
-            // if instr is read
-            if (i->get_instr_kind() == ir::instr::read) {
+            // if defkind is read
+            if (i->get_kind() == ir::defkind::read) {
 
                 // get the most recent def of sa for b
                 ir::Def *mrdef = most_recents[b];
@@ -521,29 +521,29 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 //std::cout << "    mrdef to replace " << i->get_name() << " : ";
                 //mrdef->dump();
 
-                // then replace all uses of instr with the def
+                // then replace all uses of defkind with the def
                 for (auto u : i->uses_iterable()) {
                     u->set_def(mrdef);
                 }
 
-                // finally, remove instr
+                // finally, remove defkind
                 i->remove_from_parent();
             }
 
-            // if instr is write
+            // if defkind is write
             else {
 
-                assert(i->get_instr_kind() == ir::instr::write && "instr that uses SAllocInstr which isnt read or write?");
+                assert(i->get_kind() == ir::defkind::write && "defkind that uses SAllocInstr which isnt read or write?");
                 
-                // remove the instr (the var will be used via the inner
+                // remove the defkind (the var will be used via the inner
                 // def, aka, the one that was being written)
                 i->remove_from_parent();
                 
                 // rename the inner def
                 ir::Def *inner = static_cast<ir::WriteInstr *>(i)->get_val();
                 
-                if (auto casted = dynamic_cast<ir::Instr *>(inner)) {
-                    casted->set_name(sa->get_name() /* + std::to_string(counter++) */);
+                if (inner->is_instr()) {
+                    static_cast<ir::Instr *>(inner)->set_name(sa->get_name() /* + std::to_string(counter++) */);
                 }
 
                 // then update the most recent def for b
@@ -572,7 +572,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
         }
     }
 
-    // finally, remove the salloc instr
+    // finally, remove the salloc defkind
     sa->remove_from_parent();
 }
 
@@ -582,7 +582,7 @@ void run_stackpromotion(ir::Function *f) {
     djg.dump(djgfile);
     ir::Block *entry = djg.get_root()->block;
     for (ir::Instr *i : *entry) {
-        if (i->get_instr_kind() == ir::instr::salloc) {
+        if (i->get_kind() == ir::defkind::salloc) {
             ir::SAllocInstr *sa = static_cast<ir::SAllocInstr *>(i);
             std::set<DJGVertex *> alpha;
             if (eligible(sa, djg, alpha)) {
