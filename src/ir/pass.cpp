@@ -501,17 +501,17 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
         //std::cout << "    rectifying reads/writes" << std::endl;
 
-        // visit each defkind in order
+        // visit each instr in order
         for (auto i : *b) {
 
             // determine which instrs in b are relevant
             if (std::find_if(sa->uses_begin(), sa->uses_end(),
                 [=](ir::Use *const &u) { return i == u->get_user(); }) == sa->uses_end()) {
-                // irrelevant defkind
+                // irrelevant instr
                 continue;
             }
 
-            // if defkind is read
+            // if instr is read
             if (i->get_kind() == ir::defkind::read) {
 
                 // get the most recent def of sa for b
@@ -521,21 +521,21 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 //std::cout << "    mrdef to replace " << i->get_name() << " : ";
                 //mrdef->dump();
 
-                // then replace all uses of defkind with the def
+                // then replace all uses of instr with the def
                 for (auto u : i->uses_iterable()) {
                     u->set_def(mrdef);
                 }
 
-                // finally, remove defkind
+                // finally, remove instr
                 i->remove_from_parent();
             }
 
-            // if defkind is write
+            // if instr is write
             else {
 
-                assert(i->get_kind() == ir::defkind::write && "defkind that uses SAllocInstr which isnt read or write?");
+                assert(i->get_kind() == ir::defkind::write && "instr that uses SAllocInstr which isnt read or write?");
                 
-                // remove the defkind (the var will be used via the inner
+                // remove the instr (the var will be used via the inner
                 // def, aka, the one that was being written)
                 i->remove_from_parent();
                 
@@ -572,7 +572,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
         }
     }
 
-    // finally, remove the salloc defkind
+    // finally, remove the salloc instr
     sa->remove_from_parent();
 }
 
