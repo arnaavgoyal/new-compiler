@@ -137,25 +137,32 @@ enum class typekind {
 
                 // unsigned
                 _unsigned_start,
-                u8_t,
-                u16_t,
-                u32_t,
-                u64_t,
+
+                    u8_t,
+                    u16_t,
+                    u32_t,
+                    u64_t,
+
                 _unsigned_end,
 
                 // signed
                 _signed_start,
-                i8_t,
-                i16_t,
-                i32_t,
-                i64_t,
+
+                    i8_t,
+                    i16_t,
+                    i32_t,
+                    i64_t,
+
                 _signed_end,
 
             _integral_end,
 
             // floating point
             _fp_start,
-            f32_t, f64_t,
+
+                f32_t,
+                f64_t,
+
             _fp_end,
         
         _numeric_end,
@@ -165,7 +172,7 @@ enum class typekind {
 
     _primitive_end,
 
-// constructible
+    // constructible
     pointer_t,
     array_t,
     alias_t,
