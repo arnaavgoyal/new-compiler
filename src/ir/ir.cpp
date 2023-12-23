@@ -7,6 +7,14 @@
 
 namespace ir {
 
+/** ------------------- Use ------------------- */
+
+void Use::set_def(Def *def) {
+    if (this->def) this->def->remove_use(this);
+    this->def = def;
+    if (def) def->add_use(this);
+}
+
 /** ------------------- Def ------------------- */
 
 void Def::add_use(Use *use) {
@@ -29,35 +37,80 @@ void Def::dump_as_operand() {
 
 /** ------------------- DefUser ------------------- */
 
-DefUser::DefUser(defkind kind, Type *ty, unsigned num_ops)
-    : Def(kind, ty), num_ops(num_ops), operands(num_ops) {
-    // operands = new Use[num_ops];
-    // for (unsigned i = 0; i < num_ops; i++) {
-    //     operands[i].idx = i;
-    //     operands[i].user = this;
-    //     operands[i].def = nullptr;
-    // }
-}
-void DefUser::set_operand(unsigned idx, Def *operand) {
-    assert(operand && "operand cannot be null");
-
-    Use *u;
-    if (idx >= operands.size()) {
-        assert(idx == operands.size() && "must add immediate next operand if adding new");
-        operands.push_back(Use(this, operand, idx));
-        u = &operands[idx];
+DefUser::DefUser(defkind kind, Type *ty, unsigned num)
+    : Def(kind, ty) {
+    //std::cout << "making defuser (in ctor)\n"
+    //    << "  num=" << num << ", num_ops=" << num_ops << std::endl;
+    if (num && has_var_oplist) {
+        assert(num_ops == 0);
+        realloc_oplist(num);
     }
     else {
-        u = &operands[idx];
-        u->idx = idx;
-        u->user = this;
-        u->def = operand;
+        //std::cout << (unsigned)kind << std::endl;
+        assert(num == num_ops);
     }
-    operand->add_use(u);
+    //std::cout << "  done" << std::endl;
 }
-Use *DefUser::get_operand(unsigned idx) {
-    assert(idx < operands.size() && "idx must be < num_ops");
-    return &operands[idx];
+
+void *DefUser::operator new(size_t size) {
+    //std::cout << "alloc'ing new defuser with var oplist\n";
+
+    // allocate memory for this object + a pointer to an op list
+    void *mem = ::operator new(size + sizeof(Use *));
+
+    // get the oplist (ptr to mem)
+    Use **oplist = static_cast<Use **>(mem);
+
+    // get this object
+    DefUser *this_obj = reinterpret_cast<DefUser *>(oplist + 1);
+
+    // zero the oplist (to indicate that it has not yet been allocated)
+    *oplist = nullptr;
+
+    // this object has client-decided variable number of ops
+    this_obj->has_var_oplist = true;
+    this_obj->num_ops = 0;
+
+    //std::cout << "  done\n";
+
+    return this_obj;
+}
+
+void *DefUser::operator new(size_t size, unsigned num_ops) {
+    //std::cout << "alloc'ing new defuser with fixed oplist\n";
+
+    // allocate memory for this object + the op list
+    void *mem = ::operator new(size + num_ops * sizeof(Use));
+
+    // get the start and end of the op list
+    Use *op_start = static_cast<Use *>(mem);
+    Use *op_end = op_start + num_ops;
+
+    // ptr to this object is just op_end
+    DefUser *this_obj = reinterpret_cast<DefUser *>(op_end);
+
+    // initialize the ops in op list
+    for (Use *op_i = op_start; op_i != op_end; op_i++) {
+        new(op_i) Use(this_obj, op_i - op_start);
+    }
+
+    // this object has fixed number of ops
+    this_obj->has_var_oplist = false;
+    this_obj->num_ops = num_ops;
+
+    //std::cout << "  done\n";
+
+    return this_obj;
+}
+
+void DefUser::operator delete(void *obj) {
+    //std::cout << "deleting defuser\n";
+    DefUser *this_obj = static_cast<DefUser *>(obj);
+    if (this_obj->has_var_oplist) {
+        ::operator delete(reinterpret_cast<Use **>(this_obj)[-1]);
+    }
+    ::operator delete(obj);
+    //std::cout << "  done\n";
 }
 
 void DefUser::dump(unsigned indent) {
@@ -195,8 +248,10 @@ BranchInstr::BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *pa
 }
 BranchInstr::BranchInstr(Block *jmp, Block *parent)
     : Instr(defkind::branch, PrimitiveType::get_void_type(), 1, true, parent) {
+    //std::cout << "ctor branch uncond" << std::endl;
     set_operand(0, jmp);
     conditional = false;
+    //std::cout << "  done" << std::endl;
 }
 
 void SAllocInstr::dump(unsigned indent) {

@@ -119,7 +119,8 @@ ir::Function *ASTTranslator::t_func(ASTNode *fdecl, ir::Program *p) {
     for (unsigned i = 0; i < params.size(); i++) {
         auto sa = t_lvar(fdecl->children[i]);
         sa->set_name(sa->get_name() + ".addr");
-        new ir::WriteInstr(params[i], sa, curr_block);
+        auto wi = new ir::WriteInstr(params[i], sa, curr_block);
+        //wi->dump();
     }
     
     // generate ir for the function body
@@ -185,6 +186,7 @@ ir::Def *ASTTranslator::t_stmt(ASTNode *node) {
         case ast::stmt_block:
             for (ASTNode *c : node->children) {
                 res = t_stmt(c);
+                //if (res) res->dump();
             }
             return res;
         case ast::str_lit:
@@ -247,11 +249,14 @@ ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode *expr) {
     ir::Def *ir_expr = t_stmt(expr);
     if (ci_lval) { ir_expr = t_rval(ir_expr, t_type(expr->type)); }
     
-    return new ir::WriteInstr(
+    auto wi = new ir::WriteInstr(
         ir_expr,
         lval,
         curr_block
     );
+    //wi->dump();
+    //std::cout << "  done\n";
+    return wi;
 }
 
 ir::Def *ASTTranslator::t_binop(ASTNode *binop) {
@@ -495,6 +500,7 @@ ir::Def *ASTTranslator::t_if(ASTNode *ifstmt) {
 }
 
 ir::Def *ASTTranslator::t_loop(ASTNode *lnode) {
+    //std::cout << "translating loop stmt to ir\n";
 
     // get the function
     ir::Function *f = curr_block->get_parent();
@@ -503,7 +509,10 @@ ir::Def *ASTTranslator::t_loop(ASTNode *lnode) {
     ir::Block *loopcond = new ir::Block(f, "loopcond");
 
     // branch from the current block to the loop condition block
-    new ir::BranchInstr(loopcond, curr_block);
+    //std::cout << "  making branch\n";
+    auto jmp_to_cond = new ir::BranchInstr(loopcond, curr_block);
+    //std::cout << "    done" << std::endl;
+    //jmp_to_cond->dump();
 
     // move to the loop cond block
     curr_block = loopcond;
@@ -526,13 +535,17 @@ ir::Def *ASTTranslator::t_loop(ASTNode *lnode) {
     ir::Block *loopend = new ir::Block(f, "loopend");
 
     // the branch from the loop condition block to the loopbody and loopend
-    new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+    auto cond_branch = new ir::BranchInstr(cond_inner, loopbody, loopend, loopcond);
+    //cond_branch->dump();
 
     // the branch from the end of the loop body back to the loop condition
-    new ir::BranchInstr(loopcond, curr_block);
+    auto body_to_cond = new ir::BranchInstr(loopcond, curr_block);
+    //body_to_cond->dump();
 
     // move to the loop end block (this is where ir generation continues after the loop)
     curr_block = loopend;
+
+    //std::cout << "  done\n";
 
     // TODO: make this return whatever the last value in the loop is
     return loopend;

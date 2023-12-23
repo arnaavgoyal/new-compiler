@@ -91,8 +91,8 @@ public:
         out << "digraph {\n";
         for (edge_ty *e : edges) {
 
-            // std::cout << e->from->block->get_name()
-            //     << " -> " << e->to->block->get_name() << "\n";
+            //std::cout << e->from->block->get_name()
+            //    << " -> " << e->to->block->get_name() << "\n";
 
             out << "\t" << e->from->block->get_name()
                 << " -> " << e->to->block->get_name() << " [";
@@ -136,34 +136,33 @@ static void calc_po_nums(
 ) {
     assert(!visited.count(v) && "v was already visited?");
 
-    // std::cout << "    checking " << v->val->get_name() << std::endl;
+    //std::cout << "    checking " << v->get_name() << std::endl;
 
     auto res = visited.insert(v);
     assert(res.second && "insertion of v failed");
-    // std::cout << "      inserted into visited\n";
+    //std::cout << "      inserted into visited\n";
 
     // visit successors first
     for (auto succ : successors(v)) {
 
-        // std::cout << "      out-edge " << e->from->val->get_name() << " -> " << e->to->val->get_name() << std::endl;
+        //std::cout << "      out-edge " << v->get_name() << " -> " << succ->get_name() << std::endl;
 
         // only visit if not already visited
         if (!visited.count(succ)) {
-            // std::cout << "        visiting!" << std::endl;
+            //std::cout << "        visiting!" << std::endl;
             calc_po_nums(po2v, v2po, succ, visited, order, i);
         }
     }
 
-    // std::cout << "      children done\n";
-    // std::cout << "      num is " << i << "\n";
+    //std::cout << "      children done\n";
+    //std::cout << "      num is " << i << "\n";
 
-    // std::cout << "    visiting " << v->val->get_name()
-    //    << " block@" << v->val << ","
-    //    << " cfgv@" << v << "\n";
+    //std::cout << "    visiting " << v->get_name()
+    //   << " block@" << v << "\n";
 
-    // for (auto v : visited) {
-    //     std::cout << "      alr visited " << v->val->get_name() << "\n";
-    // }
+    for (auto v : visited) {
+        //std::cout << "      alr visited " << v->get_name() << "\n";
+    }
 
     // visit v
     po2v[i] = v;
@@ -178,12 +177,12 @@ static void calc_po_nums(
 
 static unsigned intersect(unsigned *doms, unsigned b1, unsigned b2) {
     auto f1 = b1, f2 = b2;
-    // std::cout << "    intersecting " << b1 << " and " << b2 << std::endl
-    //     << "      using doms=[";
+    //std::cout << "    intersecting " << b1 << " and " << b2 << std::endl
+    //    << "      using doms=[";
     for (unsigned i = 1; i < 10; i++) {
-        // std::cout << " " << doms[i];
+        //std::cout << " " << doms[i];
     }
-    // std::cout << " ]\n";
+    //std::cout << " ]\n";
     while (f1 != f2) {
         if (f1 < f2) {
             f1 = doms[f1];
@@ -191,16 +190,16 @@ static unsigned intersect(unsigned *doms, unsigned b1, unsigned b2) {
         if (f2 < f1) {
             f2 = doms[f2];
         }
-        // std::cout << "      f1=" << f1 << ", f2=" << f2 << std::endl;
+        //std::cout << "      f1=" << f1 << ", f2=" << f2 << std::endl;
     }
     return f1;
 }
 
 static DJG make_djg(ir::Function *f) {
 
-    // std::cout << "making djg\n";
+    //std::cout << "making djg\n";
 
-    // std::cout << "  calculating postorder nums\n";
+    //std::cout << "  calculating postorder nums\n";
 
     // calculate postorder numbers
     std::vector<ir::Block *> po2v(f->size() + 1);
@@ -212,16 +211,16 @@ static DJG make_djg(ir::Function *f) {
     assert(num - 1 == f->size() && "number of vertices visited does not match the number of cfg vertices");
     unsigned start_node = num - 1;
 
-    // std::cout << "  calculated postorder nums\n";
-    // for (unsigned i = start_node; i > 0; i--) {
-    //     std::cout << "    " << i << " " << po2v[i]->get_name() << std::endl;
-    // }
+    //std::cout << "  calculated postorder nums\n";
+    for (unsigned i = start_node; i > 0; i--) {
+        //std::cout << "    " << i << " " << po2v[i]->get_name() << std::endl;
+    }
 
     // initialize the dominators array
     unsigned doms[num];
     memset(doms, 0, sizeof(doms));
 
-    // std::cout << "  init'd doms array\n";
+    //std::cout << "  init'd doms array\n";
 
     doms[start_node] = start_node;
 
@@ -229,24 +228,27 @@ static DJG make_djg(ir::Function *f) {
     while (changed) {
         changed = false;
 
-        // std::cout << "  new iteration:\n";
+        //std::cout << "  new iteration:\n";
 
+        assert(start_node > 0);
         // iterate in reverse postorder (skipping start_node)
         for (unsigned b = start_node - 1; b > 0; b--) {
             auto block = po2v[b];
-            // std::cout << "    " << block->get_name() << std::endl;
+            //std::cout << "    " << block->get_name() << std::endl;
             auto preds = predecessors(block);
             unsigned new_idom = 0;
             ir::Block *chosen_pred = nullptr;
             for (auto pred : preds) {
+                //std::cout << "      " << pred->get_name() << std::endl;
                 auto tmp = v2po[pred];
                 if (doms[tmp] != 0) {
                     chosen_pred = pred;
                     new_idom = tmp;
+                    //std::cout << "        chosen" << std::endl;
                     break;
                 }
             }
-            // std::cout << "    new_idom=" << new_idom << "\n";
+            //std::cout << "    new_idom=" << new_idom << "\n";
             assert(chosen_pred && "no pred that is processed already?");
 
             // iterate backwards over the preds, skipping new_idom
@@ -266,12 +268,12 @@ static DJG make_djg(ir::Function *f) {
         }
     }
 
-    // std::cout << "  final doms:\n";
-    // for (unsigned i = start_node - 1; i > 0; i--) {
-    //     std::cout << "    idom(" << po2v[i]->get_name() << ") = " << po2v[doms[i]]->get_name() << "\n";
-    // }
+    //std::cout << "  final doms:\n";
+    for (unsigned i = start_node - 1; i > 0; i--) {
+        //std::cout << "    idom(" << po2v[i]->get_name() << ") = " << po2v[doms[i]]->get_name() << "\n";
+    }
 
-    // std::cout << "  making djg\n";
+    //std::cout << "  making djg\n";
 
     DJG djg(f->get_first_block());
 
@@ -279,7 +281,7 @@ static DJG make_djg(ir::Function *f) {
     for (unsigned i = start_node - 1; i > 0; i--) {
         auto v = djg.add_vertex(po2v[i]);
         auto idomv = djg.get_vertex(po2v[doms[i]]);
-        // std::cout << "    d-edge: " << po2v[doms[i]]->get_name() << " -> " << v->block->get_name() << std::endl;
+        //std::cout << "    d-edge: " << po2v[doms[i]]->get_name() << " -> " << v->block->get_name() << std::endl;
         djg.add_edge(DJGEdge::d_edge, idomv, v);
     }
 
@@ -294,7 +296,7 @@ static DJG make_djg(ir::Function *f) {
         }
     }
 
-    // std::cout << "    done!\n";
+    //std::cout << "    done!\n";
 
     // std::ofstream out("djg.dot");
     // djg.dump(out);
@@ -347,12 +349,12 @@ static PB *pb_get(PB **pb, unsigned &cl) {
 }
 
 static void pb_visit(PB **pb, DJGVertex *x, PB *cr, std::set<ir::Block *> &idf) {
-    // std::cout << "  visiting " << x->block->get_name() << std::endl;
+    //std::cout << "  visiting " << x->block->get_name() << std::endl;
     for (auto e : x->out_edges) {
         //std::cout << "  edge " << x->block->get_name() << " -> " << e->to->block->get_name() << std::endl;
         DJGVertex *y = e->to;
         if (e->kind == DJGEdge::j_edge) {
-            // std::cout << "    j-edge found\n";
+            //std::cout << "    j-edge found\n";
             if (y->level <= cr->v->level) {
                 if (y->inphi == false) {
                     y->inphi = true;
@@ -360,8 +362,8 @@ static void pb_visit(PB **pb, DJGVertex *x, PB *cr, std::set<ir::Block *> &idf) 
                     if (y->alpha == false) {
                         pb_insert(pb, new PB{y, nullptr});
                     }
-                    // std::cout << "    inserted " << y->block->get_name()
-                    //     << " into idf" << std::endl;
+                    //std::cout << "    inserted " << y->block->get_name()
+                    //    << " into idf" << std::endl;
                 }
             }
         }
@@ -372,11 +374,11 @@ static void pb_visit(PB **pb, DJGVertex *x, PB *cr, std::set<ir::Block *> &idf) 
             }
         }
     }
-    // std::cout << "    done\n";
+    //std::cout << "    done\n";
 }
 
 static std::set<ir::Block *> compute_idf(DJG &djg, std::set<DJGVertex *> &alpha) {
-    // std::cout << "computing idf\n";
+    //std::cout << "computing idf\n";
 
     // init
     std::set<ir::Block *> idf;
@@ -398,30 +400,31 @@ static std::set<ir::Block *> compute_idf(DJG &djg, std::set<DJGVertex *> &alpha)
     PB *x;
     PB *curr_root;
     while ((x = pb_get(pb, curr_lvl)) != nullptr) {
-        // std::cout << "  new block " << x->v->block->get_name() << std::endl;
+        //std::cout << "  new block " << x->v->block->get_name() << std::endl;
         curr_root = x;
         x->v->visited = true;
         pb_visit(pb, x->v, curr_root, idf);
     }
 
-    // std::cout << "  done\n";
+    //std::cout << "  done\n";
 
     return idf;
 }
 
 static bool eligible(ir::SAllocInstr *sa, DJG &djg, std::set<DJGVertex *> &alpha) {
-    // std::cout << "eligibility of " << sa->get_name() << ": ";
+    //std::cout << "eligibility of " << sa->get_name() << ": ";
     for (ir::Use *u : sa->uses_iterable()) {
-        ir::Instr *i = static_cast<ir::Instr *>(u->get_user());
-        if (i->get_kind() == ir::defkind::write) {
-            alpha.insert(djg.get_vertex(i->get_parent()));
+        auto d = u->get_user();
+        //std::cout << "  user@" << d << std::endl;
+        if (d->get_kind() == ir::defkind::write) {
+            alpha.insert(djg.get_vertex(static_cast<ir::Instr *>(d)->get_parent()));
         }
-        else if (i->get_kind() != ir::defkind::read) {
-            // std::cout << "ineligible :(\n";
+        else if (d->get_kind() != ir::defkind::read) {
+            //std::cout << "ineligible :(\n";
             return false;
         }
     }
-    // std::cout << "eligible :)\n";
+    //std::cout << "eligible :)\n";
     return true;
 }
 
@@ -468,7 +471,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
                 auto rec = most_recents[pred];
                 if (rec) {
                     //std::cout << "    adding alternative from " << pred->get_name() << std::endl;
-                    phi->add_alternative(pred, rec);
+                    phi->add_alternatives(pred, rec);
                     //std::cout << "      done" << std::endl;
                 }
                 else {
@@ -502,17 +505,18 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
         //std::cout << "    rectifying reads/writes" << std::endl;
 
         // visit each instr in order
-        for (auto i : *b) {
+        for (auto d : *b) {
 
             // determine which instrs in b are relevant
             if (std::find_if(sa->uses_begin(), sa->uses_end(),
-                [=](ir::Use *const &u) { return i == u->get_user(); }) == sa->uses_end()) {
+                [=](ir::Use *const &u) { return d == u->get_user(); }) == sa->uses_end()) {
                 // irrelevant instr
                 continue;
             }
 
             // if instr is read
-            if (i->get_kind() == ir::defkind::read) {
+            if (d->get_kind() == ir::defkind::read) {
+                ir::Instr *i = static_cast<ir::Instr *>(d);
 
                 // get the most recent def of sa for b
                 ir::Def *mrdef = most_recents[b];
@@ -532,6 +536,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
             // if instr is write
             else {
+                ir::Instr *i = static_cast<ir::Instr *>(d);
 
                 assert(i->get_kind() == ir::defkind::write && "instr that uses SAllocInstr which isnt read or write?");
                 
@@ -553,7 +558,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
         //std::cout << "    most_recent = ";
         //most_recents[b]->dump_as_operand();
-        //std::cout << " <" << most_recents[b] << ">" << std::endl;
+        //std::cout << "<" << most_recents[b] << ">" << std::endl;
 
         // add new (not found before) vertices
         for (auto e : curr->out_edges) {
@@ -568,12 +573,14 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
         for (auto need : needs) {
             auto mrdef = most_recents[need];
             assert(mrdef);
-            phi->add_alternative(need, mrdef);
+            phi->add_alternatives(need, mrdef);
         }
     }
 
     // finally, remove the salloc instr
     sa->remove_from_parent();
+
+    //std::cout << "  done (stackpromote)\n";
 }
 
 void run_stackpromotion(ir::Function *f) {
@@ -585,7 +592,10 @@ void run_stackpromotion(ir::Function *f) {
         if (i->get_kind() == ir::defkind::salloc) {
             ir::SAllocInstr *sa = static_cast<ir::SAllocInstr *>(i);
             std::set<DJGVertex *> alpha;
-            if (eligible(sa, djg, alpha)) {
+            //std::cout << "determining eligibility\n";
+            bool el = eligible(sa, djg, alpha);
+            //std::cout << "  done\n";
+            if (el) {
                 //std::cout << "alpha for " << ioformat::YELLOW << sa->get_name()
                 //    << ioformat::RESET << " is { ";
                 // print_internally_separated_list(

@@ -99,64 +99,43 @@ private:
     class fwiter : public bidirectional_iterator<Inner *, fwiter> {
     private:
         using bidirectional_iterator<Inner *, fwiter>::curr;
-        
-        void go_forward() override { curr = curr->get_next(); }
-        void go_backward() override { curr = curr->get_prev(); }
+
+        IList<Inner> *list = nullptr;
+        Inner *cache_next = nullptr;
+        Inner *cache_prev = nullptr;
+        void cache() { cache_next = curr->get_next(); cache_prev = curr->get_prev(); }
+
+        void go_forward() override { curr = cache_next; cache(); }
+        void go_backward() override { curr = cache_prev; cache(); }
 
     public:
         fwiter() { curr = nullptr; }
-        fwiter(Inner *ptr) { curr = ptr; }
+        fwiter(Inner *ptr, IList<Inner> *list) : list(list) { curr = ptr; cache(); }
     };
     class bwiter : public bidirectional_iterator<Inner *, bwiter> {
     private:
         using bidirectional_iterator<Inner *, bwiter>::curr;
 
-        void go_forward() override { curr = curr->get_prev(); }
-        void go_backward() override { curr = curr->get_next(); }
+        Inner *cache_next = nullptr;
+        Inner *cache_prev = nullptr;
+        void cache() { cache_next = curr->get_next(); cache_prev = curr->get_prev(); }
+
+        void go_forward() override { curr = cache_prev; cache(); }
+        void go_backward() override { curr = cache_next; cache(); }
 
     public:
         bwiter() { curr = nullptr; }
-        bwiter(Inner *ptr) { curr = ptr; }
-    };
-    class cfwiter : public bidirectional_iterator<Inner *, cfwiter> {
-    private:
-        using bidirectional_iterator<Inner *, cfwiter>::curr;
-        
-        void go_forward() override { curr = curr->get_next(); }
-        void go_backward() override { curr = curr->get_prev(); }
-
-    public:
-        cfwiter() { curr = nullptr; }
-        cfwiter(Inner *ptr) { curr = ptr; }
-    };
-    class cbwiter : public bidirectional_iterator<Inner *, cbwiter> {
-    private:
-        using bidirectional_iterator<Inner *, cbwiter>::curr;
-        
-        void go_forward() override { curr = curr->get_prev(); }
-        void go_backward() override { curr = curr->get_next(); }
-
-    public:
-        cbwiter() { curr = nullptr; }
-        cbwiter(Inner *ptr) { curr = ptr; }
+        bwiter(Inner *ptr) { curr = ptr; cache(); }
     };
 
 public:
     using iterator = fwiter;
-    iterator begin() { return iterator(_head->get_next()); }
-    iterator end() { return iterator(_tail); }
+    iterator begin() { return iterator(_head->get_next(), this); }
+    iterator end() { return iterator(_tail, this); }
 
     using reverse_iterator = bwiter;
     reverse_iterator rbegin() { return reverse_iterator(_tail->get_prev()); }
     reverse_iterator rend() { return reverse_iterator(_head); }
-
-    using const_iterator = cfwiter;
-    const_iterator begin() const { return const_iterator(_head->get_next()); }
-    const_iterator end() const { return const_iterator(_tail); }
-
-    using const_reverse_iterator = cbwiter;
-    const_reverse_iterator rbegin() const { return const_reverse_iterator(_tail->get_prev()); }
-    const_reverse_iterator rend() const { return const_reverse_iterator(_head); }
 };
 
 #endif

@@ -16,7 +16,7 @@ main(argc, argv) {
     //var []*()i32 str;
     //str++;
     var i32 val = 0;
-    var u16 val2 = -001;
+    var u16 val2 = 001;
     var u8 thing;
     *str = 5;
     //str = *argv;
@@ -29,11 +29,11 @@ main(argc, argv) {
             val = 400;
         }
     }
-    if (0 as i32 == argc) {
+    if (argc) {
         str = *argv;
         val = foo(*argv);
     }
-    else if (argc as u8 == 2) {
+    else if (argc) {
         str = *argv;
     }
     foo(str);

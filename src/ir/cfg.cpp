@@ -27,9 +27,12 @@ std::vector<ir::Block *> successors(ir::Block *b) {
     // by b's terminator branch instr. Thus, the list
     // of successors to b is the block operands
     // of the branch instruction.
+    //b->dump(8);
     ir::Instr *term = b->get_last_instr();
+    assert(term && "block does not have any instructions");
     assert(term->is_terminator() && "block is ill-formed -- no terminator instruction");
     std::vector<ir::Block *> succs;
+    //term->dump(8);
     if (term->get_kind() == ir::defkind::branch) {
         ir::BranchInstr *bi = static_cast<ir::BranchInstr *>(term);
         succs.push_back(bi->get_jmp_true());
