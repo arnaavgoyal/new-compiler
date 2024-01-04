@@ -39,78 +39,29 @@ void Def::dump_as_operand() {
 
 DefUser::DefUser(defkind kind, Type *ty, unsigned num)
     : Def(kind, ty) {
-    //std::cout << "making defuser (in ctor)\n"
-    //    << "  num=" << num << ", num_ops=" << num_ops << std::endl;
-    if (num && has_var_oplist) {
-        assert(num_ops == 0);
+    if (num) {
         realloc_oplist(num);
     }
+}
+
+void DefUser::realloc_oplist(unsigned num) {
+    assert(num > num_ops);
+    Use *list = static_cast<Use *>(::operator new(num * sizeof(Use)));
+    if (oplist()) {
+        auto oplist_start = oplist();
+        for (unsigned i = 0; i < num_ops; i++) {
+            new(list + i) Use(this, i);
+            list[i].set_def(oplist_start[i].get_def());
+        }
+    }
     else {
-        //std::cout << (unsigned)kind << std::endl;
-        assert(num == num_ops);
+        assert(num_ops == 0);
     }
-    //std::cout << "  done" << std::endl;
-}
-
-void *DefUser::operator new(size_t size) {
-    //std::cout << "alloc'ing new defuser with var oplist\n";
-
-    // allocate memory for this object + a pointer to an op list
-    void *mem = ::operator new(size + sizeof(Use *));
-
-    // get the oplist (ptr to mem)
-    Use **oplist = static_cast<Use **>(mem);
-
-    // get this object
-    DefUser *this_obj = reinterpret_cast<DefUser *>(oplist + 1);
-
-    // zero the oplist (to indicate that it has not yet been allocated)
-    *oplist = nullptr;
-
-    // this object has client-decided variable number of ops
-    this_obj->has_var_oplist = true;
-    this_obj->num_ops = 0;
-
-    //std::cout << "  done\n";
-
-    return this_obj;
-}
-
-void *DefUser::operator new(size_t size, unsigned num_ops) {
-    //std::cout << "alloc'ing new defuser with fixed oplist\n";
-
-    // allocate memory for this object + the op list
-    void *mem = ::operator new(size + num_ops * sizeof(Use));
-
-    // get the start and end of the op list
-    Use *op_start = static_cast<Use *>(mem);
-    Use *op_end = op_start + num_ops;
-
-    // ptr to this object is just op_end
-    DefUser *this_obj = reinterpret_cast<DefUser *>(op_end);
-
-    // initialize the ops in op list
-    for (Use *op_i = op_start; op_i != op_end; op_i++) {
-        new(op_i) Use(this_obj, op_i - op_start);
+    for (unsigned i = num_ops; i < num; i++) {
+        new(list + i) Use(this, i);
     }
-
-    // this object has fixed number of ops
-    this_obj->has_var_oplist = false;
-    this_obj->num_ops = num_ops;
-
-    //std::cout << "  done\n";
-
-    return this_obj;
-}
-
-void DefUser::operator delete(void *obj) {
-    //std::cout << "deleting defuser\n";
-    DefUser *this_obj = static_cast<DefUser *>(obj);
-    if (this_obj->has_var_oplist) {
-        ::operator delete(reinterpret_cast<Use **>(this_obj)[-1]);
-    }
-    ::operator delete(obj);
-    //std::cout << "  done\n";
+    num_ops = num;
+    _oplist = list;
 }
 
 void DefUser::dump(unsigned indent) {

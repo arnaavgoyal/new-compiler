@@ -82,6 +82,8 @@ enum class defkind {
         phi,
     
     _instr_end,
+
+    _last = _instr_end
 };
 
 enum class cmpkind {
@@ -124,10 +126,8 @@ private:
 protected:
     Def(Def &) = default;
     Def(Def &&) = default;
-    Def(defkind kind, Type *ty) : kind(kind), type(ty) {
-        //std::cout << " ctor Def" << std::endl;
-        //std::cout << "  done ctor Def" << std::endl;
-    }
+    Def(defkind kind, Type *ty)
+        : kind(kind), type(ty) { }
 
 public:
     virtual ~Def() = default;
@@ -149,17 +149,10 @@ public:
 
 class DefUser : public Def {
 private:
-    unsigned num_ops;
-    bool has_var_oplist;
-
-    Use *&var_oplist() {
-        assert(has_var_oplist);
-        return reinterpret_cast<Use **>(this)[-1];
-    }
+    unsigned num_ops = 0;
+    Use *_oplist = nullptr;
 
 protected:
-    void *operator new(size_t size);
-    void *operator new(size_t size, unsigned num_ops);
     DefUser(DefUser &) = default;
     DefUser(DefUser &&) = default;
     DefUser(defkind kind, Type *ty, unsigned num_ops);
@@ -168,48 +161,10 @@ protected:
         assert(idx < num_ops && "idx out of range");
         return oplist()[idx];
     }
-    Use *oplist() {
-        if (has_var_oplist) {
-            return var_oplist();
-        }
-        return reinterpret_cast<Use *>(this) - num_ops;
-    }
-    void set_num_ops(unsigned num) {
-        assert(has_var_oplist && "cannot change num ops with fixed oplist");
-        num_ops = num;
-    }
-    void set_oplist(Use *oplist) {
-        assert(has_var_oplist && "cannot change oplist with fixed oplist");
-        var_oplist() = oplist;
-    }
-    void realloc_oplist(unsigned num) {
-        assert(has_var_oplist && "");
-        assert(num > num_ops);
-        //std::cout << "realloc'ing var oplist\n"
-        //    << "  curr size: " << num_ops << "\n"
-        //    << "  new size: " << num << "\n";
-        Use *list = static_cast<Use *>(::operator new(num * sizeof(Use)));
-        if (oplist()) {
-            auto oplist_start = oplist();
-            for (unsigned i = 0; i < num_ops; i++) {
-                new(list + i) Use(this, i);
-                list[i].set_def(oplist_start[i].get_def());
-            }
-        }
-        else {
-            assert(num_ops == 0);
-        }
-        for (unsigned i = num_ops; i < num; i++) {
-            new(list + i) Use(this, i);
-        }
-        num_ops = num;
-        var_oplist() = list;
-        //std::cout << "  done\n";
-    }
+    Use *oplist() { return _oplist; }
+    void realloc_oplist(unsigned num);
 
 public:
-    void operator delete(void *obj);
-    void operator delete(void *obj, unsigned) { DefUser::operator delete(obj); }
     unsigned get_num_ops() { return num_ops; }
     void set_operand(unsigned idx, Def *operand) { use(idx).set_def(operand); }
     Def *get_operand(unsigned idx) { return use(idx).get_def(); }
@@ -306,18 +261,6 @@ private:
     bool term;
 
 protected:
-    void *operator new(size_t size) {
-        //std::cout << "instr new var entry" << std::endl;
-        auto ptr = DefUser::operator new(size);
-        //std::cout << "  instr new var exit" << std::endl;
-        return ptr;
-    }
-    void *operator new(size_t size, unsigned num_ops) {
-        //std::cout << "instr new fixed entry" << std::endl;
-        auto ptr = DefUser::operator new(size, num_ops);
-        //std::cout << "  instr new fixed exit" << std::endl;
-        return ptr;
-    }
     Instr(Instr &) = default;
     Instr(Instr &&) = default;
     Instr(defkind kind, Type *ty, unsigned num_ops, bool term,
@@ -349,9 +292,10 @@ public:
     std::string get_str_repr() { return STR_REPR; }
     
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 1); }
     ReturnInstr(Def *retval, Block *parent)
-        : Instr(defkind::ret, retval->get_type(), 1, true, parent) { set_operand(0, retval); }
+        : Instr(defkind::ret, retval->get_type(), 1, true, parent) {
+        set_operand(0, retval);
+    }
 };
 
 class BranchInstr : public Instr {
@@ -365,12 +309,6 @@ private:
     bool conditional;
 
 public:
-    void *operator new(size_t size) {
-        //std::cout << "branch new var entry" << std::endl;
-        auto ptr = Instr::operator new(size);
-        //std::cout << "  branch new var exit " << ptr << std::endl;
-        return ptr;
-    }
     BranchInstr(Def *cond, Block *jmp_true, Block *jmp_false, Block *parent = nullptr);
     BranchInstr(Block *jmp, Block *parent = nullptr);
     bool is_conditional() { return conditional; }
@@ -396,7 +334,6 @@ private:
     Type *alloc_ty;
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 0); }
     SAllocInstr(Type *alloc_type, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::salloc, PrimitiveType::get_ptr_type(), 0, parent, before, name_hint),
         alloc_ty(alloc_type) { }
@@ -412,7 +349,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 1); }
     ReadInstr(Type *val_type, Def *mem_ptr, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::read, val_type, 1, parent, before, name_hint) {
         assert(mem_ptr->get_type() == PrimitiveType::get_ptr_type() && "mem_ptr must be of pointer type");
@@ -429,7 +365,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 2); }
     WriteInstr(Def *val, Def *mem, Block *parent = nullptr)
         : Instr(defkind::write, PrimitiveType::get_void_type(), 2, parent) {
         set_operand(0, val);
@@ -446,7 +381,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 2); }
     PtrIdxInstr(Def *ptr_val, Def *idx_val, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::ptridx, PrimitiveType::get_ptr_type(), 2, parent, before, name_hint) {
         assert(ptr_val->get_type() == PrimitiveType::get_ptr_type() && "ptr_val must be of pointer type");
@@ -463,7 +397,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 1); }
     TypecastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::typecast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
@@ -480,7 +413,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 1); }
     IUpcastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::iupcast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
@@ -497,7 +429,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 1); }
     IDowncastInstr(Def *val, Type *ty, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::idowncast, ty, 1, parent, before, name_hint) {
         set_operand(0, val);
@@ -517,7 +448,6 @@ private:
     cmpkind kind;
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 2); }
     ICmpInstr(cmpkind kind, Def *x, Def *y, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "")
         : Instr(defkind::icmp, PrimitiveType::get_i1_type(), 2, parent, before, name_hint), kind(kind) {
         assert(x->get_type() == y->get_type() && "operands must be of equivalent type");
@@ -536,7 +466,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size); }
     CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
 };
 
@@ -548,7 +477,6 @@ public:
     std::string get_str_repr() { return STR_REPR; }
 
 public:
-    void *operator new(size_t size) { return Instr::operator new(size); }
     PhiInstr(Type *ty, Block *parent = nullptr, std::string name_hint = "")
         : Instr(defkind::phi, ty, 0, nullptr, nullptr, name_hint) {
         if (parent) {
@@ -579,7 +507,6 @@ public:
 
 class BinaryOpInstr : public Instr {
 public:
-    void *operator new(size_t size) { return Instr::operator new(size, 2); }
     BinaryOpInstr(defkind opc, Def *x1, Def *x2, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
 };
 
@@ -608,6 +535,9 @@ private:
 
 public:
     static IntegralConstant *get(Type *ty, uint64_t value);
+    static map_type::const_iterator begin() { return vals.cbegin(); }
+    static map_type::const_iterator end() { return vals.cend(); }
+    uint64_t get_value() { return value; }
     void dump(unsigned indent = 0);
     void dump_as_operand();
 };
