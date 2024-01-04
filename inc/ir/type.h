@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 
+#define POINTER_SIZE_IN_BITS 64
+
 namespace ir {
     enum class typekind {
 
@@ -38,14 +40,16 @@ namespace ir {
 class Type {
 private:
     typekind kind;
+    unsigned bitsize;
 
 protected:
     Type(Type &) = default;
     Type(Type &&) = default;
-    Type(typekind kind) : kind(kind) { }
+    Type(typekind kind, unsigned bs) : kind(kind), bitsize(bs) { }
 
 public:
     typekind get_kind() { return kind; }
+    unsigned get_size() { return bitsize; }
     bool is_integral_type() { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
     bool is_fp_type() { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
     virtual std::string stringify() = 0;
@@ -55,8 +59,8 @@ class PrimitiveType final : public Type {
 private:
     std::string str;
 
-    PrimitiveType(typekind kind, std::string str)
-        : Type(kind), str(str) { }
+    PrimitiveType(typekind kind, unsigned bs, std::string str)
+        : Type(kind, bs), str(str) { }
 
 public:
     PrimitiveType() = delete;
@@ -89,7 +93,7 @@ protected:
     ArrayType(ArrayType &) = default;
     ArrayType(ArrayType &&) = default;
     ArrayType(Type *element_ty)
-        : Type(typekind::array), array_of(element_ty) { }
+        : Type(typekind::array, POINTER_SIZE_IN_BITS), array_of(element_ty) { }
 
 public:
     Type *element_ty() { return array_of; }
@@ -104,7 +108,7 @@ public:
     FunctionType(FunctionType &) = default;
     FunctionType(FunctionType &&) = default;
     FunctionType(Type *return_ty, std::vector<Type *> param_tys)
-        : Type(typekind::function), returns(return_ty), params(param_tys) { }
+        : Type(typekind::function, POINTER_SIZE_IN_BITS), returns(return_ty), params(param_tys) { }
 
 public:
     Type *return_ty() { return returns; }
