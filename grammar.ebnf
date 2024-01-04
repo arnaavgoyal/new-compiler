@@ -1,0 +1,133 @@
+program
+    = { decl }
+    ;
+
+decl
+    = vardecl
+    | typedecl
+    | funcdecl
+    ;
+
+vardecl
+    = "var", type, identifier, [ "=", valexpr ]
+    ;
+
+typedecl
+    = "type", identifier, "=", type
+    ;
+
+funcdecl
+    = "def", functiontype, identifier, "(", [ identifier, { ",", identifier } ]
+    , stmtblock
+    ;
+
+type
+    = primitivetype
+    | pointertype
+    | arraytype
+    | aliastype
+    | functiontype
+    ;
+
+primitivetype
+    = ? primitive types ?
+    ;
+
+pointertype
+    = "*", type
+    ;
+
+arraytype
+    = "[]", type
+    ;
+
+aliastype
+    = identifier
+    ;
+
+functiontype
+    = "(", [ type { ",", type } ], ")", type
+    ;
+
+stmtblock
+    = "{"
+    , { stmt }
+    , "}"
+    ;
+
+stmt
+    = decl
+    | valexpr
+    | ifthen
+    | loop
+    ;
+
+ifthen
+    = "if", "(", valexpr, ")"
+    , stmtblock
+    , [ "else", ( ifthen | stmtblock ) ]
+    ;
+
+loop
+    = "while", "(", valexpr, ")"
+    , stmtblock
+    ;
+
+valexpr
+    = valexpr, binop, valexpr
+    | lvalexpr
+    | literal
+    ;
+
+binop
+    = ? binary operations ?
+    ;
+
+lvalexpr
+    = prefixop, lvalexpr
+    | unitexpr
+    ;
+
+prefixop
+    = ? prefix operations ?
+    ;
+
+unitexpr
+    = unitexpr, postop
+    | unitexpr, "(", [ valexpr, { ",", valexpr } ], ")"  (* call *)
+    | unitexpr, "[", valexpr, "]"                        (* subscript *)
+    | unitexpr, "as", type                               (* cast *)
+    | "(", valexpr, ")"                                  (* paren *)
+    | identifier                                         (* ref *)
+    ;
+
+postop
+    = ? postfix operations ?
+    ;
+
+identifier
+    = alphachar, { alphachar | numchar }
+    ;
+
+literal
+    = '"', { printchar }, '"'                 (* string *)
+    | "'", [ printchar ], "'"                 (* char *)
+    | numchar, [ alphachar ], { numchar }     (* integral *)
+    | { numchar }, ".", numchar, { numchar }  (* floating point *)
+    ;
+
+printchar
+    = alphachar
+    | numchar
+    | ? type-able characters other than \ ' " ?
+    | "\", ? escape code characters (including \ ' ") ?
+    ;
+
+alphachar
+    = ? alphabetic characters or underscore ?
+    ;
+
+numchar
+    = ? numeric characters ?
+    ;
+
