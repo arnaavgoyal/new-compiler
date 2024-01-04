@@ -3,7 +3,9 @@
 
 #include <vector>
 #include <iostream>
-#include <stdlib.h>
+#include <memory>
+#include <concepts>
+#include <cassert>
 
 template <typename T>
 class Allocator {
@@ -113,5 +115,78 @@ Allocator<T>::~Allocator() {
     }
     //std::cout << "Allocator<" << typeid(T).name() << ">(id " << id << ") freed." << std::endl;
 }
+
+class RawRegionAllocatorImpl {
+private:
+    friend class RawRegionAllocator;
+
+    std::vector<std::byte *> bufs;
+    std::size_t allocsz;
+    std::byte *curr;
+
+    std::byte *alloc_buf(std::size_t sz) {
+        return static_cast<std::byte *>(::operator new(sz));
+    }
+
+    RawRegionAllocatorImpl(std::size_t initsize, std::size_t allocsize)
+        : allocsz(allocsize) {
+        curr = alloc_buf(initsize);
+        bufs.push_back(curr);
+    }
+
+    template <typename AllocTy>
+    AllocTy *allocate(unsigned num) {
+        static_assert(std::is_trivially_destructible<AllocTy>::value,
+            "objects allocated with this allocator do not get destructed");
+        assert(sizeof(AllocTy) <= allocsz &&
+            "size of object is too big for this allocator");
+        if (num == 0) { return nullptr; }
+        std::size_t totalsz = sizeof(AllocTy) * num;
+        std::size_t rem = bufs.back() - curr;
+        if (totalsz > rem) {
+            curr = alloc_buf(allocsz);
+        }
+        AllocTy *retptr = reinterpret_cast<AllocTy *>(curr);
+        curr += totalsz;
+        return retptr;
+    }
+
+public:
+    ~RawRegionAllocatorImpl() {
+        for (auto buf : bufs) {
+            ::operator delete(buf);
+        }
+    }
+};
+
+class RawRegionAllocator {
+protected:
+    std::shared_ptr<RawRegionAllocatorImpl> impl;
+
+public:
+    enum { DEFAULT_ALLOCSZ = 1024 };
+
+    // regular ctors
+    RawRegionAllocator(std::size_t initsize, std::size_t allocsize)
+        : impl(new RawRegionAllocatorImpl(initsize, allocsize)) { }
+    RawRegionAllocator(std::size_t allocsize)
+        : RawRegionAllocator(allocsize, allocsize) { }
+    RawRegionAllocator()
+        : RawRegionAllocator(DEFAULT_ALLOCSZ) { }
+
+    // copy ctor
+    RawRegionAllocator(RawRegionAllocator const &other)
+        { impl = other.impl; }
+
+    // copy assign
+    RawRegionAllocator &operator=(RawRegionAllocator const &rhs) {
+        if (this == &rhs) return *this;
+        impl = rhs.impl;
+    }
+
+    template <typename AllocTy>
+    AllocTy *allocate(unsigned num = 1) { return impl->allocate<AllocTy>(num); }
+};
+static_assert(std::copy_constructible<RawRegionAllocator>);
 
 #endif
