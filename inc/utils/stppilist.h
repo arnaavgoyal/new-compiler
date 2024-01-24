@@ -75,7 +75,7 @@ public:
     bool has_name() { return hinted && parent; }
     bool has_name_hint() { return hinted; }
     std::string get_name() {
-        //assert(has_name() && "does not have a name");
+        assert(has_name() && "does not have a name");
         return name;
     }
     std::string get_name_hint() {
