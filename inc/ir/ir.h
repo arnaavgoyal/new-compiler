@@ -20,12 +20,12 @@ class Global;
 class Function;
 class Program;
 
-enum class linkage {
+enum class linkage : bool {
     internal,
     external,
 };
 
-enum class defkind {
+enum class defkind : unsigned {
 
     param,
     block,
@@ -100,6 +100,7 @@ enum class cmpkind {
 };
 
 class Use : public IListNode<Use> {
+private:
     DefUser *owner = nullptr;
     Def *def = nullptr;
     unsigned idx = 0;
@@ -168,36 +169,12 @@ public:
     unsigned get_num_ops() { return num_ops; }
     void set_operand(unsigned idx, Def *operand) { use(idx).set_def(operand); }
     Def *get_operand(unsigned idx) { return use(idx).get_def(); }
+    template <typename ReturnTy>
+    ReturnTy *get_operand(unsigned idx) { return static_cast<ReturnTy *>(get_operand(idx)); }
     Use *get_operand_list() { return oplist(); }
     void dump(unsigned indent = 0);
     void dump_as_operand();
     void dump_operands();
-
-private:
-    class fwiter : public bidirectional_iterator<Def *, fwiter> {
-    private:
-        using bidirectional_iterator<Def *, fwiter>::curr;
-        Use *use_curr;
-
-        void go_forward() override { use_curr++; curr = use_curr->get_def(); }
-        void go_backward() override { use_curr--; curr = use_curr->get_def(); }
-
-    public:
-        fwiter() { use_curr = nullptr; curr = nullptr; }
-        fwiter(Use *ptr) { use_curr = ptr; curr = use_curr->get_def(); }
-    };
-    class bwiter : public bidirectional_iterator<Def *, bwiter> {
-    private:
-        using bidirectional_iterator<Def *, bwiter>::curr;
-        Use *use_curr;
-
-        void go_forward() override { use_curr--; curr = use_curr->get_def(); }
-        void go_backward() override { use_curr++; curr = use_curr->get_def(); }
-
-    public:
-        bwiter() { use_curr = nullptr; curr = nullptr; }
-        bwiter(Use *ptr) { use_curr = ptr; curr = use_curr->get_def(); }
-    };
 
 public:
     using iterator = Use *;
@@ -207,14 +184,6 @@ public:
     using reverse_iterator = Use *;
     reverse_iterator operands_rbegin() { return oplist() + num_ops - 1; }
     reverse_iterator operands_rend() { return oplist() - 1; }
-
-    using def_iterator = fwiter;
-    def_iterator def_operands_begin() { return def_iterator(oplist()); }
-    def_iterator def_operands_end() { return def_iterator(oplist() + num_ops); }
-
-    using def_reverse_iterator = bwiter;
-    def_reverse_iterator def_operands_rbegin() { return def_reverse_iterator(oplist() + num_ops - 1); }
-    def_reverse_iterator def_operands_rend() { return def_reverse_iterator(oplist() - 1); }
 };
 
 class Block : public Def, public STPPIListNode<Block, Function> {
@@ -293,7 +262,7 @@ public:
     
 public:
     ReturnInstr(Def *retval, Block *parent)
-        : Instr(defkind::ret, retval->get_type(), 1, true, parent) {
+        : Instr(defkind::ret, PrimitiveType::get_void_type(), 1, true, parent) {
         set_operand(0, retval);
     }
 };
@@ -467,6 +436,8 @@ public:
 
 public:
     CallInstr(Function *callee, std::vector<Def *> args, Block *parent = nullptr, Instr *before = nullptr, std::string name_hint = "");
+    Function *callee() { return get_operand<Function>(0); }
+    unsigned num_args() { return get_num_ops() - 1; }
 };
 
 class PhiInstr : public Instr {

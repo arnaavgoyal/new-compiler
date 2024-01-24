@@ -38,7 +38,7 @@ void Def::dump_as_operand() {
 /** ------------------- DefUser ------------------- */
 
 DefUser::DefUser(defkind kind, Type *ty, unsigned num)
-    : Def(kind, ty) {
+    : Def(kind, ty), _oplist(reinterpret_cast<Use *>(this)) {
     if (num) {
         realloc_oplist(num);
     }
@@ -76,6 +76,7 @@ void DefUser::dump_as_operand() {
 
 void DefUser::dump_operands() {
     print_internally_separated_list(
+        std::cout,
         operands_begin(),
         operands_end(),
         ", ",
@@ -125,11 +126,12 @@ void Block::dump_as_operand() {
 
 void Instr::dump(unsigned indent) {
     std::cout << std::string(indent, ' ');
-    if (has_name()) {
-        std::cout << get_name() << " = ";
+    if (get_type()->get_kind() == typekind::void_ty) {
+        assert(!has_name());
     }
-    else if (has_name_hint()) {
-        std::cout << get_name_hint() << " = ";
+    else {
+        dump_as_operand();
+        std::cout << " = ";
     }
     std::cout << get_str_repr() << " ";
     dump_operands();
@@ -137,7 +139,7 @@ void Instr::dump(unsigned indent) {
 }
 
 void Instr::dump_as_operand() {
-    std::cout << get_type()->stringify() << " ";
+    std::cout << get_type()->stringify() << " %";
     if (has_name()) {
         std::cout << get_name();
     }
@@ -145,14 +147,14 @@ void Instr::dump_as_operand() {
         std::cout << get_name_hint();
     }
     else {
-        std::cout << "<unnamed>";
+        std::cout << "_";
     }
 }
 
 void ICmpInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr() << " ";
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr() << " ";
 
 #define CMPCP(kind) case cmpkind::kind: std::cout << #kind; break;
     switch (kind) {
@@ -206,41 +208,41 @@ BranchInstr::BranchInstr(Block *jmp, Block *parent)
 }
 
 void SAllocInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr()
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr()
         << " " << alloc_ty->stringify() << std::endl;
 }
 
 void ReadInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr() << " "
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr() << " "
         << get_type()->stringify() << ", ";
     dump_operands();
     std::cout << std::endl;
 }
 
 void TypecastInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr() << " ";
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr() << " ";
     dump_operands();
     std::cout << ", " << get_type()->stringify() << std::endl;
 }
 
 void IUpcastInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr() << " ";
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr() << " ";
     dump_operands();
     std::cout << ", " << get_type()->stringify() << std::endl;
 }
 
 void IDowncastInstr::dump(unsigned indent) {
-    std::cout << std::string(indent, ' ')
-        << (has_name() ? get_name() : has_name_hint() ? get_name_hint() : "<unnamed>")
-        << " = " << get_str_repr() << " ";
+    std::cout << std::string(indent, ' ');
+    dump_as_operand();
+    std::cout << " = " << get_str_repr() << " ";
     dump_operands();
     std::cout << ", " << get_type()->stringify() << std::endl;
 }
@@ -289,6 +291,7 @@ void Function::dump(unsigned indent) {
     std::cout << is << get_type()->stringify() << " " << get_name() << " (";
     auto piter = params_iterable();
     print_internally_separated_list(
+        std::cout,
         piter.begin(),
         piter.end(),
         ", ",
