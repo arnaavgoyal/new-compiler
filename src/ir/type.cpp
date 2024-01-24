@@ -52,7 +52,7 @@ PrimitiveType *PrimitiveType::get_f64_type() {
     return ty.get();
 }
 PrimitiveType *PrimitiveType::get_block_type() {
-    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::block, POINTER_SIZE_IN_BITS, "block"));
+    static std::unique_ptr<PrimitiveType> ty(new PrimitiveType(ir::typekind::label, POINTER_SIZE_IN_BITS, "block"));
     return ty.get();
 }
 PrimitiveType *PrimitiveType::get_void_type() {

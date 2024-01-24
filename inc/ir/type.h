@@ -26,7 +26,7 @@ namespace ir {
         _fp_end,
 
         // other
-        block,
+        label,
         void_ty,
         ptr,
 
