@@ -520,7 +520,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
 
                 // get the most recent def of sa for b
                 ir::Def *mrdef = most_recents[b];
-                assert(mrdef && "no most recent def?");
+                assert(mrdef && "stack var used before defined");
 
                 //std::cout << "    mrdef to replace " << i->get_name() << " : ";
                 //mrdef->dump();
@@ -583,7 +583,7 @@ static void stackpromote(ir::SAllocInstr *sa, std::set<ir::Block *> idf, DJG &dj
     //std::cout << "  done (stackpromote)\n";
 }
 
-void run_stackpromotion(ir::Function *f) {
+static void run_stackpromotion(ir::Function *f) {
     DJG djg = make_djg(f);
     std::ofstream djgfile("djg.dot");
     djg.dump(djgfile);
@@ -620,5 +620,11 @@ void run_stackpromotion(ir::Function *f) {
                 //return;
             }
         }
+    }
+}
+
+void run_stackpromotion(ir::Program *p) {
+    for (auto f : *p) {
+        run_stackpromotion(f);
     }
 }

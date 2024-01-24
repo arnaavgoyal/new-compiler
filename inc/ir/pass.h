@@ -3,6 +3,6 @@
 
 #include "ir/cfg.h"
 
-void run_stackpromotion(ir::Function *f);
+void run_stackpromotion(ir::Program *p);
 
 #endif
