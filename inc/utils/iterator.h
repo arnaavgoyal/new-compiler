@@ -18,17 +18,17 @@ public:
     using reference = ValueType &;
 
 protected:
-    value_type curr;
-
+    virtual reference get() = 0;
     virtual void go_forward() = 0;
     virtual void go_backward() = 0;
+    virtual bool eq(ChildIteratorClass const &r) const = 0;
 
 private:
     using this_type = bidirectional_iterator<ValueType, ChildIteratorClass>;
 
 public:
-    reference operator*() { return curr; }
-    pointer operator->() { return &curr; }
+    reference operator*() { return get(); }
+    pointer operator->() { return get(); }
     ChildIteratorClass &operator++() {
         go_forward();
         return static_cast<ChildIteratorClass &>(*this);
@@ -47,10 +47,12 @@ public:
         go_backward();
         return it;
     }
+
+public:
     friend bool operator==(ChildIteratorClass const &l, ChildIteratorClass const &r)
-        { return static_cast<this_type const &>(l).curr == static_cast<this_type const &>(r).curr; }
+        { return static_cast<this_type const &>(l).eq(r); /* dynamic dispatch hack to get around potentially private overrides of eq() */ }
     friend bool operator!=(ChildIteratorClass const &l, ChildIteratorClass const &r)
-        { return static_cast<this_type const &>(l).curr != static_cast<this_type const &>(r).curr; }
+        { return !static_cast<this_type const &>(l).eq(r); }
 };
 
 template <typename Iterator>
