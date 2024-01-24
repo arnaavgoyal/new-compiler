@@ -1,17 +1,2 @@
 digraph {
-	entry -> loopcond
-	loopcond -> loopbody
-	loopcond -> loopend
-	loopbody -> ifthen
-	loopbody -> ifelse
-	ifthen -> ifdone
-	ifelse -> ifdone
-	ifdone -> loopcond
-	loopend -> ifthen1
-	loopend -> ifelse1
-	ifthen1 -> ifdone2
-	ifelse1 -> ifthen2
-	ifelse1 -> ifdone1
-	ifthen2 -> ifdone1
-	ifdone1 -> ifdone2
 }

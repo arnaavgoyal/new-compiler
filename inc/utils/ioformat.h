@@ -19,24 +19,24 @@ public:
 };
 
 // I LOVE CONCEPTS THANK YOU C++
-template <typename Iterator, typename Lambda>
-concept c_iterator_with_lambda_printer = requires(Iterator i, Iterator j, Lambda l) {
+template <typename Iterator, typename Callable>
+concept c_iterator_with_lambda_printer = requires(Iterator i, Iterator j, Callable &&l) {
     *i;
     ++i;
     i != j;
     l(*i);
 };
 
-template <typename Iterator, typename Lambda> requires
-c_iterator_with_lambda_printer<Iterator, Lambda>
-void print_internally_separated_list(Iterator start, Iterator finish, std::string separator, Lambda &&l) {
+template <typename Iterator, typename Callable> requires
+c_iterator_with_lambda_printer<Iterator, Callable>
+void print_internally_separated_list(std::ostream &os, Iterator start, Iterator finish, std::string separator, Callable &&l) {
     if (!(start != finish)) {
         return;
     }
     l(*start);
     ++start;
     for (; start != finish; ++start) {
-        std::cout << separator;
+        os << separator;
         l(*start);
     }
 }

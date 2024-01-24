@@ -17,6 +17,7 @@
 #include "ir/cfg.h"
 #include "ir/pass.h"
 #include "utils/ioformat.h"
+#include "codegen/x86_64_gen.h"
 
 #define DEBUG
 
@@ -101,17 +102,15 @@ int main(int argc, char **argv) {
     dump_cfg(prog->get_function("main"), cfgfile);
     cfgfile.close();
 
-    run_stackpromotion(prog->get_function("foo"));
-    //prog->dump();
-
-    run_stackpromotion(prog->get_function("main"));
+    run_stackpromotion(prog);
     prog->dump();
 
     // ---------------- BACKEND ------------------
 
     // codegen
     std::ofstream outfile(argv[2]);
-    outfile << "x\n";
+    be::x86_64CodeGen tcg;
+    be::codegen(prog, tcg, outfile);
     outfile.close();
 
 

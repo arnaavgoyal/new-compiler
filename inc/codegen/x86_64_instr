@@ -1,0 +1,12 @@
+#ifndef INSTR
+#define INSTR(val, str)
+#endif
+
+INSTR( ret, "ret" )
+INSTR(call, "call")
+INSTR( mov, "mov" )
+INSTR( add, "add" )
+INSTR( sub, "sub" )
+INSTR(imul, "imul")
+
+#undef INSTR
