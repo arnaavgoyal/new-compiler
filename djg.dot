@@ -1,3 +1,0 @@
-digraph {
-	entry -> entry [style="dashed" color="crimson" headlabel="1"]
-}
