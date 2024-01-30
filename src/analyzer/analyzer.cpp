@@ -223,12 +223,9 @@ bool SemanticAnalyzer::typecheck_assignment(ASTNode *lhs, ASTNode *rhs) {
     }
 
     else {
-        // idk what this could be
-        DiagnosticHandler::make(diag::id::nyi, rhs->loc)
-            .add("unknown-to-unknown type checks")
-            .finish();
-        
-        compat = false;
+        // error-type
+        // return compatible bc there is no point in propagating
+        //   an error that is already reported
     }
 
     return compat;
@@ -367,7 +364,11 @@ FunctionType *SemanticAnalyzer::analyze_function_type(
         *can_str = can_rep;
 
         // create canon
-        canon = new FunctionType(nullptr, return_type->get_canonical(), param_types);
+        std::vector<Type *> canon_param_types;
+        for (auto pty : param_types) {
+            canon_param_types.push_back(pty->get_canonical());
+        }
+        canon = new FunctionType(nullptr, return_type->get_canonical(), canon_param_types);
 
         // insert into global scope
         insert_type(gscope, *can_str, canon);
@@ -941,6 +942,9 @@ ASTNode *SemanticAnalyzer::analyze_numeric_literal(
 
     // else, the default 8 bit type can contain the value
 
+    // For now, override literal type narrowing and assume 32 bits in all cases
+    //Type *ty = PrimitiveType::get_u32_type();
+
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::int_lit,
@@ -1250,8 +1254,8 @@ ASTNode *SemanticAnalyzer::analyze_var_decl(
 ) {
     ASTNode *decl_node = analyze_var_decl(scope, type, ident, ident_loc);
     decl_node->children.push_back(rhs);
-    bool res = typecheck_assignment(decl_node, rhs);
-    if (res) decl_node->has_error = true;
+    bool compat = typecheck_assignment(decl_node, rhs);
+    if (!compat) decl_node->has_error = true;
     return decl_node;
 }
 
