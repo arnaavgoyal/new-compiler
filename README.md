@@ -3,60 +3,7 @@ My second, more informed attempt at making a compiler. Written in C++, to compil
 
 I started this project after I decided my first compiler ([here][1]) needed a complete rewrite.
 
-## Foundations
-The biggest learning from the first compiler was the importance of design, so I took a lot of time setting the foundations of my design to ensure success later on.
-
-### Dynamic Allocation
-Dynamic allocation was necessary for my design, but I did not want to fall into the same pit as last time with manual allocation and a memory leak nightmare.
-To solve this, I created an allocator to efficiently allocate objects and automatically deallocate them (destructors are the greatest thing ever created).
-
-My allocator is declared and defined in [memory/allocator.h][2].
-It allocates buffers big enough to hold `buf_size` number of templated objects and adds their pointers to a vector.
-Every time it runs out of space in the current buffer, it allocates a new buffer.
-This approach has the benefit of grouping allocations, so that a memory allocation syscall only happens every `buf_size` allocations rather than every time a new object is allocated.
-
-I was incredibly proud of my creation until I discovered that `std::allocator` already exists. Oh well.
-
-### Source Management
-I wanted my compiler to be able to compile multiple source files at once, rather than being locked to one.
-To this end, I created a suite of source management tools for myself to use in the future.
-These are all declared in [source/source.h][3] and defined in [source/source.cpp][4].
-
-The `SourceManager` holds a list of all source file paths.
-When a source file is added, it returns a corresponding `SourceID` object. This object is essentially the "key" to the right source file in the `SourceManager`.
-When any part of the compiler wants access to any source file, it calls `open_source` with the `SourceID` object, and the `SourceManager` will return a new input stream for the corresponding file.
-This setup provides a central place to access source files, and will hopefully make juggling multiple source files much easier in the future.
-The intended caller flow looks like this:
-```cpp
-// in compilation driver
-std::string path = SRCPATH;
-SourceID src_id = SourceManager::add_source(path);
-
-// in compiler component
-std::ifstream *src = SourceManager::open_source(src_id);
-```
-
-I also made `SourceLocation`, which is a direct answer to the problem I had with the first compiler of bad token location data.
-This class holds all the data I could ever want about a token's location in the source, and it will be a part of the token class.
-This way, every token will have its location as part of it, making refactoring and error tracing much easier.
-
-### Error Handling
-After the last compiler, I wanted this one to have proper error handling and nice, descriptive error messages.
-
-The `ErrorHandler` class is my solution to this.
-It is declared in [error/error.h][5] and defined in [error/error.cpp][6].
-
-The main attraction of the class is the `handle` function. Given an error type, source location, and error string, it pretty-prints the error to the console.
-It has all the bells and whistles of a production compiler: line numbers, context, underlining, and color highlighting.
-This is what an error printed using this function looks like:
-
-![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/8a1c493b-22b6-4efb-aa61-2fb4f3aea3b7)
-
-Pretty awesome, right?
-
-At this point, I have set myself up with a solid base of utility classes. Time to start with the actual compiler.
-
-## Lexing
+## Frontend
 
 ### Tokens
 The `Token` class is a hugely upgraded version of the `token` struct from my last compiler. It contains its source location, string representation, and type.
@@ -90,9 +37,7 @@ lex(tk);
 
 The lexer was pretty quick this time. The parser and analyzer, however, is a different story.
 
-## Syntactic and Semantic Analyzation
-
-### The AST
+### The Abstract Syntax Tree
 The ultimate goal of my parser and analyzer is to produce a semantically correct AST, which I can use later in code generation.
 To this end, I created the ast module to house all of the ast definitions and utilities.
 
@@ -104,7 +49,6 @@ The `print()` function pretty-prints the AST, which is absolutely invaluable whe
 All of the AST representations on this page were printed using this function.
 
 ### The Parser and Semantic Analyzer
-
 The `Parser` class implements a fully featured LL(1) parser.
 It is declared in [parser/parser.h][12] and defined in [parser/parser.cpp][13].
 
@@ -188,48 +132,496 @@ loc_cache = tk.get_src_loc();
 consume();
 
 // parse expr
-AnalyzedExpr temp = parse_expr();
+ASTNode *temp = parse_expr();
 
 // analyze return stmt
-res = (ASTNode *)analyzer.analyze_return_stmt(temp).contents;
+res = analyzer.analyze_return_stmt(temp);
 ```
 
-As you can see, there are still result objects being used.
-This is because the parser and analyzer are in a transition state as I refactor them using my new strategy.
-I am also in the process of making new additions to the language such as loops and if-else.
+Once parsing is finished, the compiler can progress onwards.
 
-As an example of the current capabilities, this code:
+## Middle-End
+I wanted my compiler to be capable of doing everything that the likes of Clang and GCC can, and that includes optimization.
+To this end, I created a middle-end complete with a custom IR, within which I can add any kind of analysis or transformation I like.
 
-```cpp
-using i3 = i32;
 
-decl (i3, i32) *()i32
-foo (first, second) {
-    decl i32 i;
-    decl i64 j;
-    decl i64 first;
-    foo(first, second);
-    decl (i3)i3 food (first) {
-        decl i32 bar;
-        foo(first, bar);
-    };
-    return i * j + bar;
-};
+### IR
+My IR is heavily inspired by (in my opinion) the king of optimizing compilers: LLVM.
+It is in static single-assignment form, like LLVM IR and GCC gimple, for all the same reasons as them:
+* Trivial analysis of the control flow graph (since the IR *is* the cfg),
+* Explicit def-use chains (since the IR *is also* the dataflow graph), which makes many optimizations significantly easier to implement, and
+* Semantics that are much closer to machine code, allowing for more potential optimization
 
-decl () *i3
-bar () {
-    return first;
-};
+A lot of design decisions in the IR were influenced directly by LLVM IR, such as:
+* A deeply nested class hierarchy (I wanted to do things "right" for once),
+* Iterator-based data structure traversal, and
+* Many IR instructions and semantics
+* Uniquing of IR constructs like constants
+
+"If it ain't broke, don't fix it"
+
+Developing the IR led me into the depths of LLVM and GCC to understand how they used IR and what I should consider with mine.
+I developed a very deep understanding of how LLVM itself works, which not only helped with this compiler but also with my understanding of modern compiler construction and compilation pipelines.
+
+### Translation
+To translate the AST to IR, I created `ASTTranslator`, whose only purpose is to perform its namesake.
+I like LLVM's philosophy of isolating SSA logic to the middle-end, so the translation step lowers variables via stack reads and writes.
+This is inefficient, but it will be fixed in IR.
+
+For example, this code:
+
+```go
+def (*i8) i32
+foo(str) {
+  return 0;
+}
+
+def (i32, **i8) i32
+main(argc, argv) {
+  var i32 val = 0;
+  while (val) {
+    val = 33;
+    if (val) {
+        val = 1;
+    }
+    else {
+        val = 400;
+    }
+  }
+  if (argc) {
+      val = foo(*argv);
+  }
+  return val;
+}
+```
+
+is translated to this IR:
+
+```
+i32 foo (ptr str) {
+entry:
+  ptr %str.addr = salloc ptr
+  write ptr str, ptr %str.addr
+  return i32 0
+}
+i32 main (i32 argc, ptr argv) {
+entry:
+  ptr %val = salloc i32
+  ptr %argv.addr = salloc ptr
+  ptr %argc.addr = salloc i32
+  write i32 argc, ptr %argc.addr
+  write ptr argv, ptr %argv.addr
+  write i32 0, ptr %val
+  branch block loopcond
+loopcond:
+  i32 %tmp = read i32, ptr %val
+  i1 %tmp1 = icmp neq, i32 %tmp, i32 0
+  branch block loopbody, i1 %tmp1, block loopend
+loopbody:
+  write i32 33, ptr %val
+  i32 %tmp2 = read i32, ptr %val
+  i1 %tmp3 = icmp neq, i32 %tmp2, i32 0
+  branch block ifthen, i1 %tmp3, block ifelse
+ifthen:
+  write i32 1, ptr %val
+  branch block ifdone
+ifelse:
+  write i32 400, ptr %val
+  branch block ifdone
+ifdone:
+  branch block loopcond
+loopend:
+  i32 %tmp4 = read i32, ptr %argc.addr
+  i1 %tmp5 = icmp neq, i32 %tmp4, i32 0
+  branch block ifthen1, i1 %tmp5, block ifdone1
+ifthen1:
+  ptr %tmp6 = read ptr, ptr %argv.addr
+  ptr %tmp7 = read ptr, ptr %tmp6
+  i32 %tmp8 = call i32 foo, ptr %tmp7
+  write i32 %tmp8, ptr %val
+  branch block ifdone1
+ifdone1:
+  i32 %tmp9 = read i32, ptr %val
+  return i32 %tmp9
+}
+```
+
+### Passes
+Again, I absolutely love LLVM's approach to analysis and optimization, and at the core of its infrastructure are Passes.
+Everything in LLVM is a pass, and I wanted to approach it the same way.
+As my first foray into creating an IR pass, I decided to make my own mem2reg - an LLVM transformation pass that promotes stack variables into SSA registers.
+(This is how the variable translation issue is fixed, and is a common paradigm when writing frontends to LLVM)
+
+#### Stackpromote
+To create stackpromote (my mem2reg) I needed to use almost every capability afforded by my shiny new IR.
+* First, it determines elibility for promotion by traversing the def-use chains for every `salloc` (my equivalent to LLVM's `alloca`)
+  * If a pointer returned from `salloc` is read from (`read`) or written to (`write`), it is eligible
+  * If any other instruction uses the pointer, it is not eligible (the pointer value itself must exist, so the stack allocation cannot be removed)
+* Second, for each eligible `salloc`, it traverses the cfg to calculate a special dominator tree called a dj-graph [^1]
+* Third, it computes the iterated dominance frontier (idf) of each `salloc` based on its dj-graph [^1]
+  * Simply, the idf is the set of basic blocks in which to insert phi-nodes for optimal phi-node placement
+* Fourth, it replaces all uses of the `salloc` value with a newly made SSA register
+* Fifth, it places phi-nodes based on the idf, removes all relevant reads and writes, and finally removes the `salloc` itself
+[^1]: https://dl.acm.org/doi/pdf/10.1145/199448.199464
+
+And there you go! Perfect SSA code.
+
+Here is an example pass through stackpromote:
+* initial code:
+
+```go
+def (*i8) i32
+foo(str) {
+  return 0;
+}
+
+def (i32, **i8) i32
+main(argc, argv) {
+  var i32 val = 0;
+  while (val) {
+    val = 33;
+    if (val) {
+        val = 1;
+    }
+    else {
+        val = 400;
+    }
+  }
+  if (argc) {
+      val = foo(*argv);
+  }
+  return val;
+}
+```
+
+* ir + cfg:
+
+```
+i32 foo (ptr str) {
+entry:
+  ptr %str.addr = salloc ptr
+  write ptr str, ptr %str.addr
+  return i32 0
+}
+i32 main (i32 argc, ptr argv) {
+entry:
+  ptr %val = salloc i32
+  ptr %argv.addr = salloc ptr
+  ptr %argc.addr = salloc i32
+  write i32 argc, ptr %argc.addr
+  write ptr argv, ptr %argv.addr
+  write i32 0, ptr %val
+  branch block loopcond
+loopcond:
+  i32 %tmp = read i32, ptr %val
+  i1 %tmp1 = icmp neq, i32 %tmp, i32 0
+  branch block loopbody, i1 %tmp1, block loopend
+loopbody:
+  write i32 33, ptr %val
+  i32 %tmp2 = read i32, ptr %val
+  i1 %tmp3 = icmp neq, i32 %tmp2, i32 0
+  branch block ifthen, i1 %tmp3, block ifelse
+ifthen:
+  write i32 1, ptr %val
+  branch block ifdone
+ifelse:
+  write i32 400, ptr %val
+  branch block ifdone
+ifdone:
+  branch block loopcond
+loopend:
+  i32 %tmp4 = read i32, ptr %argc.addr
+  i1 %tmp5 = icmp neq, i32 %tmp4, i32 0
+  branch block ifthen1, i1 %tmp5, block ifdone1
+ifthen1:
+  ptr %tmp6 = read ptr, ptr %argv.addr
+  ptr %tmp7 = read ptr, ptr %tmp6
+  i32 %tmp8 = call i32 foo, ptr %tmp7
+  write i32 %tmp8, ptr %val
+  branch block ifdone1
+ifdone1:
+  i32 %tmp9 = read i32, ptr %val
+  return i32 %tmp9
+}
+```
+
+![cfg](https://github.com/arnaavgoyal/new-compiler/assets/58274830/dcef5f09-3e23-43a3-85d0-03baa0e6bc6d)
+
+* dj-graph for `val`:
+
+![djg](https://github.com/arnaavgoyal/new-compiler/assets/58274830/9c122857-865f-4e6d-99f9-fca7143a1997)
+
+* final ir after stackpromote:
+
+```
+i32 foo (ptr str) {
+entry:
+  return i32 0
+}
+i32 main (i32 argc, ptr argv) {
+entry:
+  branch block loopcond
+loopcond:
+  i32 %val1 = phi block entry, i32 0, block ifdone, i32 %val4
+  i1 %tmp1 = icmp neq, i32 %val1, i32 0
+  branch block loopbody, i1 %tmp1, block loopend
+loopbody:
+  i1 %tmp3 = icmp neq, i32 33, i32 0
+  branch block ifthen, i1 %tmp3, block ifelse
+ifthen:
+  branch block ifdone
+ifelse:
+  branch block ifdone
+ifdone:
+  i32 %val4 = phi block ifthen, i32 1, block ifelse, i32 400
+  branch block loopcond
+loopend:
+  i1 %tmp5 = icmp neq, i32 argc, i32 0
+  branch block ifthen1, i1 %tmp5, block ifdone1
+ifthen1:
+  ptr %tmp7 = read ptr, ptr argv
+  i32 %val2 = call i32 foo, ptr %tmp7
+  branch block ifdone1
+ifdone1:
+  i32 %val3 = phi block ifthen1, i32 %val2, block loopend, i32 %val1
+  return i32 %val3
+}
+```
+
+As you can see, all of the reads and writes to `%val` were eliminated and replaced with SSA registers and phi-nodes.
+
+I fully intend to add more passes in the future, but for now, we need to actually generate code.
+
+## Codegen
+Codegen - the backend of my compiler - is still very much a work-in-progress.
+So far, it naively converts from IR into an intermediate target representation.
+The goal is that through multiple steps, it will end up in pure target code, after which it can simply be printed as assembly.
+
+The fundamental concept is that each target subclasses `TargetCodeGen` and overrides the hooks.
+From there, the subclassed `TargetCodeGen` object can be passed to Codegen, which will iteratively lower the code to target code using the target hooks.
+Right now, I am working on the implementation of Codegen itself, as well as `X86TargetCodeGen`, which implements x86-64 target hooks.
+
+## Current Functionality
+Here are a few demonstrations of the current capabilities...
+
+### Demo 1
+This code:
+
+```go
+type my_i32 = i32;
+
+var my_i32 glob = 0;
+
+def (i8) my_i32
+foo(num) {
+    return num;
+}
+
+def (*i8) i32
+bar(str) {
+    var my_i32 i = 14;
+    var u8 u = -4;
+    var i32 v = foo(i);
+    return v;
+}
+
+def (my_i32, **i8) i32
+my_main(argc, argv) {
+    var i32 v = &3;
+    v = bar(*argv);
+    var my_i32 v;
+    v = foo(6;
+    return v;
+}
 ```
 
 is synthesized into this AST:
 
-![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/c93e6507-fdf3-45f7-b1a6-2cf66ee4f912)
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/60e13cd0-cfaf-4c33-b972-6e789ca4eb77)
 
-with these semantic errors:
+with these diagnostics:
 
-![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/28194a16-3ce8-4e11-82a1-c8bcd24601fa)
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/af86bd83-d640-41f8-8194-40a697a07239)
 
+### Demo 2
+This code:
+
+```go
+type my_i32 = i32;
+
+def (i32) i32
+foo(num) {
+    return num;
+}
+
+def (*i8) i32
+bar(str) {
+    var i32 i = 14;
+    var i32 v = foo(i);
+    return v;
+}
+
+def (i32, **i8) i32
+my_main(argc, argv) {
+    var i32 v = 3;
+    v = bar(*argv);
+    return v;
+}
+```
+
+is synthesized into this AST:
+
+![image](https://github.com/arnaavgoyal/new-compiler/assets/58274830/3c8ffb51-4d5c-4db4-9fc0-8a72eb078f7e)
+
+then translated into this IR:
+
+```
+i32 foo (i32 num) {
+entry:
+  ptr %num.addr = salloc i32
+  write i32 num, ptr %num.addr
+  i32 %tmp = read i32, ptr %num.addr
+  return i32 %tmp
+}
+i32 bar (ptr str) {
+entry:
+  ptr %v = salloc i32
+  ptr %i = salloc i32
+  ptr %str.addr = salloc ptr
+  write ptr str, ptr %str.addr
+  write i32 14, ptr %i
+  i32 %tmp = read i32, ptr %i
+  i32 %tmp1 = call i32 foo, i32 %tmp
+  write i32 %tmp1, ptr %v
+  i32 %tmp2 = read i32, ptr %v
+  return i32 %tmp2
+}
+i32 my_main (i32 argc, ptr argv) {
+entry:
+  ptr %v = salloc i32
+  ptr %argv.addr = salloc ptr
+  ptr %argc.addr = salloc i32
+  write i32 argc, ptr %argc.addr
+  write ptr argv, ptr %argv.addr
+  write i32 3, ptr %v
+  ptr %tmp = read ptr, ptr %argv.addr
+  ptr %tmp1 = read ptr, ptr %tmp
+  i32 %tmp2 = call i32 bar, ptr %tmp1
+  write i32 %tmp2, ptr %v
+  i32 %tmp3 = read i32, ptr %v
+  return i32 %tmp3
+}
+```
+
+which after stackpromote, becomes this IR:
+
+```
+i32 foo (i32 num) {
+entry:
+  return i32 num
+}
+i32 bar (ptr str) {
+entry:
+  i32 %v1 = call i32 foo, i32 14
+  return i32 %v1
+}
+i32 my_main (i32 argc, ptr argv) {
+entry:
+  ptr %tmp1 = read ptr, ptr argv
+  i32 %v1 = call i32 bar, ptr %tmp1
+  return i32 %v1
+}
+```
+
+which is translated into this intermediate target representation:
+
+```
+foo:
+  return %s:16
+bar:
+  %v:0 = call %l:foo, %i:14
+  return %v:0
+my_main:
+  %v:0 = read %s:20
+  %v:1 = call %l:bar, %v:0
+  return %v:1
+```
+
+which is lowered to this x86-64 target representation:
+
+```
+foo:
+  %p:rax = x86:mov %s:16
+  x86:ret <imp %p:rax>
+bar:
+  %s:4 = x86:mov %i:14
+  %p:rax = x86:call %l:foo, <imp %s:4>
+  x86:ret <imp %p:rax>
+my_main:
+  %v:0 = x86:mov %s:20
+  %s:8 = x86:mov %v:0
+  %p:rax = x86:call %l:bar, <imp %s:8>
+  x86:ret <imp %p:rax>
+```
+
+which is finally outputted as this x86-64 assembly:
+
+output.s
+```asm
+	.intel_syntax noprefix
+	.globl foo
+	.globl bar
+	.globl my_main
+foo:
+	push	rbp
+	mov	rbp, rsp
+	sub	rsp, 0
+	mov	rax, [rbp + 16]
+	mov	rsp, rbp
+	pop	rbp
+	ret
+bar:
+	push	rbp
+	mov	rbp, rsp
+	sub	rsp, 4
+	mov	[rbp - 4], 14
+	call	foo
+	mov	rsp, rbp
+	pop	rbp
+	ret
+my_main:
+	push	rbp
+	mov	rbp, rsp
+	sub	rsp, 8
+	mov	rax, [rbp + 20]
+	mov	[rbp - 8], rax
+	call	bar
+	mov	rsp, rbp
+	pop	rbp
+	ret
+```
+
+which... doesn't actually assemble:
+
+test.c
+```c
+#include <stdio.h>
+extern int my_main(int, char**);
+int main() {
+    int res = my_main(0, NULL);
+    printf("%d\n", res);
+    return 0;
+}
+```
+
+terminal
+```bash
+$ gcc test.c output.s -o test.exe
+output.s: Assembler messages:
+output.s:17: Error: ambiguous operand size for `mov'
+```
+
+Hooray!
 
 [1]:  https://github.com/arnaavgoyal/compiler
 [2]:  ../main/inc/memory/allocator.h
