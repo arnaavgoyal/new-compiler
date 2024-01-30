@@ -1,25 +1,9 @@
-#include <stdlib.h>
 #include <stdio.h>
 
-int nerd = 0;
+extern int my_main(int, char**);
 
-int *foo(int i) {
-    int i = 0;
-}
-
-int k = 0;
-
-typedef int i32;
-
-int main(int argc, char *argv[]) {
-
-    typedef double i32;
-
-    int argc = 0;
-
-    int i32 = 0;
-
-    char i32 = '0';
-
+int main() {
+    int res = my_main(0, NULL);
+    printf("%d\n", res);
     return 0;
 }

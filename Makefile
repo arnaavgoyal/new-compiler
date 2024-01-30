@@ -1,5 +1,5 @@
 CODEIN := input.a
-CODEOUT := output.asm
+CODEOUT := output.s
 
 INCDIR := inc
 SRCDIR := src

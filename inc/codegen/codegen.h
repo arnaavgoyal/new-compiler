@@ -17,19 +17,19 @@ enum class typekind {
     dfp
 };
 
-enum class storagekind {
-    reg,
-    stack,
-    glob,
-    imm,
-    label,
-    inv
+enum class storagekind : unsigned char {
+    inv   = 0b0000'0000,
+    reg   = 0b0000'0001,
+    stack = 0b0000'0010,
+    glob  = 0b0000'0100,
+    imm   = 0b0000'1000,
+    label = 0b0001'0000,
 };
 
 enum regbound : unsigned {
     _vreg_start = 0,
     _vreg_end   = 1 << 24,
-    _preg_start = _vreg_end + 1
+    _preg_start = _vreg_end
 };
 
 /** ir -> target code utils */
@@ -89,6 +89,7 @@ constexpr unsigned tysizebits(typekind tk) {
     case typekind::dfp:
         return 64;
     }
+    assert(false);
     __builtin_unreachable();
 }
 
@@ -103,7 +104,8 @@ struct RegData {
 };
 
 struct StackData {
-    int offset;
+    unsigned offset;
+    bool param;
 };
 
 struct GlobalData {
@@ -133,6 +135,14 @@ struct UseEdge : IListNode<UseEdge> {
         : UseEdge(tv, ti, false) { }
 };
 
+struct TargetFunction {
+    std::string str;
+    unsigned stacksize = 0;
+    unsigned vregidx = 0;
+    IList<TargetValue> params;
+    IList<TargetInstr> instrs;
+};
+
 struct TargetValue : public IListNode<TargetValue> {
     typekind ty;
     storagekind loc;
@@ -145,7 +155,7 @@ struct TargetValue : public IListNode<TargetValue> {
     };
     IList<UseEdge> uses;
 
-    static TargetValue *reg(typekind tk, RegData data, TargetInstr *defr) {
+    static TargetValue *reg(typekind tk, RegData data) {
         auto tv = new TargetValue();
         tv->ty = tk;
         tv->loc = storagekind::reg;
@@ -192,13 +202,6 @@ struct TargetInstr : public IListNode<TargetInstr> {
         : opcode(opcode), orig(orig) { }
 };
 
-struct TargetFunction {
-    std::string str;
-    unsigned stacksize = 0;
-    IList<TargetValue> params;
-    IList<TargetInstr> instrs;
-};
-
 struct TargetProgram {
     std::vector<TargetValue *> globs;
     std::vector<TargetFunction> funcs;
@@ -243,9 +246,13 @@ inline void rauw(TargetValue *olddef, TargetValue *newdef) {
     }
 }
 
+inline TargetValue *make_vreg(typekind tk, TargetFunction &tf) {
+    return TargetValue::reg(tk, RegData{ tf.vregidx++ });
+}
+
 inline TargetValue *make_stack(typekind tk, TargetFunction &tf) {
-    auto tv = TargetValue::stack(tk, StackData{ tf.stacksize } );
     tf.stacksize += tysizebytes(tk);
+    auto tv = TargetValue::stack(tk, StackData{ tf.stacksize, false } );
     return tv;
 }
 
@@ -258,7 +265,12 @@ struct TargetCodeGen {
     // 2. instruction selection (isel)
     virtual bool isel(TargetFunction &tf, TargetInstr *ti) = 0;
 
-    // 3. print assembly (pasm)
+    // 3. register allocation
+    virtual unsigned ralloc() = 0;
+    virtual void rfree(unsigned reg) = 0;
+    virtual void rfree_all() = 0;
+
+    // 4. print assembly (pasm)
     virtual void pasm(TargetProgram &tp, std::ostream &os) = 0;
 
     // utils

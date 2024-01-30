@@ -289,7 +289,7 @@ TargetInstr *visit_instr(ir::Instr *i, TargetCodeGen &tcg, TargetFunction &tf, s
     }
     if (i->get_type()->get_kind() != ir::typekind::void_ty) {
         // has a value that it defines
-        add_def(ti, TargetValue::reg(irty2tk(i->get_type()->get_kind()), RegData{ tcg.new_vreg() }, ti));
+        add_def(ti, make_vreg(irty2tk(i->get_type()->get_kind()), tf));
         def2tv[i] = ti->defs.back();
     }
     tf.instrs.push_back(ti);
@@ -311,7 +311,7 @@ void translate(TargetProgram &tp, ir::Program *p, TargetCodeGen &tcg) {
     }
     
     for (auto f : *p) {
-        TargetFunction tf;
+        TargetFunction &tf = tp.funcs.emplace_back();
         tf.str = f->get_name();
         tcg.ccvl(tf, f);
         assert(tf.params.size() == f->num_params());
@@ -327,7 +327,7 @@ void translate(TargetProgram &tp, ir::Program *p, TargetCodeGen &tcg) {
                 }
             }
         }
-        tp.funcs.push_back(std::move(tf));
+        //tp.funcs.push_back(std::move(tf));
     }
 }
 
@@ -404,12 +404,17 @@ void dbgprint(TargetProgram &tp, TargetCodeGen &tcg, std::ostream &os) {
 void codegen(ir::Program *p, TargetCodeGen &tcg, std::ostream &os) {
 
     TargetProgram tp;
-    translate(tp, p, tcg);
 
+    // 1. translate
+
+    translate(tp, p, tcg);
+    
     dbgprint(tp, tcg, std::cout);
     std::cout << std::endl;
 
-    for (auto tf : tp.funcs) {
+    // 2. instruction selection
+
+    for (auto &tf : tp.funcs) {
         for (auto ti : tf.instrs) {
             if (is_irop(ti->opcode)) {
                 bool selected = tcg.isel(tf, ti);
@@ -423,6 +428,20 @@ void codegen(ir::Program *p, TargetCodeGen &tcg, std::ostream &os) {
     }
 
     dbgprint(tp, tcg, std::cout);
+
+    // 3. register allocation
+
+    for (auto &tf : tp.funcs) {
+        for (auto ti : tf.instrs) {
+            for (auto def : ti->defs) {
+                if (def->loc == storagekind::reg && def->regdata.reg <= regbound::_vreg_end) {
+                    def->regdata.reg = tcg.ralloc();
+                }
+            }
+        }
+    }
+
+    // 4. output to assembly
 
     tcg.pasm(tp, os);
 }

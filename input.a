@@ -1,54 +1,20 @@
-type myty = i32;
+type my_i32 = i32;
 
-var i32 glob = 0;
-
-def (*i8) i32
-foo(str) {
-    return 0;
+def (i32) i32
+foo(num) {
+    return num;
 }
 
 def (*i8) i32
 bar(str) {
-    var i32 i = 0;
-    var i32 v;
-    v = foo(str);
+    var i32 i = 14;
+    var i32 v = foo(i);
     return v;
 }
 
 def (i32, **i8) i32
-main(argc, argv) {
-//    type charstar = *i8;
-//    type i32ptr = *i32;
-//    var charstar str = *argv;
-//    var i32ptr ptr = argv;
-//    //var []*()i32 str;
-//    //str++;
-//    var i32 val = 0;
-//    var u16 val2 = 001;
-//    var u8 thing;
-//    *str = 5;
-//    //str = *argv;
-//    while (val) {
-//        val = foo(str);
-//        if (val) {
-//            val = 1;
-//        }
-//        else {
-//            val = 400;
-//        }
-//    }
-//    if (argc) {
-//        str = *argv;
-//        val = foo(*argv);
-//    }
-//    else if (argc) {
-//        str = *argv;
-//    }
-//    foo(str);
-//    return val;
+my_main(argc, argv) {
     var i32 v = 3;
-    bar(*argv);
+    v = bar(*argv);
     return v;
 }
-
-// ------------------------------

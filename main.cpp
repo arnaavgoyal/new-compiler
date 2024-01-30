@@ -96,10 +96,10 @@ int main(int argc, char **argv) {
 
     ir::Program *prog = fe::ASTTranslator().translate(ast);
     std::cout << std::endl;
-    //prog->dump();
+    prog->dump();
 
     std::ofstream cfgfile("cfg.dot");
-    dump_cfg(prog->get_function("main"), cfgfile);
+    dump_cfg(prog->get_function("my_main"), cfgfile);
     cfgfile.close();
 
     run_stackpromotion(prog);
