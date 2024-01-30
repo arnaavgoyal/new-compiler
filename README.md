@@ -148,17 +148,17 @@ To this end, I created a middle-end complete with a custom IR, within which I ca
 ### IR
 My IR is heavily inspired by (in my opinion) the king of optimizing compilers: LLVM.
 It is in static single-assignment form, like LLVM IR and GCC gimple, for all the same reasons as them:
-* Trivial analysis of the control flow graph (since the IR *is* the cfg),
-* Explicit def-use chains (since the IR *is also* the dataflow graph), which makes many optimizations significantly easier to implement, and
+* Trivial analysis of the control flow graph (since the IR *is* the cfg)
+* Explicit def-use chains (since the IR *is also* the dataflow graph), which makes many optimizations significantly easier to implement
 * Semantics that are much closer to machine code, allowing for more potential optimization
 
 A lot of design decisions in the IR were influenced directly by LLVM IR, such as:
-* A deeply nested class hierarchy (I wanted to do things "right" for once),
-* Iterator-based data structure traversal, and
+* A deeply nested class hierarchy (I wanted to do things "right" for once)
+* Iterator-based data structure traversal
 * Many IR instructions and semantics
 * Uniquing of IR constructs like constants
 
-"If it ain't broke, don't fix it"
+*"If it ain't broke, don't fix it"*
 
 Developing the IR led me into the depths of LLVM and GCC to understand how they used IR and what I should consider with mine.
 I developed a very deep understanding of how LLVM itself works, which not only helped with this compiler but also with my understanding of modern compiler construction and compilation pipelines.
