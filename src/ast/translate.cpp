@@ -262,13 +262,9 @@ ir::WriteInstr *ASTTranslator::t_assign(ir::Def *lval, ASTNode *expr) {
 ir::Def *ASTTranslator::t_binop(ASTNode *binop) {
 
     switch (binop->op) {
-        case op::add:
-            NYI(add)
         case op::assign: {
             return t_assign(t_stmt(binop->children[0]), binop->children[1]);
         }
-        case op::div:
-            NYI(div)
         case op::eq: {
             ir::Def *lhs = t_stmt(binop->children[0]);
             bool lhs_lval = ci_lval;
@@ -294,12 +290,37 @@ ir::Def *ASTTranslator::t_binop(ASTNode *binop) {
             NYI(lte)
         case op::mod:
             NYI(mod)
-        case op::mult:
-            NYI(mult)
         case op::neq:
             NYI(neq)
-        case op::sub:
-            NYI(sub)
+        case op::add: {
+            ir::Def *lhs = t_stmt(binop->children[0]);
+            bool lhs_lval = ci_lval;
+            ir::Def *rhs = t_stmt(binop->children[1]);
+            bool rhs_lval = ci_lval;
+            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type)); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
+            return new ir::BinaryOpInstr(ir::defkind::iadd, lhs, rhs, curr_block, nullptr, "addtmp");
+        }
+        case op::sub: {
+            ir::Def *lhs = t_stmt(binop->children[0]);
+            bool lhs_lval = ci_lval;
+            ir::Def *rhs = t_stmt(binop->children[1]);
+            bool rhs_lval = ci_lval;
+            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type)); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
+            return new ir::BinaryOpInstr(ir::defkind::isub, lhs, rhs, curr_block, nullptr, "subtmp");
+        }
+        case op::mult: {
+            ir::Def *lhs = t_stmt(binop->children[0]);
+            bool lhs_lval = ci_lval;
+            ir::Def *rhs = t_stmt(binop->children[1]);
+            bool rhs_lval = ci_lval;
+            if (lhs_lval) { lhs = t_rval(lhs, t_type(binop->children[0]->type)); }
+            if (rhs_lval) { rhs = t_rval(rhs, t_type(binop->children[1]->type)); }
+            return new ir::BinaryOpInstr(ir::defkind::imul, lhs, rhs, curr_block, nullptr, "multmp");
+        }
+        case op::div:
+            NYI(div)
         case op::postdecr:
         case op::postincr:
         case op::predecr:
