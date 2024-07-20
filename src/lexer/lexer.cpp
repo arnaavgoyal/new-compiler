@@ -125,6 +125,19 @@ bool Lexer::lex_block_comment(Token &tk) {
     return false;
 }
 
+static inline token::token_type check_keywords(
+    void *str,
+    unsigned len,
+    token::token_type *expecteds
+) {
+    for (int i = 0; i < len; i++) {
+        if (((std::string *)str)->compare(token::get_keyword_string(expecteds[i])) == 0) {
+            return expecteds[i];
+        }
+    }
+    return token::identifier;
+}
+
 void Lexer::lex_token(Token &tk) {
     int c;
     token::token_type type;
@@ -173,170 +186,28 @@ lex_start:
         // reads the identifier into it. However, if it is classified as a keyword
         // afterwards, the alloced string will never be used.
         // TODO: fix this error
-        case 'a':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_as)) == 0) {
-                type = token::kw_as;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'b':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_break)) == 0) {
-                type = token::kw_break;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'c':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_continue)) == 0) {
-                type = token::kw_continue;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'd':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_def)) == 0) {
-                type = token::kw_def;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'e':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_else)) == 0) {
-                type = token::kw_else;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'f':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f32)) == 0) {
-                type = token::kw_f32;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_f64)) == 0) {
-                type = token::kw_f64;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_false)) == 0) {
-                type = token::kw_false;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'i':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i8)) == 0) {
-                type = token::kw_i8;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i16)) == 0) {
-                type = token::kw_i16;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i32)) == 0) {
-                type = token::kw_i32;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_i64)) == 0) {
-                type = token::kw_i64;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_if)) == 0) {
-                type = token::kw_if;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'l':
-            src->unget();
-            lex_identifier(tk);
-            type = token::identifier;
-            break;
-        case 'r':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_return)) == 0) {
-                type = token::kw_return;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 's':
-            src->unget();
-            lex_identifier(tk);
-            type = token::identifier;
-            break;
-        case 't':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_true)) == 0) {
-                type = token::kw_true;
-            }
-            
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_type)) == 0) {
-                type = token::kw_type;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'u':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u8)) == 0) {
-                type = token::kw_u8;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u16)) == 0) {
-                type = token::kw_u16;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u32)) == 0) {
-                type = token::kw_u32;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_u64)) == 0) {
-                type = token::kw_u64;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'v':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_var)) == 0) {
-                type = token::kw_var;
-            }
-            else if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_void)) == 0) {
-                type = token::kw_void;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
-        case 'w':
-            src->unget();
-            lex_identifier(tk);
-            if (((std::string *)tk.str)->compare(token::get_keyword_string(token::kw_while)) == 0) {
-                type = token::kw_while;
-            }
-            else {
-                type = token::identifier;
-            }
-            break;
+#define KEYWORD_CHECK(L, C, ...) \
+case C: \
+    src->unget(); \
+    lex_identifier(tk); \
+    static token::token_type L##_kws[] = {__VA_ARGS__}; \
+    type = check_keywords(tk.str, sizeof(L##_kws) / sizeof(L##_kws[0]), L##_kws); \
+    break;
+
+        KEYWORD_CHECK(a, 'a', token::kw_as)
+        KEYWORD_CHECK(b, 'b', token::kw_break)
+        KEYWORD_CHECK(c, 'c', token::kw_continue)
+        KEYWORD_CHECK(d, 'd', token::kw_def)
+        KEYWORD_CHECK(e, 'e', token::kw_else)
+        KEYWORD_CHECK(f, 'f', token::kw_f32, token::kw_f64, token::kw_false)
+        KEYWORD_CHECK(i, 'i', token::kw_i8, token::kw_i16, token::kw_i32, token::kw_i64, token::kw_if)
+        KEYWORD_CHECK(r, 'r', token::kw_return)
+        KEYWORD_CHECK(t, 't', token::kw_true, token::kw_type)
+        KEYWORD_CHECK(u, 'u', token::kw_u8, token::kw_u16, token::kw_u32, token::kw_u64)
+        KEYWORD_CHECK(v, 'v', token::kw_var, token::kw_void)
+        KEYWORD_CHECK(w, 'w', token::kw_while)
+
+#undef KEYWORD_CHECK
         
         // chars that no keyword starts with
         case 'A': case 'B': case 'C': case 'D':
@@ -347,9 +218,9 @@ lex_start:
         case 'U': case 'V': case 'W': case 'X':
         case 'Y': case 'Z':
         case 'g': case 'h':
-        case 'j': case 'k': case 'm':
+        case 'j': case 'k': case 'l': case 'm':
         case 'n': case 'o': case 'p': case 'q':
-        case 'x':
+        case 's': case 'x':
         case 'y': case 'z': case '_':
             src->unget();
             lex_identifier(tk);
