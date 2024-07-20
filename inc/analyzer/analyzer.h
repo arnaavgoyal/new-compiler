@@ -255,6 +255,7 @@ public:
     );
 
     ASTNode *analyze_return_stmt(
+        SourceLocation retloc,
         ASTNode *expr
     );
 

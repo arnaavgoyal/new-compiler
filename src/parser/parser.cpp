@@ -14,6 +14,8 @@
 #include <cassert>
 
 //#define DEBUG
+template <typename T>
+T x;
 
 namespace fe {
 
@@ -1111,7 +1113,7 @@ ASTNode *Parser::parse_stmt() {
         ASTNode *temp = parse_expr();
 
         // analyze return stmt
-        res = analyzer.analyze_return_stmt(temp);
+        res = analyzer.analyze_return_stmt(loc_cache, temp);
     }
 
     // var decl

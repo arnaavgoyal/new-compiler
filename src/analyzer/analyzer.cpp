@@ -1320,14 +1320,16 @@ void SemanticAnalyzer::end_scoped_block(
 }
 
 ASTNode *SemanticAnalyzer::analyze_return_stmt(
+    SourceLocation retloc,
     ASTNode *expr
 ) {
     ASTNode *node = node_allocator.alloc();
+    retloc.copy_end(expr->loc);
     node->set(
         ast::ret_stmt,
         expr->type,
         nullptr,
-        expr->loc,
+        retloc,
         token::kw_return,
         expr->has_error
     );
