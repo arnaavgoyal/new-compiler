@@ -43,6 +43,7 @@ KEYWORD(return)
 KEYWORD(var)
 KEYWORD(def)
 KEYWORD(type)
+KEYWORD(tmpl)
 KEYWORD(as)
 
 KEYWORD(true)

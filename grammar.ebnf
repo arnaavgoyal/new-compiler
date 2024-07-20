@@ -8,6 +8,16 @@ decl
     | funcdecl
     ;
 
+tmpl
+    = "tmpl", "<", [ tmplparam, { ",", tmplparam } ], ">", decl
+    ;
+
+tmplparam
+    = "type", [ identifier ]
+    | type, [ identifier ]
+    | tmpl
+    ;
+
 vardecl
     = "var", type, identifier, [ "=", valexpr ]
     ;
@@ -17,8 +27,11 @@ typedecl
     ;
 
 funcdecl
-    = "def", functiontype, identifier, "(", [ identifier, { ",", identifier } ]
-    , stmtblock
+    = "def", funcparams, identifier, stmtblock
+    ;
+
+funcparams
+    = "(", [ type, identifier, { ",", type, identifier } ], ")"
     ;
 
 type
@@ -27,6 +40,8 @@ type
     | arraytype
     | aliastype
     | functiontype
+    | uninstantiated-template-type
+    | template-placeholder-type
     ;
 
 primitivetype

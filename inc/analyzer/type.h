@@ -126,6 +126,9 @@ enum class typekind {
     // error
     error_t,
 
+    // wildcard type in templates
+    wildcard_t,
+
     // primitives
     _primitive_start,
 
@@ -172,11 +175,26 @@ enum class typekind {
 
     _primitive_end,
 
-    // constructible
+    // compound types
     pointer_t,
     array_t,
-    alias_t,
     function_t,
+
+    // user-definable types
+    _definable_start,
+
+        alias_t,
+
+        // template placeholder type
+        template_placeholder_t,
+
+        // uninstantiated templated type
+        uninstantiated_template_t,
+
+        // instantiated templated type
+        instantiated_template_t,
+
+    _definable_end,
 };
 
 class Type {
@@ -187,6 +205,9 @@ private:
     bool error;
 
 protected:
+
+    static ASTNode *error_node;
+
     Type(typekind kind, unsigned sz, Type *canonical, bool error)
         : kind(kind), size(sz), canonical(canonical), error(error) {
         
@@ -201,10 +222,13 @@ protected:
     void set_error() { error = true; }
 
 private:
-    // error type constructor
-    Type() : Type(typekind::error_t, 0, this, true) { }
+    // unique type constructor
+    Type(typekind tk) : Type(tk, 0, this, true) { }
 
 public:
+
+    static void set_error_node (ASTNode *en) { error_node = en; }
+
     typekind get_kind() { return kind; }
     unsigned get_size() { return size; }
     Type *get_canonical() { return canonical; }
@@ -212,19 +236,27 @@ public:
     virtual std::string stringify() { return "<error-type>"; };
 
     static Type *get_error_type();
+    static Type *get_wildcard_type();
     static bool is_primitive(typekind kind) { return kind > typekind::_primitive_start && kind < typekind::_primitive_end; }
     static bool is_numeric(typekind kind) { return kind > typekind::_numeric_start && kind < typekind::_numeric_end; }
     static bool is_integral(typekind kind) { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
     static bool is_unsigned(typekind kind) { return kind > typekind::_unsigned_start && kind < typekind::_unsigned_end; }
     static bool is_signed(typekind kind) { return kind > typekind::_signed_start && kind < typekind::_signed_end; }
     static bool is_fp(typekind kind) { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
+    static bool is_definable(typekind kind) { return kind > typekind::_definable_start && kind < typekind::_definable_end; }
 
-    bool is_primitive() { return Type::is_primitive(kind); }
-    bool is_numeric() { return Type::is_numeric(kind); }
-    bool is_integral() { return Type::is_integral(kind); }
-    bool is_unsigned() { return Type::is_unsigned(kind); }
-    bool is_signed() { return Type::is_signed(kind); }
-    bool is_fp() { return Type::is_fp(kind); }
+#define INSTANCE_REPLICATOR(fname) \
+bool fname() { return Type::fname(kind); }
+
+    INSTANCE_REPLICATOR(is_primitive)
+    INSTANCE_REPLICATOR(is_numeric)
+    INSTANCE_REPLICATOR(is_integral)
+    INSTANCE_REPLICATOR(is_unsigned)
+    INSTANCE_REPLICATOR(is_signed)
+    INSTANCE_REPLICATOR(is_fp)
+    INSTANCE_REPLICATOR(is_definable)
+
+#undef INSTANCE_REPLICATOR
 };
 
 class PrimitiveType : public Type {
@@ -284,28 +316,6 @@ public:
     static ArrayType *get_error_type();
 };
 
-class AliasType : public Type {
-private:
-    friend SemanticAnalyzer;
-    std::string str;
-    Type *aliasee;
-    ASTNode *decl;
-
-    static ASTNode *error_node;
-
-protected:
-    AliasType(Type *aliasee, std::string str, ASTNode *decl)
-        : Type(typekind::alias_t, aliasee->get_size(), aliasee->get_canonical(), aliasee->has_error()), str(str), aliasee(aliasee), decl(decl) { }
-
-public:
-    Type *get_aliasee() { return aliasee; }
-    ASTNode *get_decl() { return decl; }
-    std::string stringify() override { return str; }
-
-    static void set_error_node (ASTNode *en) { error_node = en; }
-    static AliasType *get_error_type();
-};
-
 class FunctionType : public Type {
 private:
     friend SemanticAnalyzer;
@@ -314,7 +324,9 @@ private:
 
 protected:
     FunctionType(Type *canonical, Type *return_ty, std::vector<Type *> params)
-        : Type(typekind::function_t, POINTER_SIZE_IN_BYTES, canonical, false), return_ty(return_ty), params(std::move(params)) {
+        : Type(typekind::function_t, POINTER_SIZE_IN_BYTES, canonical, false)
+        , return_ty(return_ty)
+        , params(std::move(params)) {
         if (return_ty->has_error()) {
             set_error();
             return;
@@ -335,11 +347,10 @@ public:
         bool hp = false;
         for (auto &param : params) {
             str.append(param->stringify());
-            str.append(", ");
+            str.append(",");
             hp = true;
         }
         if (hp) {
-            str.pop_back();
             str.pop_back();
         }
         str.append(")");
@@ -348,6 +359,81 @@ public:
     }
 
     static FunctionType *get_error_type();
+};
+
+class AliasType : public Type {
+private:
+    friend SemanticAnalyzer;
+    std::string str;
+    Type *aliasee;
+    ASTNode *decl;
+
+protected:
+    AliasType(Type *aliasee, std::string str, ASTNode *decl)
+        : Type(typekind::alias_t, aliasee->get_size(), aliasee->get_canonical(), aliasee->has_error())
+        , str(str)
+        , aliasee(aliasee)
+        , decl(decl) { }
+
+public:
+    Type *get_aliasee() { return aliasee; }
+    ASTNode *get_decl() { return decl; }
+    std::string stringify() override { return str; }
+
+    static AliasType *get_error_type();
+};
+
+class TemplatePlaceholderType : public Type {
+private:
+    friend SemanticAnalyzer;
+    std::string str;
+    ASTNode *decl;
+
+protected:
+    TemplatePlaceholderType(std::string str, ASTNode *decl)
+        : Type(typekind::template_placeholder_t, 0, nullptr, false)
+        , str(str)
+        , decl(decl) { }
+
+public:
+    ASTNode *get_decl() { return decl; }
+    std::string stringify() override { return str; }
+
+    static TemplatePlaceholderType *get_error_type();
+};
+
+class UninstantiatedTemplateType : public Type {
+private:
+    friend SemanticAnalyzer;
+    Type *base;
+    std::vector<Type *> placeholders;
+    ASTNode *decl;
+
+protected:
+    UninstantiatedTemplateType(Type *base, std::vector<Type *> &placeholders, ASTNode *decl)
+        : Type(typekind::uninstantiated_template_t, 0, nullptr, false)
+        , placeholders(placeholders)
+        , decl(decl) { }
+
+public:
+    Type *get_base() { return base; }
+    std::vector<Type *> const &get_placeholders() { return placeholders; }
+    ASTNode *get_decl() { return decl; }
+    std::string stringify() {
+        std::string str = "tmpl<";
+        bool hp = false;
+        for (auto ty : placeholders) {
+            str.append(ty->stringify());
+            str.append(",");
+            hp = true;
+        }
+        if (hp) {
+            str.pop_back();
+        }
+        str.append(">");
+        str.append(base->stringify());
+        return str;
+    }
 };
 
 }

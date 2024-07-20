@@ -850,7 +850,8 @@ ASTNode *Parser::parse_var_decl() {
 
 ASTNode *Parser::parse_func_decl() {
 
-    Type *type;
+    assert(tk.get_type() == token::kw_def);
+
     SourceLocation loc;
 
     // consume def keyword
@@ -859,32 +860,12 @@ ASTNode *Parser::parse_func_decl() {
     // cache start loc
     loc = tk.get_src_loc();
 
-    // expects to be on type
-    // so parse type
-    type = parse_type();
-
-    // expects identifier
-    if (tk.get_type() != token::identifier) {
-        DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
-            .finish();
-        fatal_abort();
-    }
-
-    // save identifier
-    std::string *ident = tk.get_identifier_str();
-
-    // save identifier loc
-    SourceLocation ident_loc = tk.get_src_loc();
-
-    // consume identifier
-    consume();
-
     // handle param list
     //   1: ()
-    //   2: (ident)
-    //   3: (ident, ident, ... , ident)
+    //   2: (type ident)
+    //   3: (type ident, type ident, ... , type ident)
 
-    std::vector<std::pair<std::string *, SourceLocation>> params;
+    std::vector<std::tuple<Type *, std::string *, SourceLocation>> params;
 
     // expect left paren
     match(token::op_leftparen);
@@ -898,6 +879,9 @@ ASTNode *Parser::parse_func_decl() {
     bool go = tk.get_type() == token::op_rightparen ? false : true;
     while (go) {
 
+        // we expect a type here
+        Type *ty = parse_type();
+
         // expect identifier
         if (tk.get_type() != token::identifier) {
             DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
@@ -906,7 +890,7 @@ ASTNode *Parser::parse_func_decl() {
         }
         
         // add param to list
-        params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
+        params.push_back(std::make_tuple(ty, tk.get_identifier_str(), tk.get_src_loc()));
         
         // consume ident
         consume();
@@ -943,18 +927,41 @@ ASTNode *Parser::parse_func_decl() {
     // consume right paren
     consume();
 
-    std::cout << "func decl " << *ident << " w/ type " << type->stringify() << std::endl;
+    // expects return type
+    Type *rtype = parse_type();
+
+    std::cout << "hello1\n";
+
+    // expects identifier
+    if (tk.get_type() != token::identifier) {
+        DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+            .finish();
+        fatal_abort();
+    }
+
+    // save identifier
+    std::string *ident = tk.get_identifier_str();
+    std::cout << *ident << "\n";
+
+    // save identifier loc
+    SourceLocation ident_loc = tk.get_src_loc();
+
+    std::cout << "hello4\n";
 
     // analyze func decl
     ASTNode *func_decl = analyzer.analyze_func_decl(
         &curr_scope,
-        type,
-        ident,
         params,
+        rtype,
+        ident,
         ident_loc,
         lparen_loc,
         rparen_loc
     );
+
+    // consume identifier
+    consume();
+    std::cout << "hello3\n";
 
     // expect left brace for definition
     match(token::op_leftbrace);
@@ -971,10 +978,13 @@ ASTNode *Parser::parse_func_decl() {
     // this call exits function scope
     analyzer.end_func_define(&curr_scope, tk.get_src_loc());
 
+    std::cout << "hello2\n";
+
     return func_decl;
 }
 
 ASTNode *Parser::parse_type_decl() {
+
     assert(tk.get_type() == token::kw_type);
 
     // consume keyword
@@ -1012,6 +1022,88 @@ ASTNode *Parser::parse_type_decl() {
     );
 
     return res;
+}
+
+ASTNode *Parser::parse_tmpl_decl() {
+
+    assert(tk.get_type() == token::kw_tmpl);
+
+    auto tmpl_open_loc = tk.get_src_loc();
+
+    // consume tmpl token
+    consume();
+
+    // consume '<'
+    consume();
+
+    std::vector<std::pair<std::string *, SourceLocation>> params;
+
+    bool go = tk.get_type() == token::op_greater ? false : true;
+    while (go) {
+
+        auto ty = tk.get_type();
+
+        // expect identifier
+        if (tk.get_type() != token::identifier) {
+            DiagnosticHandler::make(diag::id::decl_expected_identifier, tk.get_src_loc())
+                .finish();
+            fatal_abort();
+        }
+        
+        // add param to list
+        params.push_back(std::make_pair(tk.get_identifier_str(), tk.get_src_loc()));
+        
+        // consume ident
+        consume();
+
+        // next action based on current token
+        switch (tk.get_type()) {
+
+            // another type in param list
+            case token::op_comma:
+
+                // consume comma
+                consume();
+                break;
+
+            // end of param list
+            case token::op_greater:
+
+                // consume
+                go = false;
+                break;
+            
+            // error - something else
+            default:
+
+                match(token::op_greater);
+                break;
+        }
+
+    }
+
+    // save complete loc
+    auto tmpl_decl_loc = tk.get_src_loc();
+    tmpl_decl_loc.copy_start(tmpl_open_loc);
+
+    // consume '>'
+    consume();
+
+    ASTNode *tmpl = analyzer.analyze_tmpl_decl(&curr_scope, params, tmpl_decl_loc);
+    ASTNode *inner = nullptr;
+    if (tk.get_type() == token::kw_var
+        || tk.get_type() == token::kw_def
+        || tk.get_type() == token::kw_type) {
+        inner = parse_stmt();
+    }
+    else {
+        DiagnosticHandler::make(diag::id::expected_decl_after_tmpl_decl, tk.get_src_loc())
+            .finish();
+    }
+
+    analyzer.end_tmpl_define(&curr_scope, tmpl, inner);
+
+    return tmpl;
 }
 
 ASTNode *Parser::parse_stmt_block(bool make_new_scope) {
@@ -1129,6 +1221,14 @@ ASTNode *Parser::parse_stmt() {
         // parse the declaration
         res = parse_func_decl();
 
+        req_semi = false;
+    }
+
+    // tmpl decl
+    else if (tk_type == token::kw_tmpl) {
+
+        // will take of the subsequent declaration
+        res = parse_tmpl_decl();
         req_semi = false;
     }
 
@@ -1285,6 +1385,13 @@ bool Parser::parse_entry() {
             // deal with semi
             match(token::op_semicolon);
             consume();
+        }
+
+        // tmpl decl
+        else if (tkty == token::kw_tmpl) {
+
+            // will take of the subsequent declaration
+            tunit->children.push_back(parse_tmpl_decl());
         }
 
         // end of program (eof)

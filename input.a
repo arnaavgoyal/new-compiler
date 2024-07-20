@@ -1,20 +1,56 @@
 type my_i32 = i32;
 
-def (i32) i32
-foo(num) {
+def (i32 num) i32 foo {
     return num;
 }
 
-def (*i8) i32
-bar(str) {
-    var i32 i = 14;
+def (*i8 str) i32 bar {
+    var i32 i = 14; //lol
     var i32 v = foo(i);
+    var i32 x = v;
     return v;
 }
 
-def (i32, **i8) i32
-my_main(argc, argv) {
+// type <type T> MyType1 {
+//     T inner;
+// }
+// type <type T> MyType2 = MyType1<T>;
+// type <i32 i> MyType3 {
+//     static i32 inner = i;
+// }
+// type <type T, T t> MyType4 {
+//     static T inner = t;
+// }
+// type <i64 i> MyType5 = MyType4<i64, i>;
+// type MyType6 = MyType5<1>;
+
+// def <T> (T t1, T t2) myfunc1 {
+//     return t1 == t2;
+// }
+// def <i32 i1> (i32 i2) myfunc2 {
+//     return i1 + i2;
+// }
+// def <type T, T t1> (T t2) myfunc3 {
+//     return t1 == t2;
+// }
+// def <i32 i1> myfunc4 = myfunc3<i32, i1>;
+// def <i32 i1> (i32 i2) myfunc5 {
+//     return myfunc3<i32, i1>(i2);
+// }
+
+tmpl <X, Y, Z>
+def (X x, Y y, Z z) Z fun1 {
+    return x + y + z;
+}
+
+tmpl <Y>
+def (i32 x, Y y, i64 z) i64 fun2 {
+    return fun1(x, y, z);
+}
+
+def (i32 argc, **i8 argv) i32 my_main {
     var i32 v = 3;
     v = bar(*argv);
+    //let y = hof()(*argv);
     return v;
 }

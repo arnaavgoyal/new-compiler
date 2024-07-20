@@ -413,7 +413,7 @@ AliasType *SemanticAnalyzer::analyze_typename(
     }
 
     // type exists
-    assert(type->get_kind() == typekind::alias_t);
+    assert(type->is_definable());
     return static_cast<AliasType *>(type);
 }
 
@@ -1082,18 +1082,41 @@ ASTNode *SemanticAnalyzer::analyze_prefix_op_expr(
 
 ASTNode *SemanticAnalyzer::analyze_func_decl(
     Scope **scope,
-    Type *ftype,
+    std::vector<std::tuple<Type *, std::string *, SourceLocation>> params,
+    Type *rtype,
     std::string *ident,
-    std::vector<std::pair<std::string *, SourceLocation>> params,
     SourceLocation ident_loc,
     SourceLocation param_list_start_loc,
     SourceLocation param_list_end_loc
 ) {
     // ErrorHandler::handle(error::nyi, ident_loc, "function declarations");
     // ErrorHandler::prog_exit();
+    std::vector<Type *> ptypes, cptypes;
+    bool diff = false;
+    for (auto [ty, str, loc] : params) {
+        std::cout << ty->stringify() << " " << *str << "\n";
+        ptypes.push_back(ty);
+        cptypes.push_back(ty->get_canonical());
+        if (ty != ty->get_canonical()) {
+            diff = true;
+        }
+    }
+    
+    FunctionType *canon = new FunctionType(nullptr, rtype->get_canonical(), cptypes);
+    std::cout << "haha0\n";
+    std::string *tmp = str_allocator.alloc();
+    *tmp = canon->stringify();
+    std::cout << canon->stringify() << "\n";
+    insert_type(*scope, *tmp, canon);
+    FunctionType *type = canon;
 
-    assert(ftype->get_kind() == typekind::function_t);
-    FunctionType *type = static_cast<FunctionType *>(ftype);
+    if (diff) {
+        std::cout << "haha0.5\n";
+        type = new FunctionType(canon, rtype, ptypes);
+        *tmp = type->stringify();
+        insert_type(*scope, *tmp, type);
+    }
+    std::cout << "haha0.5\n";
 
     // redeclaration in current scope
     if (Symbol *osym = find_symbol_in_current_scope(ident, *scope)) {
@@ -1108,7 +1131,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         DiagnosticHandler::make(diag::id::note_original_declaration, osym->decl->loc)
             .finish();
     }
-
+    std::cout << "haha1\n";
     ASTNode *node = node_allocator.alloc();
     node->set(
         ast::func_decl,
@@ -1118,14 +1141,18 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         token::unknown,
         type->has_error()
     );
+    std::cout << "haha2\n";
 
     // add to symbol table
     Symbol *sym = insert_symbol(*scope, *ident, type, node);
+    std::cout << "haha3\n";
 
     node->sym = sym;
+    std::cout << "haha4\n";
 
     // enter new scope
     enter_new_scope(scope);
+    std::cout << "haha5\n";
 
     // add params
     ASTNode *param;
@@ -1148,8 +1175,8 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         param->set(
             ast::param_decl,
             type->params[i],
-            params[i].first,
-            params[i].second,
+            std::get<1>(params[i]),
+            std::get<2>(params[i]),
             token::identifier,
             type->params[i]->has_error()
         );
@@ -1157,7 +1184,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
         // add to symbol table
         sym = insert_symbol(
             *scope,
-            *params[i].first,
+            *std::get<1>(params[i]),
             type->params[i],
             param
         );
@@ -1170,8 +1197,8 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
 
     if (i < params.size()) {
         // too many params
-        auto errloc = params[i].second;
-        errloc.copy_end(params.back().second);
+        auto errloc = std::get<2>(params[i]);
+        errloc.copy_end(std::get<2>(params.back()));
         DiagnosticHandler::make(diag::id::func_decl_too_many_parameters, errloc)
             .add(*ident)
             .add(type->stringify())
@@ -1180,7 +1207,7 @@ ASTNode *SemanticAnalyzer::analyze_func_decl(
             .finish();
     }
 
-    return (node);
+    return node;
 }
 
 void SemanticAnalyzer::start_func_define(
@@ -1378,6 +1405,67 @@ void SemanticAnalyzer::add_expr_as_stmt(
     ASTNode *expr
 ) {
     // TODO: implement
+}
+
+ASTNode *SemanticAnalyzer::analyze_tmpl_decl(
+    Scope **scope,
+    std::vector<std::pair<std::string *, SourceLocation>> params,
+    SourceLocation decl_loc
+) {
+    ASTNode *tmpl = node_allocator.alloc();
+    tmpl->set(
+        ast::tmpl_decl,
+        nullptr, // this is set later
+        nullptr,
+        decl_loc,
+        token::op_less,
+        false
+    );
+
+    // enter new scope
+    enter_new_scope(scope);
+
+    std::vector<Type *> ptys;
+    for (auto &[ident, loc] : params) {
+        ASTNode *tmplparam = node_allocator.alloc();
+        Type *ty = new TemplatePlaceholderType(*ident, tmplparam);
+        tmplparam->set(
+            ast::tmpl_param_decl,
+            ty,
+            ident,
+            loc,
+            token::identifier,
+            false
+        );
+        tmpl->children.push_back(tmplparam);
+        ptys.push_back(ty);
+        insert_type(*scope, *ident, ty);
+    }
+
+    Type *tmpl_ty = new UninstantiatedTemplateType(
+        Type::get_error_type(), // updated with the base type in end_tmpl_define
+        ptys,
+        tmpl
+    );
+    tmpl->type = tmpl_ty;
+
+    return tmpl;
+}
+
+void SemanticAnalyzer::end_tmpl_define(
+    Scope **scope,
+    ASTNode *tmpl,
+    ASTNode *inner
+) {
+    exit_current_scope(scope);
+    if (inner) {
+        tmpl->children.push_back(inner);
+        static_cast<UninstantiatedTemplateType *>(tmpl->type)->base = inner->type;
+    }
+    else {
+        tmpl->children.push_back(error_node);
+        tmpl->type = Type::get_error_type();
+    }
 }
 
 }

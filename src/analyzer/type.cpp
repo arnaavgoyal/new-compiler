@@ -4,8 +4,15 @@
 
 namespace fe {
 
+ASTNode *Type::error_node = nullptr;
+
 Type *Type::get_error_type() {
-    static std::unique_ptr<Type> ptr(new Type());
+    static std::unique_ptr<Type> ptr(new Type(typekind::error_t));
+    return ptr.get();
+}
+
+Type *Type::get_wildcard_type() {
+    static std::unique_ptr<Type> ptr(new Type(typekind::wildcard_t));
     return ptr.get();
 }
 
@@ -67,14 +74,18 @@ ArrayType *ArrayType::get_error_type() {
     return ptr.get();
 }
 
-ASTNode *AliasType::error_node = nullptr;
+FunctionType *FunctionType::get_error_type() {
+    static std::unique_ptr<FunctionType> ptr(new FunctionType(nullptr, Type::get_error_type(), std::vector<Type *>()));
+    return ptr.get();
+}
+
 AliasType *AliasType::get_error_type() {
     static std::unique_ptr<AliasType> ptr(new AliasType(Type::get_error_type(), "<error-alias>", error_node));
     return ptr.get();
 }
 
-FunctionType *FunctionType::get_error_type() {
-    static std::unique_ptr<FunctionType> ptr(new FunctionType(nullptr, Type::get_error_type(), std::vector<Type *>()));
+TemplatePlaceholderType *TemplatePlaceholderType::get_error_type() {
+    static std::unique_ptr<TemplatePlaceholderType> ptr(new TemplatePlaceholderType("<error-template-placeholder>", error_node));
     return ptr.get();
 }
 

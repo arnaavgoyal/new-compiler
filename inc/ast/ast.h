@@ -79,6 +79,12 @@ namespace ast {
         // binary operation
         binary_op,
 
+        // template declaration
+        tmpl_decl,
+
+        // template parameter decl
+        tmpl_param_decl,
+
         // error recovery
         recovery,
 

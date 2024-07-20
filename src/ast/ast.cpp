@@ -111,6 +111,12 @@ void ASTNode::print_ast(ASTNode *tree, std::string str) {
             case ast::error:
                 type_str = "error";
                 break;
+            case ast::tmpl_param_decl:
+                type_str = "tmpl param decl";
+                break;
+            case ast::tmpl_decl:
+                type_str = "tmpl decl";
+                break;
             default:
                 type_str = "?";
                 break;

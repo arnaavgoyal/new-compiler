@@ -10,6 +10,7 @@ DIAGNOSTIC(expected_token, error, "expected '%0'")
 DIAGNOSTIC(expected_type, error, "expected type")
 DIAGNOSTIC(decl_expected_identifier, fatal, "expected identifier for declaration")
 DIAGNOSTIC(type_decl_expected_assignment, fatal, "expected '=' after type declaration")
+DIAGNOSTIC(expected_decl_after_tmpl_decl, error, "expected appropriate declaration after template")
 
 // semantic
 

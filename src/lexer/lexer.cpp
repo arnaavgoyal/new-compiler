@@ -202,7 +202,7 @@ case C: \
         KEYWORD_CHECK(f, 'f', token::kw_f32, token::kw_f64, token::kw_false)
         KEYWORD_CHECK(i, 'i', token::kw_i8, token::kw_i16, token::kw_i32, token::kw_i64, token::kw_if)
         KEYWORD_CHECK(r, 'r', token::kw_return)
-        KEYWORD_CHECK(t, 't', token::kw_true, token::kw_type)
+        KEYWORD_CHECK(t, 't', token::kw_true, token::kw_type, token::kw_tmpl)
         KEYWORD_CHECK(u, 'u', token::kw_u8, token::kw_u16, token::kw_u32, token::kw_u64)
         KEYWORD_CHECK(v, 'v', token::kw_var, token::kw_void)
         KEYWORD_CHECK(w, 'w', token::kw_while)

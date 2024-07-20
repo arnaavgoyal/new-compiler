@@ -315,6 +315,8 @@ private:
 
     ASTNode *parse_type_decl();
 
+    ASTNode *parse_tmpl_decl();
+
     ASTNode *parse_stmt_block(bool need_new_scope);
 
     /**

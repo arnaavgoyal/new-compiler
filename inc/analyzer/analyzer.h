@@ -203,9 +203,9 @@ public:
 
     ASTNode *analyze_func_decl(
         Scope **scope,
-        Type *type,
+        std::vector<std::tuple<Type *, std::string *, SourceLocation>> params,
+        Type *rtype,
         std::string *ident,
-        std::vector<std::pair<std::string *, SourceLocation>> params,
         SourceLocation ident_loc,
         SourceLocation param_list_start_loc,
         SourceLocation param_list_end_loc
@@ -271,6 +271,18 @@ public:
 
     void add_expr_as_stmt(
         ASTNode *expr
+    );
+
+    ASTNode *analyze_tmpl_decl(
+        Scope **scope,
+        std::vector<std::pair<std::string *, SourceLocation>> params,
+        SourceLocation decl_loc
+    );
+
+    void end_tmpl_define(
+        Scope **scope,
+        ASTNode *tmpl,
+        ASTNode *inner
     );
 
 };
