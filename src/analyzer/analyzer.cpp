@@ -708,7 +708,7 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
     // ErrorHandler::handle(error::nyi, call_start_loc, "call expressions");
     // ErrorHandler::prog_exit();
 
-    FunctionType *callable = (FunctionType *)get_most_recent_non_alias(expr->type);
+    Type *non_alias_ty = get_most_recent_non_alias(expr->type);
     bool error = expr->has_error;
     ASTNode *node = node_allocator.alloc();
     node->children.push_back(expr);
@@ -717,7 +717,7 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
     call_loc.copy_end(call_end_loc);
 
     // verify func type
-    if (callable->get_kind() != typekind::function_t) {
+    if (non_alias_ty->get_kind() != typekind::function_t) {
         // ErrorHandler::handle(
         //     error::type_is_not_callable,
         //     expr->loc,
@@ -737,6 +737,7 @@ ASTNode *SemanticAnalyzer::analyze_call_expr(
 
         return node;
     }
+    FunctionType *callable = (FunctionType *)non_alias_ty;
 
     unsigned num_params = callable->params.size();
 
@@ -1461,11 +1462,23 @@ void SemanticAnalyzer::end_tmpl_define(
     if (inner) {
         tmpl->children.push_back(inner);
         static_cast<UninstantiatedTemplateType *>(tmpl->type)->base = inner->type;
+        insert_symbol(*scope, *inner->str, tmpl->type, tmpl);
     }
     else {
         tmpl->children.push_back(error_node);
         tmpl->type = Type::get_error_type();
     }
+}
+
+ASTNode *SemanticAnalyzer::analyze_tmpl_instantiation(
+    ASTNode *tmpl,
+    std::vector<Type *> args,
+    SourceLocation arglist_loc
+) {
+    DiagnosticHandler::make(diag::id::nyi, arglist_loc)
+        .add("template instantiations")
+        .finish();
+    DiagnosticHandler::prog_exit();
 }
 
 }

@@ -121,13 +121,17 @@ void DiagnosticHandler::print_diag(Diagnostic &diag) {
 }
 
 static void fmt(std::string &finalstr, char const *formatstr, char const *formatend, std::vector<std::string> &args) {
+    
+    unsigned num_inserted = 0;
+
 start:
-    auto formatstart = formatstr;
+    char const *formatstart = formatstr;
     while (*formatstr != '%' && formatstr != formatend) {
         formatstr++;
     }
     finalstr.append(formatstart, formatstr - formatstart);
     if (formatstr == formatend) {
+        assert(num_inserted >= args.size() && "not all args inserted into diagnostic");
         return;
     }
 
@@ -138,8 +142,10 @@ start:
     assert(isdigit(*formatstr) && "char after '%' is not a digit");
 
     unsigned char idx = *formatstr - '0';
+    assert(idx < args.size() && "expected arg not added to diag");
     finalstr.append(args[idx]);
 
+    num_inserted++;
     formatstr++;
 
     if (formatstr != formatend) {

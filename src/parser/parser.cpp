@@ -192,6 +192,7 @@ ASTNode *Parser::parse_postfix(ASTNode *pre) {
     ASTNode *res = pre;
     SourceLocation op_loc;
     std::vector<ASTNode *> args;
+    std::vector<Type *> types;
     while (true) {
         switch (tk.get_type()) {
 
@@ -264,6 +265,45 @@ ASTNode *Parser::parse_postfix(ASTNode *pre) {
 
                 // consume right bracket
                 consume();
+                break;
+            case token::op_less:
+
+                // check if is uninstantiated template
+                if (pre->type->get_kind() != typekind::uninstantiated_template_t) {
+
+                    // no, so leave
+                    break;
+                }
+
+                op_loc = tk.get_src_loc();
+
+                // consume '<'
+                consume();
+
+                std::cout << "lol\n";
+
+                // parse template args
+                parse_delimited_list(
+                    token::op_comma,
+                    token::op_greater,
+                    [&types, this](){
+                        types.push_back(parse_type());
+                    }
+                );
+                assert(tk.get_type() == token::op_greater);
+
+                op_loc.copy_end(tk.get_src_loc());
+
+                // consume '>'
+                consume();
+
+                res = analyzer.analyze_tmpl_instantiation(
+                    pre,
+                    types, 
+                    op_loc
+                );
+                std::cout << "lol2\n";
+
                 break;
 
             // no postfix operators left
@@ -538,48 +578,22 @@ ASTNode *Parser::parse_expr() {
 
 std::vector<ASTNode *> Parser::parse_call_args() {
 
+    assert(tk.get_type() == token::op_leftparen);
+
     std::vector<ASTNode *> args;
 
     // consume left paren
     consume();
 
-    // no args
-    if (tk.get_type() == token::op_rightparen) {
-        
-        // consume right paren
-        consume();
-        return args;
-    }
-
-    ASTNode *arg;
-    bool go = true;
-    while (go) {
-
-        // parse expr
-        arg = parse_assignment();
-        
-        // add to node
-        args.push_back(arg);
-
-        // next action based on current token
-        switch (tk.get_type()) {
-
-            // another arg
-            case token::op_comma:
-                // consume comma
-                consume();
-                break;
-
-            // no more args
-            case token::op_rightparen:
-                go = false;
-                break;
-            
-            // error - something else
-            default:
-                match(token::op_rightparen);
+    parse_delimited_list(
+        token::op_comma,
+        token::op_rightparen,
+        [&args, this](){
+            args.push_back(parse_assignment());
         }
-    }
+    );
+
+    assert(tk.get_type() == token::op_rightparen);
 
     // consume right paren
     consume();

@@ -52,5 +52,6 @@ def (i32 argc, **i8 argv) i32 my_main {
     var i32 v = 3;
     v = bar(*argv);
     //let y = hof()(*argv);
+    var i64 x = fun2<i32>(1, 2, 3);
     return v;
 }

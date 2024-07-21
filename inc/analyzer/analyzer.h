@@ -285,6 +285,12 @@ public:
         ASTNode *inner
     );
 
+    ASTNode *analyze_tmpl_instantiation(
+        ASTNode *tmpl,
+        std::vector<Type *> args,
+        SourceLocation arglist_loc
+    );
+
 };
 
 }

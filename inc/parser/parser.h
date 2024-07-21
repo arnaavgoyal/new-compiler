@@ -2,6 +2,7 @@
 #define PARSER_H
 
 #include <stack>
+#include <type_traits>
 #include "lexer/tokentypes.h"
 #include "lexer/token.h"
 #include "lexer/lexer.h"
@@ -103,6 +104,10 @@ private:
         std::vector<token::token_type> const &types,
         std::vector<op::kind> const &ops
     );
+
+    template <typename Callable>
+    requires std::invocable<Callable>
+    void parse_delimited_list(token::token_type delim, token::token_type end, Callable &&func);
 
     /** ------------------- EXPRESSION PARSING ------------------- */
 
@@ -358,6 +363,43 @@ public:
     bool parse(ASTNode **ref);
     
 };
+
+template <typename Callable>
+requires std::invocable<Callable>
+void Parser::parse_delimited_list(
+    token::token_type delim,
+    token::token_type end,
+    Callable &&func
+) {
+    // no items
+    if (tk.get_type() == end) {
+        return;
+    }
+
+    while (true) {
+
+        // delegate to user func
+        func();
+
+        // next action based on current token
+
+        // another arg
+        if (tk.get_type() == delim) {
+            // consume delimiter
+            consume();
+        }
+
+        // no more items
+        else if (tk.get_type() == end) {
+            return;
+        }
+
+        // error - something else
+        else {
+            match(end);
+        }
+    }
+}
 
 }
 
