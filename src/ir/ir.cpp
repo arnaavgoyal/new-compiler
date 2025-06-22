@@ -183,9 +183,9 @@ CallInstr::CallInstr(Function *callee, std::vector<Def *> args, Block *parent, I
     set_operand(0, callee);
     auto it = callee->params_begin();
     for (unsigned i = 0; i < callee->num_params(); i++, ++it) {
-        // std::cout << "arg: " << args[i]->get_type()->stringify()
-        //     << "   param: " << (*it)->get_type()->stringify()
-        //     << std::endl;
+        std::cout << "arg: " << args[i]->get_type()->stringify()
+            << "   param: " << (*it)->get_type()->stringify()
+            << std::endl;
         assert(args[i]->get_type() == (*it)->get_type());
         set_operand(i + 1, args[i]);
     }

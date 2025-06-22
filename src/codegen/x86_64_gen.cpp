@@ -7,6 +7,7 @@
 #include <limits>
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 
 namespace be {
 
@@ -41,13 +42,52 @@ enum opcode : unsigned {
 };
 
 void x86_64CodeGen::ccvl(TargetFunction &tf, ir::Function *f) {
+
+    static reg int_tbl[] = {
+        rcx, rdx, r8, r9
+    };
+
+    auto it = f->params_begin();
+    auto end = f->params_end();
+    for (unsigned i = 0; i < 4 && it != end; i++, ++it) {
+        typekind param_type = irty2tk((*it)->get_type()->get_kind());
+        if (param_type >= typekind::s8 && param_type <= typekind::s64) {
+            // integral type
+            tf.params.push_back(TargetValue::reg(param_type, RegData{ int_tbl[i] }));
+        }
+    }
+
+    if (it == end) return;
+
     // params passed on the stack in order
     unsigned curr_offset = 16; // old base ptr + return ptr
-    for (auto p : f->params_iterable()) {
-        auto ty = irty2tk(p->get_type()->get_kind());
+    for (; it !=end; ++it) {
+        auto ty = irty2tk((*it)->get_type()->get_kind());
         tf.params.push_back(TargetValue::stack(ty, StackData{ curr_offset, true }));
         curr_offset += tysizebytes(ty);
     }
+}
+
+static TargetValue *gen_mov(TargetValue *from, RegData to, TargetFunction &in, TargetInstr *before, std::string cmt) {
+    auto movinstr = new TargetInstr(opcode::mov);
+    movinstr->cmt = cmt;
+    TargetValue *newval;
+    newval = TargetValue::reg(from->ty, to);
+    add_use(movinstr, from);
+    add_def(movinstr, newval);
+    in.instrs.insert(before, movinstr);
+    return newval;
+}
+
+static TargetValue *gen_mov(TargetValue *from, MemData to, TargetFunction &in, TargetInstr *before, std::string cmt) {
+    auto movinstr = new TargetInstr(opcode::mov);
+    movinstr->cmt = cmt;
+    TargetValue *newval;
+    newval = TargetValue::mem(from->ty, to);
+    add_use(movinstr, from);
+    add_def(movinstr, newval);
+    in.instrs.insert(before, movinstr);
+    return newval;
 }
 
 bool x86_64CodeGen::isel(TargetFunction &tf, TargetInstr *ti) {
@@ -76,14 +116,8 @@ bool x86_64CodeGen::isel(TargetFunction &tf, TargetInstr *ti) {
         // generate a copy to rax and update the use-defs accordingly
         auto oldval = ue.val;
         assert(oldval->uses.size() > 0);
-        auto copyinstr = new TargetInstr(opcode::mov);
-        auto newval = TargetValue::reg(oldval->ty, RegData{ reg::rax });
+        auto newval = gen_mov(oldval, RegData{ rax }, tf, ti, "move return value into rax");
         set_use(&ue, newval);
-        add_use(copyinstr, oldval);
-        add_def(copyinstr, newval);
-
-        // add the new instr into the function
-        tf.instrs.insert(ti, copyinstr);
         return true;
     }
     IRDKCASE(branch): {
@@ -98,9 +132,16 @@ bool x86_64CodeGen::isel(TargetFunction &tf, TargetInstr *ti) {
         tf.instrs.remove(ti);
         return true;
     }
-    IRDKCASE(read):
-        ti->opcode = opcode::mov;
+    IRDKCASE(read): {
+        auto &ue = ti->uses[0];
+        auto val = ue.val;
+        auto dest = ti->defs.back();
+        // FIXME: will not work for stack destinations
+        // auto newval = gen_mov(val, MemData{ dest->regdata.reg }, tf, ti, "reading memory");
+        // set_use(&ue, newval, false);
+        // ti->opcode = opcode::mov;
         return true;
+    }
     IRDKCASE(write):
         add_def(ti, ti->uses.back().val);
         rmv_use(ti, 1);
@@ -114,9 +155,26 @@ bool x86_64CodeGen::isel(TargetFunction &tf, TargetInstr *ti) {
         break;
     IRDKCASE(idowncast):
         break;
-    IRDKCASE(iadd):
+    IRDKCASE(iadd): {
+        auto &ue = ti->uses[1];
+        auto x = ue.val;
+
+        assert(ti->defs.back()->loc == storagekind::reg);
+
+        // z = x + y
+        // move x into new register
+        auto xval = gen_mov(x, RegData{ ti->defs.back()->regdata.reg }, tf, ti, "move x into reg for add");
+        set_use(&ue, xval, true);
+
+        auto olddef = ti->defs.back();
+        ti->defs.remove(olddef);
+        add_def(ti, xval);
+        rauw(olddef, xval);
+
+        // add y to x in registers
         ti->opcode = opcode::add;
         return true;
+    }
     IRDKCASE(isub):
         ti->opcode = opcode::sub;
         return true;
@@ -134,18 +192,27 @@ bool x86_64CodeGen::isel(TargetFunction &tf, TargetInstr *ti) {
         ti->defs.remove(olddef);
         add_def(ti, newdef);
         rauw(olddef, newdef);
-        for (unsigned i = 1; i < ti->uses.size(); i++) {
+        TargetValue *callee_val = ti->uses[0].val;
+        assert(callee_val->isfunc && "call instr on non-function value?");
+        TargetFunction *callee = callee_val->funcdata;
+        auto pit = callee->params.begin();
+        auto pend = callee->params.end();
+        for (unsigned i = 1; i < ti->uses.size(); i++, ++pit) {
+
+            assert(pit != pend && "number of supplied arguments is greater than the number of parameters?");
+           
             UseEdge &ue = ti->uses[i];
             auto arg = ue.val;
-            auto mi = new TargetInstr(opcode::mov);
-            std::cout << tf.str << ": " << tf.stacksize;
-            auto argval = make_stack(arg->ty, tf);
-            std::cout << " -> " << tf.stacksize << "\n";
-            add_def(mi, argval);
-            add_use(mi, ti->uses[i].val);
+            auto param = (*pit);
+            if (param->loc != storagekind::reg) {
+                assert(false && "passing args to stack spilled params NYI");
+            }
+            auto argval = gen_mov(arg, param->regdata, tf, ti, "moving argument value into register for call");
             set_use(&ue, argval, true);
-            tf.instrs.insert(ti, mi);
         }
+
+        assert(pit == pend && "number of supplied arguments is less than the number of parameters?");
+        
         return true;
     }
     IRDKCASE(phi):
@@ -201,6 +268,9 @@ void x86_64CodeGen::parg(TargetValue *tv, std::ostream &os) {
     case storagekind::stack:
         os << "[rbp " << (tv->stackdata.param ? "+ " : "- ") << tv->stackdata.offset << "]";
         break;
+    case storagekind::mem:
+        os << "[" << pregstr(tv->memdata.reg) << "]";
+        break;
     case storagekind::inv:
     default:
         assert(false);
@@ -214,12 +284,12 @@ void x86_64CodeGen::pasm(TargetProgram &tp, std::ostream &os) {
     os << "\t.intel_syntax noprefix\n";
     
     // make funcs global
-    for (auto &f : tp.funcs) {
+    for (auto &[_, f] : tp.funcs) {
         os << "\t.globl " << f.str << "\n";
     }
 
     // function bodies
-    for (auto &f : tp.funcs) {
+    for (auto &[_, f] : tp.funcs) {
 
         // label
         os << f.str << ":\n";
@@ -231,11 +301,35 @@ void x86_64CodeGen::pasm(TargetProgram &tp, std::ostream &os) {
 
         // instructions
         for (auto i : f.instrs) {
+
             if (i->opcode == opcode::ret) break;
+            
+            else if (i->opcode == irdk2opc(ir::defkind::read)) {
+                os << "\t" << instrstr(opcode::mov) << "\t";
+                parg(i->defs.front(), os);
+                os << ", [";
+                parg(i->uses[0].val, os);
+                os << "] # " << i->cmt << "\n";
+                continue;
+            }
+
+            // else if (i->opcode == irdk2opc(ir::defkind::write)) {
+            //     os << "\t" << instrstr(opcode::mov) << "\t";
+            //     parg(i->defs.front(), os);
+            //     os << ", [";
+            //     parg(i->uses[0].val, os);
+            //     os << "] # " << i->cmt << "\n";
+            //     continue;
+            // }
+
+            std::cout << (unsigned)i->opcode << "\n";
+
             os << "\t" << instrstr(i->opcode) << "\t";
             switch (i->opcode) {
             case opcode::add:
-                assert(false);
+                parg(i->uses[1].val, os);
+                os << ", ";
+                parg(i->uses[0].val, os);
                 break;
             case opcode::call:
                 parg(i->uses[0].val, os);
@@ -259,6 +353,9 @@ void x86_64CodeGen::pasm(TargetProgram &tp, std::ostream &os) {
                 assert(false);
                 break;
             }
+            if (i->cmt.length()) {
+                os << " # " << i->cmt;
+            }
             os << "\n";
         }
 
@@ -270,13 +367,13 @@ void x86_64CodeGen::pasm(TargetProgram &tp, std::ostream &os) {
 }
 
 std::string x86_64CodeGen::instrstr(unsigned opc) {
-    assert(opc > opcode::_ir_opc_end);
+    //assert(opc > opcode::_ir_opc_end);
     switch (opc) {
 
 #define INSTR(val, str) case opcode::val: return str;
 #include "codegen/x86_64_instr"
 
-        default: break;
+        default: return std::to_string(opc);
     }
     assert(false);
     __builtin_unreachable();

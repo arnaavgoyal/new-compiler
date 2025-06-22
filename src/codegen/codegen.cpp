@@ -249,7 +249,7 @@
 
 namespace be {
 
-TargetInstr *visit_instr(ir::Instr *i, TargetCodeGen &tcg, TargetFunction &tf, std::map<ir::Def *, TargetValue *> &def2tv) {
+TargetInstr *visit_instr(ir::Instr *i, TargetCodeGen &tcg, TargetFunction &tf, std::map<ir::Def *, TargetValue *> &def2tv, TargetProgram &tp) {
     // if (i->get_kind() == ir::defkind::call) {
     //     auto ti = tcg.ccvl_call(tf, static_cast<ir::CallInstr *>(i));
     //     def2tv[i] = ti->defs.back();
@@ -275,12 +275,12 @@ TargetInstr *visit_instr(ir::Instr *i, TargetCodeGen &tcg, TargetFunction &tf, s
                 break;    
             case ir::defkind::function:
                 std::cout << "func " << static_cast<ir::Function *>(d)->get_name() << "\n";
-                tv = TargetValue::label(new LabelData{ static_cast<ir::Function *>(d)->get_name() });
+                tv = TargetValue::func(&tp.funcs[static_cast<ir::Function *>(d)->get_name()]);
                 def2tv[d] = tv;
                 break;            
             default:
                 assert(d->is_instr());
-                tv = visit_instr(static_cast<ir::Instr *>(d), tcg, tf, def2tv)->defs.back();
+                tv = visit_instr(static_cast<ir::Instr *>(d), tcg, tf, def2tv, tp)->defs.back();
                 break;
             }
         }
@@ -310,8 +310,11 @@ void translate(TargetProgram &tp, ir::Program *p, TargetCodeGen &tcg) {
         std::cout << tv->globdata->str << "\n";
     }
     
+    std::map<std::string, TargetFunction *> funcs;
     for (auto f : *p) {
-        TargetFunction &tf = tp.funcs.emplace_back();
+        // FIXME: if this causes a realloc on the underlying buffer
+        //   then all previous pointers will be invalidated
+        TargetFunction &tf = tp.funcs[f->get_name()];
         tf.str = f->get_name();
         tcg.ccvl(tf, f);
         assert(tf.params.size() == f->num_params());
@@ -323,7 +326,7 @@ void translate(TargetProgram &tp, ir::Program *p, TargetCodeGen &tcg) {
         for (auto b : *f) {
             for (auto i : *b) {
                 if (!def2tv[i]) {
-                    visit_instr(i, tcg, tf, def2tv);
+                    visit_instr(i, tcg, tf, def2tv, tp);
                 }
             }
         }
@@ -358,11 +361,15 @@ void dbgprint(TargetProgram &tp, TargetCodeGen &tcg, std::ostream &os) {
         case storagekind::label:
             os << "l:" << val->labeldata->str;
             break;
+        case storagekind::mem:
+            os << "m:" << val->memdata.reg;
+            break;
         default:
+            assert(false);
             break;
         }
     };
-    for (auto &func : tp.funcs) {
+    for (auto &[_, func] : tp.funcs) {
         os << func.str << ": \n";
         for (auto instr : func.instrs) {
             os << "  ";
@@ -414,7 +421,7 @@ void codegen(ir::Program *p, TargetCodeGen &tcg, std::ostream &os) {
 
     // 2. instruction selection
 
-    for (auto &tf : tp.funcs) {
+    for (auto &[_, tf] : tp.funcs) {
         for (auto ti : tf.instrs) {
             if (is_irop(ti->opcode)) {
                 bool selected = tcg.isel(tf, ti);
@@ -431,10 +438,10 @@ void codegen(ir::Program *p, TargetCodeGen &tcg, std::ostream &os) {
 
     // 3. register allocation
 
-    for (auto &tf : tp.funcs) {
+    for (auto &[_, tf] : tp.funcs) {
         for (auto ti : tf.instrs) {
             for (auto def : ti->defs) {
-                if (def->loc == storagekind::reg && def->regdata.reg <= regbound::_vreg_end) {
+                if ((def->loc == storagekind::reg || def->loc == storagekind::mem) && def->regdata.reg <= regbound::_vreg_end) {
                     def->regdata.reg = tcg.ralloc();
                 }
             }

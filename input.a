@@ -1,20 +1,33 @@
 type my_i32 = i32;
 
-def (i32) i32
+def (u8) *i8
 foo(num) {
     return num;
 }
 
-def (*i8) i32
+def (*i8) i8
 bar(str) {
-    var i32 i = 14;
-    var i32 v = foo(i);
+    var i8 v = *(str + foo(1));
     return v;
 }
 
-def (i32, **i8) i32
+def (i32, **i8) i8
 my_main(argc, argv) {
-    var i32 v = 3;
+    var i8 v = 3;
     v = bar(*argv);
     return v;
 }
+
+// def (i32) i32 f3(x) {
+//     var i32 cmp = 10;
+//     var i32 result = 2;
+//     if (cmp) {
+//         result = 1;
+//     }
+//     return result;
+// }
+
+// def (i32, **i8) i8
+// my_main(argc, argv) {
+//     return 0;
+// }

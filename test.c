@@ -1,9 +1,9 @@
 #include <stdio.h>
 
-extern int my_main(int, char**);
+extern char my_main(int, char**);
 
-int main() {
-    int res = my_main(0, NULL);
-    printf("%d\n", res);
+int main(int argc, char **argv) {
+    char res = my_main(argc, argv);
+    printf("%c\n", res);
     return 0;
 }

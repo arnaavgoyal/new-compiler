@@ -156,7 +156,7 @@ ir::Def *ASTTranslator::t_stmt(ASTNode *node) {
             UNREACHABLE
         case ast::int_lit:
             return ir::IntegralConstant::get(
-                ir::PrimitiveType::get_i32_type(),
+                t_type(node->type),
                 std::stoi(*node->str)
             );
         case ast::loop_stmt:

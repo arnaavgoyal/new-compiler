@@ -24,6 +24,7 @@ enum class storagekind : unsigned char {
     glob  = 0b0000'0100,
     imm   = 0b0000'1000,
     label = 0b0001'0000,
+    mem   = 0b0010'0000
 };
 
 enum regbound : unsigned {
@@ -103,6 +104,10 @@ struct RegData {
     unsigned reg;
 };
 
+struct MemData {
+    unsigned reg;
+};
+
 struct StackData {
     unsigned offset;
     bool param;
@@ -146,12 +151,15 @@ struct TargetFunction {
 struct TargetValue : public IListNode<TargetValue> {
     typekind ty;
     storagekind loc;
+    bool isfunc = false;
     union {
         RegData regdata;
+        MemData memdata;
         StackData stackdata;
         GlobalData *globdata;
         ImmData immdata;
         LabelData *labeldata;
+        TargetFunction *funcdata;
     };
     IList<UseEdge> uses;
 
@@ -160,6 +168,13 @@ struct TargetValue : public IListNode<TargetValue> {
         tv->ty = tk;
         tv->loc = storagekind::reg;
         tv->regdata = data;
+        return tv;
+    }
+    static TargetValue *mem(typekind tk, MemData data) {
+        auto tv = new TargetValue();
+        tv->ty = tk;
+        tv->loc = storagekind::mem;
+        tv->memdata = data;
         return tv;
     }
     static TargetValue *stack(typekind tk, StackData data) {
@@ -190,6 +205,14 @@ struct TargetValue : public IListNode<TargetValue> {
         tv->labeldata = data;
         return tv;
     }
+    static TargetValue *func(TargetFunction *data) {
+        auto tv = new TargetValue();
+        tv->ty = irty2tk(ir::typekind::label);
+        tv->loc = storagekind::label;
+        tv->funcdata = data;
+        tv->isfunc = true;
+        return tv;
+    }
 };
 
 struct TargetInstr : public IListNode<TargetInstr> {
@@ -197,6 +220,7 @@ struct TargetInstr : public IListNode<TargetInstr> {
     ir::Instr *orig;
     std::vector<UseEdge> uses;
     IList<TargetValue> defs;
+    std::string cmt;
 
     TargetInstr(unsigned opcode, ir::Instr *orig = nullptr)
         : opcode(opcode), orig(orig) { }
@@ -204,7 +228,7 @@ struct TargetInstr : public IListNode<TargetInstr> {
 
 struct TargetProgram {
     std::vector<TargetValue *> globs;
-    std::vector<TargetFunction> funcs;
+    std::map<std::string, TargetFunction> funcs;
 };
 
 /** target modification utils */
