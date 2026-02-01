@@ -1,56 +1,33 @@
-#include "diagnostic/diagnostic.h"
-#include "source/source.h"
-#include "utils/ioformat.h"
-#include <iostream>
-#include <iomanip>
 #include <ctype.h>
+#include <iomanip>
+#include <iostream>
 #include <utility>
 
-static void print_loc_prefix(SourceLocation &loc) {
+#include "diag/diagnostic.h"
+#include "utils/ioformat.h"
+#include "utils/source.h"
+
+
+static void print_loc_prefix(ExpandedSourceLocation &loc) {
     std::cout 
         << ioformat::WHITE
-        << SourceManager::get_source_path(loc.src_id)
+        << loc.src->path
         << "::" << loc.start_row  << ":" << loc.start_col  << ": "
         << ioformat::RESET;
 }
 
-static void set_filestream_to_line_start(std::ifstream *stream, SourceLocation &loc) {
-    if (loc.start_row == 1) {
-        stream->seekg(0, std::ios::beg);
-        while (isspace(stream->peek())) {
-            stream->get();
-        }
-    }
-    else {
-        int c = stream->peek();
-        stream->seekg(loc.start_offset, std::ios::beg);
-        while (c != '\n') {
-            stream->seekg(-1, std::ios::cur);
-            c = stream->peek();
-        }
-        stream->get();
-    }
-}
-
-static void print_loc_highlight(SourceLocation &loc, char const *hc) {
-
-    // get source file
-    std::ifstream *src = SourceManager::open_source(loc.src_id);
-
-    // set stream to line start
-    set_filestream_to_line_start(src, loc);
+static void print_loc_highlight(ExpandedSourceLocation &loc, char const *hc) {
 
     // print code highlight
     unsigned pre_offset = 8;
     unsigned len = 0;
     unsigned i = 0;
     std::cout << std::setfill(' ') << std::setw(5) << loc.start_row << " | ";
-    unsigned pos;
+    unsigned pos = loc.src->lines[loc.start_row-1];
     bool flag = false;
     //::cout << loc.end_offset - loc.start_offset << std::endl;
-    int c = src->peek();
+    int c = loc.src->content[pos];
     while (c != '\n' && c != EOF) {
-        pos = src->tellg();
         if (pos == loc.start_offset) {
             std::cout << hc;
             pre_offset += i;
@@ -64,8 +41,8 @@ static void print_loc_highlight(SourceLocation &loc, char const *hc) {
             len++;
         }
         i++;
-        std::cout << (char)src->get();
-        c = src->peek();
+        std::cout << (char)c;
+        c = loc.src->content[++pos];
     }
     len--;
     std::cout << std::endl;
@@ -80,16 +57,14 @@ static void print_loc_highlight(SourceLocation &loc, char const *hc) {
         putchar('~');
     }
     std::cout << ioformat::RESET << std::endl;
-
-    // close and dealloc file
-    src->close();
-    delete src;
 }
 
 void DiagnosticHandler::print_diag(Diagnostic &diag) {
 
+    auto esl = SourceManager::expand(diag.locs[0]);
+
     // print location prefix
-    print_loc_prefix(diag.locs[0]);
+    print_loc_prefix(esl);
 
     char const *highlight_col = ioformat::GREEN;
     char const *diag_ty_str = nullptr;
@@ -117,7 +92,7 @@ void DiagnosticHandler::print_diag(Diagnostic &diag) {
             << ioformat::RESET << std::endl;
 
     // print loc highlight
-    print_loc_highlight(diag.locs[0], highlight_col);
+    print_loc_highlight(esl, highlight_col);
 }
 
 static void fmt(std::string &finalstr, char const *formatstr, char const *formatend, std::vector<std::string> &args) {
@@ -153,7 +128,7 @@ RawDiagnostic get(id diag_id) {
     switch (diag_id) {
 
 #define DIAGNOSTIC(name, sev, str) case id::name: return RawDiagnostic{severity::sev, str};
-#include "diagnostic/diagdefs"
+#include "diag/diagdefs"
 
         case id::__end:
         default:

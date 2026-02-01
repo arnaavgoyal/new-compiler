@@ -1,9 +1,10 @@
 #ifndef UTILS_STPPILIST_H
 #define UTILS_STPPILIST_H
 
-#include <type_traits>
 #include <cassert>
 #include <iostream>
+#include <type_traits>
+
 #include "utils/ilist.h"
 #include "utils/symtable.h"
 
@@ -12,38 +13,6 @@ class STPPIListNode;
 
 template <typename, typename>
 class STPPIList;
-
-/** ------------------- Ensure get_inner_list is member ------------------- */
-// THIS DOES NOT WORK -- DO NOT USE
-template<typename Class, typename MemberType>
-struct determine_get_inner_list_impl { };
-
-template <typename Class, typename FuncRetType, typename... FuncArgTypes>
-struct determine_get_inner_list_impl<Class, FuncRetType(FuncArgTypes...)> {
-
-    template <typename ClassToCheck>
-    static constexpr auto determine(ClassToCheck *) -> typename
-        std::is_same<
-            decltype(
-                std::declval<ClassToCheck>().get_inner_type(std::declval<FuncArgTypes>()...)
-            ),
-            FuncRetType
-        >::type
-    ;
-
-    template <typename ClassToCheck>
-    static constexpr std::false_type determine(ClassToCheck *);
-
-public:
-    using type = decltype(determine<Class>(nullptr));
-    static constexpr bool value = type::value;
-};
-
-template <typename Inner, typename Outer>
-struct determine_get_inner_list {
-    static constexpr bool value
-        = determine_get_inner_list_impl<Outer, STPPIList<Inner, Outer> &(Inner *)>::value;
-};
 
 /** ------------------- STPPIListNode decl ------------------- */
 

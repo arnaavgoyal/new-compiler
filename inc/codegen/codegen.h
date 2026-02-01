@@ -2,6 +2,7 @@
 #define CODEGEN_CODEGEN_H
 
 #include <iostream>
+
 #include "ir/ir.h"
 
 namespace be {

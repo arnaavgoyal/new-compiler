@@ -1,92 +1,38 @@
-#ifndef TOKEN_H
-#define TOKEN_H
+#ifndef LEXER_TOKEN_H
+#define LEXER_TOKEN_H
 
 #include "lexer/tokentypes.h"
-#include "source/source.h"
+#include "utils/source.h"
 
-class Token {
+namespace fe {
 
-    // Lexer writes directly into str when creating tokens
-    friend class Lexer;
-    
-private:
+struct Token {
 
-    /** token type */
-    token::token_type type;
-    
-    /** source location of token */
-    SourceLocation loc;
+    token::token_type type = token::unknown;
+    SourceLocation sloc;
+    union {
+        std::string_view str;
+        uint64_t ival;
+    };
 
-    /**
-     * data is different based on type:
-     * a) identifier     --  (std::string *)     owned by Allocator
-     * b) literal        --  (std::string *)     owned by Allocator
-     * c) operator       --  nullptr (use token::get_operator_string())
-     * c) keyword        --  nullptr (use token::get_keyword_string())
-    */
-    std::string *str;
+    Token() : ival{} { }
+    Token(token::token_type type, SourceLocation sloc, std::string_view str)
+    :  type(type), sloc(sloc), str(str) { }
+    Token(token::token_type type, SourceLocation sloc, uint64_t ival)
+    :  type(type), sloc(sloc), ival(ival) { }
 
-    /**
-     * Constructs a token with given fields.
-     * 
-     * @param type the token type
-     * @param src_loc the source location of the token
-    */
-    Token(
-        token::token_type type,
-        SourceLocation src_loc
-    ) { set(type, src_loc); }
 
-    /**
-     * Set all token fields to the given fields.
-     * 
-     * @param type the token type
-     * @param src_loc the source location of the token
-    */
-    void set(
-        token::token_type type,
-        SourceLocation src_loc
-    ) { this->type = type; loc = src_loc; }
-
-    /**
-     * Clears token to default unknown token.
-    */
-    void clear();
-
-public:
-
-    /**
-     * Constructs an unknown token with invalid source location.
-    */
-    Token();
-
-    /**
-     * Forbid copy to preserve uniqueness of tokens.
-    */
-    Token(Token const &other) = delete;
-    Token &operator=(Token const &other) = delete;
-
-    token::token_type get_type() { return type; }
-    SourceLocation get_src_loc() { return loc; }
-    std::string *get_identifier_str() { return str; }
-    std::string *get_literal_str() { return str; }
-    char const *get_operator_str() { return token::get_operator_string(type); }
-    char const *get_keyword_str() { return token::get_keyword_string(type); }
-    char const *get_str() {
-        if (token::is_keyword(type)) {
-            return token::get_keyword_string(type); 
+    std::string_view pstr() {
+        if (type == token::character_literal || type == token::unknown 
+            || type == token::numeric_literal || type == token::eof) {
+            return token::get_token_string(type);
         }
-        if (token::is_operator(type)) {
-            return token::get_operator_string(type);
+        else {
+            return str;
         }
-        return str->c_str();
     }
-
-    /**
-     * Gets token name as string for debugging purposes.
-    */
-    char const *get_token_str();
-
 };
+
+} // fe
 
 #endif

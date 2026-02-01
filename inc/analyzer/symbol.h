@@ -1,60 +1,61 @@
-#ifndef SYMBOL_H
-#define SYMBOL_H
+#ifndef ANALYZER_SYMBOL_H
+#define ANALYZER_SYMBOL_H
 
-#include <string>
-#include "lexer/tokentypes.h"
-#include "analyzer/type.h"
+// #include <string>
 
-namespace fe {
+// #include "analyzer/type.h"
+// #include "ast/ast.h"
 
-class Scope;
-class ASTNode;
+// namespace fe {
 
-class Symbol {
+// class Scope;
+// class ASTNode;
 
-    friend class SemanticAnalyzer;
+// class Symbol {
 
-public:
+//     friend class SemanticAnalyzer;
 
-    /** symbol name */
-    std::string name;
+// public:
+
+//     /** symbol name */
+//     std::string name;
     
-    /**
-     * pointer to the type of this symbol
-    */
-    Type *type_ptr;
+//     /**
+//      * pointer to the type of this symbol
+//     */
+//     Type *type_ptr;
 
-    Scope *scope;
+//     Scope *scope;
 
-    ASTNode *decl;
+//     ASTNode *decl;
 
-    /**
-     * Constructs a symbol with all fields as given.
-    */
-    Symbol(
-        std::string &name,
-        Type *type_ptr
-    ) :
-        name(name),
-        type_ptr(type_ptr)
-    { }
+//     /**
+//      * Constructs a symbol with all fields as given.
+//     */
+//     Symbol(
+//         std::string &name,
+//         Type *type_ptr
+//     ) :
+//         name(name),
+//         type_ptr(type_ptr)
+//     { }
 
-public:
+// public:
 
-    /** Default constructor */
-    Symbol() { }
+//     /** Default constructor */
+//     Symbol() { }
 
-    /**
-     * Prevent copying to maintain uniqueness of symbols.
-    */
-    Symbol(Symbol &other) = delete;
-    Symbol &operator=(Symbol &other) = delete;
+//     /**
+//      * Prevent copying to maintain uniqueness of symbols.
+//     */
+//     Symbol(Symbol &other) = delete;
+//     Symbol &operator=(Symbol &other) = delete;
 
-    std::string const &get_name() { return name; }
-    Type *get_type_ptr() { return type_ptr; }
+//     std::string const &get_name() { return name; }
+//     Type *get_type_ptr() { return type_ptr; }
 
-};
+// };
 
-}
+// }
 
 #endif

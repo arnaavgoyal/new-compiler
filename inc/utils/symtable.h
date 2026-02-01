@@ -1,22 +1,19 @@
-#ifndef IR_SYMTABLE_H
-#define IR_SYMTABLE_H
+#ifndef UTILS_SYMTABLE_H
+#define UTILS_SYMTABLE_H
 
-#include <map>
-#include <string>
 #include <cassert>
 #include <iostream>
-
-template <typename SymbolValueType>
-struct _ty_determiner;
+#include <map>
+#include <string>
 
 template <typename SymbolValueType>
 class AutoRenamingSymbolTable {
 private:
-    typedef struct {
+    struct map_entry_type {
         SymbolValueType val;
         unsigned collisions;
         bool populated;
-    } map_entry_type;
+    };
 
     using map_type = std::map<std::string, map_entry_type>;
     map_type map;
@@ -35,7 +32,6 @@ public:
         //       map_entry_type>>, =  .first.operator*().second
         //   bool                  =  .second
         // >
-        //_ty_determiner<decltype(res)> td;
 
         // insertion occurred
         if (res.second) {
@@ -85,33 +81,25 @@ public:
             }
         }
     }
+
     SymbolValueType remove(std::string key) {
 
-        // find entry
         auto it = map.find(key);
-
         assert(it != map.end() && "entry with given key was never inserted");
 
-        // get ref to entry
-        map_entry_type &entry = it.operator*().second;
-
+        auto &entry = it.operator*().second;
         assert(entry.populated && "entry with given key is already removed");
 
-        // set entry as unpopulated
         entry.populated = false;
-
         return entry.val;
     }
+
     SymbolValueType get(std::string key) {
-
-        // find entry
+        
         auto it = map.find(key);
-
         assert(it != map.end() && "entry with given key was never inserted");
 
-        // get entry
-        map_entry_type entry = it.operator*().second;
-
+        auto entry = it.operator*().second;
         assert(entry.populated && "entry with key is not populated");
 
         return entry.val;

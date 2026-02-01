@@ -1,10 +1,12 @@
-#include "codegen/codegen.h"
-#include "utils/iterator.h"
+#include <cstring>
+#include <map>
 #include <utility>
 #include <vector>
-#include <map>
-#include <cstring>
+
 #include "utils/ioformat.h"
+#include "utils/iterator.h"
+
+#include "codegen/codegen.h"
 
 
 // static const unsigned num_main_regs = op::_reg_end;

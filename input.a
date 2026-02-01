@@ -1,20 +1,108 @@
-type my_i32 = i32;
+let foo!(T, U)(t: T, u: U): U { }
+let baz!(T, U): i32
+let bar!(U) = foo!(i32, U)
 
-def (i32) i32
-foo(num) {
-    return num;
+type foo = i32
+type bar = v32
+let foo: foo
+type MyType!(T, U, T) {
+    let t: T
+    let u: U
+    let i: Internal
+} where {
+    type Internal = u8
+    type T = u16
+    let fun!(X) = \(x: X): X {
+        (x + y) * (x - y) / (x % y)
+    }
+    let fun!(X)(x: X): X { x }
 }
+// type MyTypeFull = MyType!(i32, u8)
+// type MyTypePartial!(T) = MyType!(T, u8)
+// type MyType2!(T, U) {
+//     let x: MyTypePartial!(T)
+//     let y: U
+// } where {}
+// 
+// type MyUnion!(T, U)
+//     | First(T)
+//     | Second(U)
+//     | Third(T, U)
+//     | Fourth(**i32)
+//     | Fifth
+// type MyUnionPartial!(T) = MyUnion!(T, i32)
 
-def (*i8) i32
-bar(str) {
-    var i32 i = 14;
-    var i32 v = foo(i);
-    return v;
-}
-
-def (i32, **i8) i32
-my_main(argc, argv) {
-    var i32 v = 3;
-    v = bar(*argv);
-    return v;
-}
+// let type ValueTmpl!(T, N: i32) =
+//     & t: T
+// let type ValueInstTest = ValueTmpl!(**Bar!(*i32))
+// 
+// // trait !(T) Stringable =
+// //     & str(T): *char
+// //     | T.str(): *char
+// //     
+// // trait !(T, U) Addable =
+// //     & +(T, U): i32
+// //     
+// // trait !(N: i32, Limit: i32) LessThan =
+// //     & assert N < Limit
+// //     
+// // let !(T) where Stringable!(T) print(T t) = { }
+// 
+// 
+// 
+// let foo(num: i32): i32 = {
+//     num
+// }
+// 
+// let bar(str: *i8): i32 = {
+//     let i: i32 = 14
+//     let v: i32 = foo(i)
+//     v
+// }
+// 
+// let my_main(argc: i32, argv: **i8): i32 = {
+//     bar(*argv)
+// }
+// 
+// // More parsing cases:
+// 
+// let type my_ptr = *my_i32
+// let type arr = []i32
+// let type fn = (i32, i32) i32
+// 
+// let x: my_i32 = 42
+// let y: my_ptr
+// let z: arr
+// let f: fn
+// 
+// let add(a i32, b i32) i32 = {
+//     a + b
+// }
+// 
+// let test_types(p1 my_i32, p2 my_ptr) my_i32 = {
+//     let temp my_i32 = *p2
+//     temp
+// }
+// 
+// let nested_types(a **i32, b (i32, *i32) i32) i32 = {
+//     let arr []my_i32
+//     let ptr *my_ptr
+//     let result i32 = b(42, ptr)
+//     result
+// }
+// 
+// let complex_exprs(x i32, y i32) i32 = {
+//     let res i32 = (x + y) * (x - y) / (x % y)
+//     if (res > 0) {
+//         res = add(res, 1)
+//     } else {
+//         res = add(res, -1)
+//     }
+//     while (res < 100) {
+//         res = res + 10
+//     }
+//     res
+// }
+// 
+// let global_arr arr
+// let global_fn fn

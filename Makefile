@@ -5,10 +5,10 @@ INCDIR := inc
 SRCDIR := src
 PROJECT := compiler.exe
 
-CPP := g++
+CPP := clang++
 CPPFLAGS := -Wall -g -MMD -c -I inc -std=c++20 -fno-rtti -fno-exceptions
 
-SOURCES := $(wildcard *.cpp) $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/*/*.cpp)
+SOURCES := main.cpp $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/*/*.cpp)
 OBJECTS := $(SOURCES:%.cpp=%.o)
 DEPENDENCIES = $(OBJECTS:%.o=%.d)
 

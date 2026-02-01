@@ -1,6 +1,7 @@
-#include "lexer/tokentypes.h"
 #include <string>
 #include <vector>
+
+#include "lexer/tokentypes.h"
 
 char const *token::get_token_string(token_type t) {
     switch (t) {
@@ -51,19 +52,6 @@ char const *token::get_print_string(token_type t) {
 
 bool token::is_literal(token_type t) {
     return (t == character_literal || t == numeric_literal || t == string_literal);
-}
-
-bool token::is_primitive_type(token_type t) {
-    switch (t) {
-
-#define TYPE(A) case kw_##A:
-#include "lexer/tokendefs"
-
-        return true;
-    
-    default:
-        return false;
-    }
 }
 
 bool token::is_keyword(token_type t) {

@@ -1,8 +1,8 @@
 #ifndef CODEGEN_X86_64_GEN
 #define CODEGEN_X86_64_GEN
 
-#include "ir/ir.h"
 #include "codegen/codegen.h"
+#include "ir/ir.h"
 
 namespace be {
 

@@ -1,125 +1,16 @@
-#ifndef TYPE_H
-#define TYPE_H
+#ifndef ANALYZER_TYPE_H
+#define ANALYZER_TYPE_H
 
+#include <cassert>
+#include <map>
 #include <string>
 #include <vector>
-#include "lexer/tokentypes.h"
-#include <map>
-#include <cassert>
 
-// namespace type {
-//     enum kind {
-
-//         primitive_type,
-
-//         pointer_type,
-//         array_type,
-//         alias_type,
-//         function_type,
-
-//         error_type
-//     };
-// }
-
-// class ASTNode;
-
-// class Type {
-
-//     friend class SemanticAnalyzer;
-
-// private:
-//     // primitive constructor
-//     Type(std::string const *str, type::kind kind, bool is_integral)
-//         : str(str), kind(kind), canonical(this),
-//         is_integral(is_integral), points_to(nullptr),
-//         contains_error(false) { }
-
-// public:
-
-//     /** string representation (as-written) of this type */
-//     std::string const *str;
-
-//     /** the kind of this type */
-//     type::kind kind;
-
-//     /** the equivalent canonical type */
-//     Type const *canonical;
-
-//     /** whether this type is integral or not */
-//     bool is_integral;
-
-//     union {
-
-//         /** the type that this pointer type points to */
-//         Type const *points_to;
-
-//         /** the type that this array type is an array of */
-//         Type const *array_of;
-
-//         /** the type that this alias type is an alias of */
-//         Type const *alias_of;
-
-//         /** the type that this func type returns */
-//         Type const *returns;
-//     };
-
-//     union {
-
-//         /** if type is function, this points to the list of param types */
-//         std::vector<Type const *> params;
-//     };
-
-//     ASTNode *decl;
-
-//     bool contains_error : 1;
-
-//     void set(
-//         std::string *str,
-//         type::kind kind,
-//         Type const *inner_type
-//     ) {
-//         this->str = str;
-//         this->kind = kind;
-//         this->points_to = inner_type;
-//         this->contains_error = this->contains_error || inner_type->contains_error;
-//     }
-
-//     void set_inner_type(Type const *inner) {
-//         points_to = inner;
-//         contains_error = this->contains_error || inner->contains_error;
-//     }
-
-//     void add_param(Type const *param) {
-//         params.push_back(param);
-//         contains_error = this->contains_error || param->contains_error;
-//     }
-
-//     std::string const *get_str() const { return str; }
-
-//     Type();
-//     ~Type() { }
-
-//     static Type *get_u8_type();
-//     static Type *get_i8_type();
-//     static Type *get_u16_type();
-//     static Type *get_i16_type();
-//     static Type *get_u32_type();
-//     static Type *get_i32_type();
-//     static Type *get_u64_type();
-//     static Type *get_i64_type();
-//     static Type *get_f32_type();
-//     static Type *get_f64_type();
-//     static Type *get_void_type();
-//     static Type *get_prim(token::token_type);
-//     static Type *get_error_type();
-// };
+#include "ast/xast.h"
 
 #define POINTER_SIZE_IN_BYTES 8
 
 namespace fe {
-
-class ASTNode;
-class SemanticAnalyzer;
 
 enum class typekind {
 
@@ -175,8 +66,17 @@ enum class typekind {
     // constructible
     pointer_t,
     array_t,
-    alias_t,
     function_t,
+
+    // declarable
+    __decl_start,
+        alias_t,
+        struct_t,
+        union_t,
+        templated_t,
+        placeholder_t,
+        instantiated_t,
+    __decl_end,
 };
 
 class Type {
@@ -184,11 +84,10 @@ private:
     typekind kind;
     unsigned size; // size in bytes
     Type *canonical;
-    bool error;
 
 protected:
-    Type(typekind kind, unsigned sz, Type *canonical, bool error)
-        : kind(kind), size(sz), canonical(canonical), error(error) {
+    Type(typekind kind, unsigned sz, Type *canonical)
+    : kind(kind), size(sz), canonical(canonical) {
         
         if (!canonical) {
             // if canonical is nullptr then this type is canonical
@@ -198,26 +97,20 @@ protected:
 
         assert(this->size == this->canonical->size && "a type and its canonical type must have the same size");
     }
-    void set_error() { error = true; }
-
-private:
-    // error type constructor
-    Type() : Type(typekind::error_t, 0, this, true) { }
 
 public:
     typekind get_kind() { return kind; }
     unsigned get_size() { return size; }
     Type *get_canonical() { return canonical; }
-    bool has_error() { return error; }
-    virtual std::string stringify() { return "<error-type>"; };
+    virtual std::string stringify() = 0;
 
-    static Type *get_error_type();
     static bool is_primitive(typekind kind) { return kind > typekind::_primitive_start && kind < typekind::_primitive_end; }
     static bool is_numeric(typekind kind) { return kind > typekind::_numeric_start && kind < typekind::_numeric_end; }
     static bool is_integral(typekind kind) { return kind > typekind::_integral_start && kind < typekind::_integral_end; }
     static bool is_unsigned(typekind kind) { return kind > typekind::_unsigned_start && kind < typekind::_unsigned_end; }
     static bool is_signed(typekind kind) { return kind > typekind::_signed_start && kind < typekind::_signed_end; }
     static bool is_fp(typekind kind) { return kind > typekind::_fp_start && kind < typekind::_fp_end; }
+    static bool is_decl(typekind kind) { return kind > typekind::__decl_start && kind < typekind::__decl_end; }
 
     bool is_primitive() { return Type::is_primitive(kind); }
     bool is_numeric() { return Type::is_numeric(kind); }
@@ -225,109 +118,79 @@ public:
     bool is_unsigned() { return Type::is_unsigned(kind); }
     bool is_signed() { return Type::is_signed(kind); }
     bool is_fp() { return Type::is_fp(kind); }
+    bool is_decl() { return Type::is_decl(kind); }
+};
+
+struct ErrorType : public Type {
+private: 
+    ErrorType() : Type(typekind::error_t, 0, nullptr) { }
+
+public:
+    std::string stringify() override { return "<err>"; }
+    static ErrorType *get();
 };
 
 class PrimitiveType : public Type {
 private:
-    token::token_type tok;
+    std::string name;
 
 protected:
-    PrimitiveType(typekind kind, unsigned size, token::token_type tok)
-        : Type(kind, size, this, false), tok(tok) { assert(token::is_keyword(tok)); }
-    std::string stringify() override { return token::get_keyword_string(tok); }
+    PrimitiveType(typekind kind, std::string name, unsigned size)
+        : Type(kind, size, this), name(name) { }
 
 public:
-    static PrimitiveType *get_u8_type();
-    static PrimitiveType *get_i8_type();
-    static PrimitiveType *get_u16_type();
-    static PrimitiveType *get_i16_type();
-    static PrimitiveType *get_u32_type();
-    static PrimitiveType *get_i32_type();
-    static PrimitiveType *get_u64_type();
-    static PrimitiveType *get_i64_type();
-    static PrimitiveType *get_f32_type();
-    static PrimitiveType *get_f64_type();
-    static PrimitiveType *get_void_type();
-    static PrimitiveType *get_prim(token::token_type);
+    std::string stringify() override { return name; }
+
+#define PRIMTYPE(name, signed, sizebytes) \
+    static PrimitiveType *get_##name##_type();
+#include "analyzer/primtypes"
+
+    static std::vector<PrimitiveType *> const &get_all();
 };
 
 class PointerType : public Type {
 private:
-    friend SemanticAnalyzer;
     Type *pointee;
 
-protected:
-    PointerType(PointerType *canonical, Type *pointee)
-        : Type(typekind::pointer_t, POINTER_SIZE_IN_BYTES, canonical, pointee->has_error()), pointee(pointee) { }
-
 public:
+    PointerType(PointerType *canonical, Type *pointee)
+    : Type(typekind::pointer_t, POINTER_SIZE_IN_BYTES, canonical)
+    , pointee(pointee) { }
+
     Type *get_pointee() { return pointee; }
     std::string stringify() override { return std::string("*") + pointee->stringify(); }
-
-    static PointerType *get_error_type();
 };
 
 class ArrayType : public Type {
 private:
-    friend SemanticAnalyzer;
     Type *element;
     unsigned num;
 
-protected:
-    ArrayType(ArrayType *canonical, Type *element_ty, unsigned num_elements)
-        : Type(typekind::array_t, element_ty->get_size() * num, canonical, element_ty->has_error()), element(element_ty) { }
-
 public:
+    ArrayType(ArrayType *canonical, Type *element_ty, unsigned num_elements)
+    : Type(typekind::array_t, element_ty->get_size() * num, canonical)
+    , element(element_ty) { }
+
     Type *get_element_ty() { return element; }
     std::string stringify() override { return std::string("[]") + element->stringify(); }
-
-    static ArrayType *get_error_type();
-};
-
-class AliasType : public Type {
-private:
-    friend SemanticAnalyzer;
-    std::string str;
-    Type *aliasee;
-    ASTNode *decl;
-
-    static ASTNode *error_node;
-
-protected:
-    AliasType(Type *aliasee, std::string str, ASTNode *decl)
-        : Type(typekind::alias_t, aliasee->get_size(), aliasee->get_canonical(), aliasee->has_error()), str(str), aliasee(aliasee), decl(decl) { }
-
-public:
-    Type *get_aliasee() { return aliasee; }
-    ASTNode *get_decl() { return decl; }
-    std::string stringify() override { return str; }
-
-    static void set_error_node (ASTNode *en) { error_node = en; }
-    static AliasType *get_error_type();
 };
 
 class FunctionType : public Type {
 private:
-    friend SemanticAnalyzer;
     Type *return_ty;
     std::vector<Type *> params;
 
-protected:
+public:
     FunctionType(Type *canonical, Type *return_ty, std::vector<Type *> params)
-        : Type(typekind::function_t, POINTER_SIZE_IN_BYTES, canonical, false), return_ty(return_ty), params(std::move(params)) {
-        if (return_ty->has_error()) {
-            set_error();
-            return;
-        }
+    : Type(typekind::function_t, POINTER_SIZE_IN_BYTES, canonical)
+    , return_ty(return_ty)
+    , params(std::move(params)) {
+        assert(return_ty);
         for (auto &ty : params) {
-            if (ty->has_error()) {
-                set_error();
-                break;
-            }
+            assert(ty);
         }
     }
 
-public:
     Type *get_return_ty() { return return_ty; }
     std::vector<Type *> get_params() { return params; }
     std::string stringify() override {
@@ -335,19 +198,77 @@ public:
         bool hp = false;
         for (auto &param : params) {
             str.append(param->stringify());
-            str.append(", ");
+            str.append(",");
             hp = true;
         }
         if (hp) {
-            str.pop_back();
             str.pop_back();
         }
         str.append(")");
         str.append(return_ty->stringify());
         return str;
     }
+};
 
-    static FunctionType *get_error_type();
+struct DeclType : public Type {
+    xast::Node *decl;
+    std::string ident;
+
+    DeclType(typekind tk, unsigned sz, Type *canonical, xast::Node *decl)
+    : Type(tk, sz, canonical), decl(decl) {
+        assert(decl->ident);
+        ident = decl->ident;
+    }
+    std::string stringify() override { return ident; }
+};
+
+struct AliasType : public DeclType {
+    Type *aliasee;
+
+    AliasType(xast::Node *decl, Type *aliasee)
+    : DeclType(typekind::alias_t, (assert(aliasee), aliasee->get_size()),
+        aliasee->get_canonical(), decl)
+    , aliasee(aliasee) { }
+};
+
+struct TemplatedType : public DeclType {
+    TemplatedType(xast::Node *decl)
+    : DeclType(typekind::templated_t, 0, nullptr, decl) { }
+};
+
+struct PlaceholderType : public DeclType {
+    PlaceholderType(xast::Node *decl)
+    : DeclType(typekind::placeholder_t, 0, nullptr, decl) { }
+};
+
+struct StructType : public Type {
+    xast::Node *node;
+    StructType(xast::Node *node)
+    : Type(typekind::struct_t, 0, nullptr)
+    , node(node) {
+        // TODO
+    }
+    std::string stringify() override { return "<struct>"; }
+};
+
+struct UnionType : public Type {
+    xast::Node *node;
+    UnionType(xast::Node *node)
+    : Type(typekind::union_t, 0, nullptr)
+    , node(node) {
+        // TODO
+    }
+    std::string stringify() override { return "<union>"; }
+};
+
+struct InstantiatedType : public Type {
+    TemplatedType *tmpl;
+    InstantiatedType(TemplatedType *tmpl)
+    : Type(typekind::instantiated_t, 0, nullptr)
+    , tmpl(tmpl) {
+        // TODO
+    }
+    std::string stringify() override { return std::string("<inst:") + tmpl->stringify() + ">"; }
 };
 
 }

@@ -1,72 +1,46 @@
+#include <iomanip>
 #include <iostream>
 #include <string>
-#include <iomanip>
-#include "lexer/lexer.h"
-#include "lexer/token.h"
-#include "lexer/tokentypes.h"
-#include "source/source.h"
-#include "ast/ast.h"
-#include "parser/parser.h"
-#include "memory/allocator.h"
-#include "diagnostic/diagnostic.h"
+
 #include "analyzer/analyzer.h"
 #include "analyzer/type.h"
 #include "ast/translate.h"
-#include "ir/ir.h"
+#include "ast/xast.h"
 #include "codegen/codegen.h"
-#include "ir/cfg.h"
-#include "ir/pass.h"
-#include "utils/ioformat.h"
 #include "codegen/x86_64_gen.h"
+#include "diag/diagnostic.h"
+#include "ir/cfg.h"
+#include "ir/ir.h"
+#include "ir/pass.h"
+#include "lexer/lexer.h"
+#include "parser/parser.h"
+#include "utils/identifier.h"
+#include "utils/ioformat.h"
+#include "utils/memory.h"
+#include "utils/source.h"
 
 #define DEBUG
-
-// class haha;
-
-// class hehe : public STPPIListNode<hehe, haha> {
-// public:
-//     hehe() { set_parent(nullptr); }
-// };
-
-// class haha {
-//     STPPIList<hehe, haha> list;
-// };
 
 int main(int argc, char **argv) {
 
     // ---------------- FRONTEND ------------------
-    
-    // Make all necessary allocators
-    Allocator<std::string> str_alloc;
-    Allocator<fe::ASTNode> node_alloc;
-    Allocator<fe::Type> type_alloc;
-    Allocator<std::vector<fe::Type *>> vec_alloc;
 
-    // Add source to source manager
-    SourceID src_id = SourceManager::add_source(argv[1]);
+    RawRegionAllocator ra;
+    StringPool strings(ra);
+    Allocator<fe::xast::Node> nodes(ra);
 
-    // Make lexer
-    Lexer lexer(src_id, str_alloc, /** save comments = */ false);
+    // intern the keyword strings
+    for (auto kw : token::get_all_keywords()) {
+        strings.add(token::get_keyword_string(kw));
+    }
 
-    // Get list of primitive types
-    std::vector<token::token_type> primitives = token::get_types_list();
+    SourceManager::init(ra);
 
-    // Make semantic analyzer
-    fe::SemanticAnalyzer analyzer(
-        str_alloc,
-        primitives
-    );
+    fe::Lexer lexer(SourceManager::get(argv[1]), strings, false);
+    fe::Parser parser(lexer, nodes);
 
-    // Make parser
-    fe::Parser parser(
-        lexer,
-        analyzer
-    );
-
-    // parse
-    fe::ASTNode *ast = nullptr;
-    bool parse_success = parser.parse(&ast);
-    ast->print();
+    auto [parse_success, ast] = parser.parse();
+    fe::xast::dump(ast);
     std::cout << "\nparse status: ";
     if (parse_success) {
         std::cout << ioformat::GREEN << "success" << ioformat::RESET;
@@ -74,44 +48,43 @@ int main(int argc, char **argv) {
     else {
         std::cout << ioformat::RED << "failure" << ioformat::RESET;
     }
-    std::cout << "\n\n";
-
-    // dump errors
-    // std::cout << "\n-------- ErrorHandler --------\n";
-    // int num_errors = ErrorHandler::dump();
-    // std::cout << "\n-------- DiagnosticHandler --------\n";
+    std::cout << "\n";
     int num_errors = DiagnosticHandler::dump();
     std::cout << num_errors << " errors\n\n";
+    if (!parse_success || num_errors) {
+        exit(EXIT_FAILURE);
+    }
 
-    // fail if errors
+    // analyze
+    auto &primitives = fe::PrimitiveType::get_all();
+    fe::analyze(ast, primitives);
+    std::cout << "\n";
+    num_errors = DiagnosticHandler::dump();
+    std::cout << num_errors << " errors\n\n";
     if (num_errors) {
         exit(EXIT_FAILURE);
     }
 
-    if (!parse_success) {
-        exit(EXIT_FAILURE);
-    }
+    // // ---------------- MIDEND ------------------
 
-    // ---------------- MIDEND ------------------
+    // ir::Program *prog = fe::ASTTranslator().translate(ast);
+    // std::cout << std::endl;
+    // prog->dump();
 
-    ir::Program *prog = fe::ASTTranslator().translate(ast);
-    std::cout << std::endl;
-    prog->dump();
+    // std::ofstream cfgfile("cfg.dot");
+    // dump_cfg(prog->get_function("my_main"), cfgfile);
+    // cfgfile.close();
 
-    std::ofstream cfgfile("cfg.dot");
-    dump_cfg(prog->get_function("my_main"), cfgfile);
-    cfgfile.close();
+    // run_stackpromotion(prog);
+    // prog->dump();
 
-    run_stackpromotion(prog);
-    prog->dump();
+    // // ---------------- BACKEND ------------------
 
-    // ---------------- BACKEND ------------------
-
-    // codegen
-    std::ofstream outfile(argv[2]);
-    be::x86_64CodeGen tcg;
-    be::codegen(prog, tcg, outfile);
-    outfile.close();
+    // // codegen
+    // std::ofstream outfile(argv[2]);
+    // be::x86_64CodeGen tcg;
+    // be::codegen(prog, tcg, outfile);
+    // outfile.close();
 
 
     return 0;

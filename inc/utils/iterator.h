@@ -1,6 +1,8 @@
 #ifndef UTILS_ITERATOR_H
 #define UTILS_ITERATOR_H
 
+#include <iterator>
+
 /**
  * Defines a simple bidirectional iterator template.
  * This allows clients to implement the full functionality of a bidirectional iterator much easier than if doing so manually.

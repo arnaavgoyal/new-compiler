@@ -1,15 +1,13 @@
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef PARSER_PARSER_H
+#define PARSER_PARSER_H
 
-#include <stack>
-#include "lexer/tokentypes.h"
-#include "lexer/token.h"
-#include "lexer/lexer.h"
-#include "source/source.h"
-#include "memory/allocator.h"
-#include "analyzer/analyzer.h"
-#include "analyzer/scope.h"
 #include <setjmp.h>
+
+#include "ast/xast.h"
+#include "lexer/lexer.h"
+#include "utils/identifier.h"
+#include "utils/memory.h"
+#include "utils/source.h"
 
 namespace fe {
 
@@ -21,9 +19,6 @@ private:
     /** The lexer to generate tokens from */
     Lexer &lexer;
 
-    /** The semantic analyzer to use */
-    SemanticAnalyzer &analyzer;
-
     /** The current token */
     Token tk;
 
@@ -31,23 +26,25 @@ private:
     SourceLocation prev_tk_loc;
 
     /** The allocator for AST nodes */
-    Allocator<ASTNode> node_allocator;
-
-    /** The current scope */
-    Scope *curr_scope;
+    Allocator<xast::Node> &nodes;
 
     /** The env for longjmp back to runner on syntax error*/
     jmp_buf env;
 
-    ASTNode *tunit = nullptr;
-
     /** ------------------- UTILS ------------------- */
 
-    ASTNode *make_node(
-        ast::node_type kind,
-        std::string *str,
+    xast::Node *make_node(
+        xast::nk kind,
+        xast::Identifier ident,
         SourceLocation loc,
-        token::token_type tok
+        token::token_type
+    );
+
+    xast::Node *make_node(
+        xast::nk kind,
+        uint64_t ival,
+        SourceLocation loc,
+        token::token_type
     );
 
     /**
@@ -82,8 +79,8 @@ private:
      * @param ops list of ops associated with the corresponding tokens
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *left_assoc_bin_op(
-        ASTNode *(Parser::*higher_prec)(),
+    xast::Node *left_assoc_bin_op(
+        xast::Node *(Parser::*higher_prec)(),
         std::vector<token::token_type> const &types,
         std::vector<op::kind> const &ops
     );
@@ -98,8 +95,8 @@ private:
      * @param ops list of ops associated with the corresponding tokens
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *right_assoc_bin_op(
-        ASTNode *(Parser::*higher_prec)(),
+    xast::Node *right_assoc_bin_op(
+        xast::Node *(Parser::*higher_prec)(),
         std::vector<token::token_type> const &types,
         std::vector<op::kind> const &ops
     );
@@ -124,7 +121,7 @@ private:
      * @param node the unit node to apply to
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_postfix(ASTNode *node);
+    xast::Node *parse_postfix(xast::Node *node);
 
     /**
      * OPERATOR PRECEDENCE [1, 2].
@@ -138,14 +135,14 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_prefix();
+    xast::Node *parse_prefix();
 
     /**
      * Parses a cast expression of the form '<unit expr> as <type>'.
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_cast();
+    xast::Node *parse_cast(); // NOTE: Cannot parse type here, semantic phase required.
 
     /**
      * OPERATOR PRECEDENCE [1, 3].
@@ -159,7 +156,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_multiplicative();
+    xast::Node *parse_multiplicative();
 
     /**
      * OPERATOR PRECEDENCE [1, 4].
@@ -173,7 +170,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_additive();
+    xast::Node *parse_additive();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6].
@@ -187,7 +184,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_gl_relational();
+    xast::Node *parse_gl_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7].
@@ -201,7 +198,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_eq_relational();
+    xast::Node *parse_eq_relational();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11].
@@ -215,7 +212,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_logical_and();
+    xast::Node *parse_logical_and();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12].
@@ -229,7 +226,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_logical_or();
+    xast::Node *parse_logical_or();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12], U [14].
@@ -243,7 +240,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_assignment();
+    xast::Node *parse_assignment();
 
     /**
      * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12] U [14, 15].
@@ -257,7 +254,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_comma();
+    xast::Node *parse_comma();
 
     /**
      * This function serves as the entry point for parsing expressions. It
@@ -270,9 +267,14 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    ASTNode *parse_expr();
+    xast::Node *parse_expr();
 
     /** ------------------- STATEMENT PARSING ------------------- */
+
+    xast::Node *parse_type_expr_postfix(xast::Node *node);
+    xast::Node *parse_type_expr(bool required = true);
+
+    xast::Node *parse_type_annotation(bool required = true);
 
     /**
      * Parses a call expression's argument list and appends a node to the given node
@@ -288,34 +290,17 @@ private:
      * 
      * @param node the node to add the arguments to
     */
-    std::vector<ASTNode *> parse_call_args();
+    std::vector<xast::Node *> parse_call_args();
 
-    /**
-     * Parses a type given that the current token is the first token of the type.
-     * 
-     * @return the parsed type
-    */
-    Type *parse_type();
+    xast::Node *parse_tmpl_params();
+    xast::Node *parse_tmpl_args();
 
-    /**
-     * Parses a var declaration given that the current token is the
-     * first token of the declaration statement (the var keyword).
-     * 
-     * @return the parsed var decl
-    */
-    ASTNode *parse_var_decl();
+    xast::Node *parse_stmt_block(bool need_new_scope);
 
-    /**
-     * Parses a func declaration given that the current token is the
-     * first token of the declaration statement (the def keyword).
-     * 
-     * @return the parsed function decl
-    */
-    ASTNode *parse_func_decl();
+    xast::Node *parse_function();
 
-    ASTNode *parse_type_decl();
-
-    ASTNode *parse_stmt_block(bool need_new_scope);
+    xast::Node *parse_typebind();
+    xast::Node *parse_valbind();
 
     /**
      * Parses a statement given that the current token is the start of the
@@ -323,9 +308,9 @@ private:
      * 
      * @return the parsed statement
     */
-    ASTNode *parse_stmt();
+    xast::Node *parse_stmt();
 
-    bool parse_entry();
+    void parse_non_execution_scope(xast::Node *container);
 
 public:
 
@@ -333,11 +318,10 @@ public:
      * Constructs a Parser.
      * 
      * @param lexer the lexer to use
-     * @param analyzer the semantic analyzer to use
     */
     Parser(
         Lexer &lexer,
-        SemanticAnalyzer &analyzer
+        Allocator<xast::Node> &a
     );
 
     /**
@@ -349,14 +333,13 @@ public:
      * Client-facing parse function. Parses until syntax error
      * or eof, and returns the generated tree.
      * 
-     * @param ref writes pointer to the root of the generated
-     *            tree at ref
-     * @return true if (syntactically) successful, false if not
+     * @return true on success, else false
+     *         the generated AST
     */
-    bool parse(ASTNode **ref);
+    std::pair<bool, xast::Node *>  parse();
     
 };
 
-}
+} // fe
 
 #endif

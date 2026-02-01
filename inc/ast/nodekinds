@@ -1,0 +1,165 @@
+#ifndef NK
+#define NK(x, num_concrete, children)
+#endif
+
+#ifndef DECL
+#define DECL(x, num_concrete, children) NK(x, num_concrete, children)
+#endif
+
+#ifndef TYPE_EXPR
+#define TYPE_EXPR(x, num_concrete, children) NK(x, num_concrete, children)
+#endif
+
+#ifndef ACCESSOR
+#define ACCESSOR(nodekind, accessor_name, child_index)
+#endif
+
+#ifndef VARIADIC_ACCESSOR
+#define VARIADIC_ACCESSOR(nodekind, accessor_name, start_index)
+#endif
+
+// VALBIND: 2 concrete children
+DECL(valbind, 2,
+    ACCESSOR(valbind, type_annot, 0)
+    ACCESSOR(valbind, def, 1)
+)
+
+// FUNCBIND: 1 concrete child
+DECL(funcbind, 1,
+    ACCESSOR(funcbind, def, 0)
+)
+
+// TYPEBIND: 2 concrete children
+DECL(typebind, 2,
+    ACCESSOR(typebind, def, 0)
+    ACCESSOR(typebind, namespace_, 1)
+)
+
+// STRUCT: 0 concrete children
+DECL(struct_, 0,
+)
+
+// UNION: 0 concrete children
+DECL(union_, 0,
+)
+
+// PARAM: 1 concrete child
+DECL(param, 1,
+    ACCESSOR(param, type_annot, 0)
+)
+
+// VARIANT: 0 concrete children
+DECL(variant, 0,
+)
+
+// TMPLDECL: wraps a declaration with template parameters (2 concrete children)
+DECL(tmpldecl, 1,
+    VARIADIC_ACCESSOR(tmpldecl, param, 1)
+    ACCESSOR(tmpldecl, decl, 0)
+)
+
+// TMPLPARAMDECL: template parameter declaration
+DECL(tmplparamdecl, 0,
+)
+
+// TE_NAME: 0 concrete children (can be wrapped by tmplinstantiation)
+TYPE_EXPR(te_name, 0,
+)
+
+// TE_POINTER: 1 concrete child
+TYPE_EXPR(te_pointer, 1,
+    ACCESSOR(te_pointer, pointee, 0)
+)
+
+// TE_ARRAY: 1 concrete child
+TYPE_EXPR(te_array, 1,
+    ACCESSOR(te_array, element_ty, 0)
+)
+
+// TE_FUNCTION: 0 concrete from start, variadic params (0..n-1), return type at -1
+TYPE_EXPR(te_function, 1,
+    VARIADIC_ACCESSOR(te_function, param, 1)
+    ACCESSOR(te_function, return_ty, 0)
+)
+
+NK(type, 0,) // TODO: remove
+NK(prog, 0,)
+NK(error, 0,) // is this still needed?
+NK(null, 0,)
+
+// FUNC: 0 concrete from start, variadic params (0..n-2), return type at -2, body at -1
+NK(func, 2,
+    VARIADIC_ACCESSOR(func, param, 2)
+    ACCESSOR(func, return_ty, 0)
+    ACCESSOR(func, body, 1)
+)
+
+NK(int_lit, 0,)
+NK(char_lit, 0,)
+NK(str_lit, 0,)
+
+// TMPLINSTANTIATION: base, variadic args (1..n)
+NK(tmplinstantiation, 1,
+    ACCESSOR(tmplinstantiation, base, 0)
+    VARIADIC_ACCESSOR(tmplinstantiation, arg, 1)
+)
+
+// LOOP: 2 concrete children
+NK(loop, 2,
+    ACCESSOR(loop, cond, 0)
+    ACCESSOR(loop, body, 1)
+)
+
+// BRANCH: 3 concrete children (cond, then_block, optional else_block)
+NK(branch, 3,
+    ACCESSOR(branch, cond, 0)
+    ACCESSOR(branch, then, 1)
+    ACCESSOR(branch, else_, 2)
+)
+
+// BLOCK: 0 concrete, variadic statements (0..n)
+NK(block, 0,
+    VARIADIC_ACCESSOR(block, stmt, 0)
+)
+
+// REF: 0 concrete children (name stored in sym field)
+NK(ref, 0,)
+
+// CALL: 1 concrete child (function at 0), variadic args (1..n)
+NK(call, 1,
+    ACCESSOR(call, called, 0)
+    VARIADIC_ACCESSOR(call, arg, 1)
+)
+
+// PAREN_EXPR: 1 concrete child
+NK(paren_expr, 1,
+    ACCESSOR(paren_expr, inner, 0)
+)
+
+// SUBSCRIPT: 2 concrete children
+NK(subscript, 2,
+    ACCESSOR(subscript, array, 0)
+    ACCESSOR(subscript, index, 1)
+)
+
+// CAST: 1 concrete child
+NK(cast, 1,
+    ACCESSOR(cast, expr, 0)
+)
+
+// UNARY_OP: 1 concrete child (operand at 0), op kind in op field
+NK(unary_op, 1,
+    ACCESSOR(unary_op, operand, 0)
+)
+
+// BINARY_OP: 2 concrete children
+NK(binary_op, 2,
+    ACCESSOR(binary_op, lhs, 0)
+    ACCESSOR(binary_op, rhs, 1)
+)
+
+#undef VARIADIC_ACCESSOR
+#undef ACCESSOR
+#undef TYPE_EXPR
+#undef DECL
+#undef NK

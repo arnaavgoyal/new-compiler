@@ -1,7 +1,6 @@
-#ifndef TOKENTYPES_H
-#define TOKENTYPES_H
+#ifndef LEXER_TOKENTYPES_H
+#define LEXER_TOKENTYPES_H
 
-#include <string>
 #include <vector>
 
 namespace token {
@@ -49,11 +48,6 @@ namespace token {
      * Determines if the given token type is a literal token.
     */
     bool is_literal(token_type t);
-
-    /**
-     * Determines if the given token type is a primitive type.
-    */
-    bool is_primitive_type(token_type t);
 
     /**
      * Determines if the given token type is a keyword,

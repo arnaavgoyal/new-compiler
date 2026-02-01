@@ -1,0 +1,16 @@
+#ifndef PRIMTYPE
+#define PRIMTYPE(name, signed, sizebytes)
+#endif
+
+PRIMTYPE(u8,   false, 1)
+PRIMTYPE(i8,   true,  1)
+PRIMTYPE(u16,  false, 2)
+PRIMTYPE(i16,  true,  2)
+PRIMTYPE(u32,  false, 4)
+PRIMTYPE(i32,  true,  4)
+PRIMTYPE(u64,  false, 8)
+PRIMTYPE(i64,  true,  8)
+PRIMTYPE(f32,  true,  4)
+PRIMTYPE(f64,  true,  8)
+
+#undef PRIMTYPE

@@ -1,12 +1,14 @@
-#include "codegen/codegen.h"
-#include "codegen/x86_64_gen.h"
-#include "utils/ioformat.h"
-#include <queue>
-#include <ostream>
-#include <string>
-#include <limits>
 #include <cmath>
 #include <cstring>
+#include <limits>
+#include <ostream>
+#include <queue>
+#include <string>
+
+#include "codegen/codegen.h"
+#include "utils/ioformat.h"
+
+#include "codegen/x86_64_gen.h"
 
 namespace be {
 
@@ -319,4 +321,4 @@ bool match(TargetInstr *ti, OpLocs... oplocs) {
     return match_impl(ti, 0, oplocs...);
 }
 
-}
+} // be

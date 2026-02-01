@@ -3,22 +3,52 @@ program
     ;
 
 decl
-    = vardecl
+    = valdecl
     | typedecl
-    | funcdecl
     ;
 
-vardecl
-    = "var", type, identifier, [ "=", valexpr ]
+valdecl
+    = "let", identifier, [ template_params ], valdecl_content
+    ;
+
+valdecl_content
+    = "(" [ param { ",", param } ], ")", type, stmtblock  (* function *)
+    | [ type_annotation ], [ "=", valexpr ]               (* variable *)
+    ;
+
+param
+    = identifier, ":", type
     ;
 
 typedecl
-    = "type", identifier, "=", type
+    = "type", identifier, [ template_params ], typedecl_content, [ where_clause ]
     ;
 
-funcdecl
-    = "def", functiontype, identifier, "(", [ identifier, { ",", identifier } ]
-    , stmtblock
+typedecl_content
+    = "=", type                              (* alias *)
+    | "{", { decl }, "}"                     (* struct *)
+    | "|", variant, { "|", variant }         (* union *)
+    ;
+
+variant
+    = identifier, [ "(", type, { ",", type }, ")" ]
+    ;
+
+where_clause
+    = "where", "{", { decl }, "}"
+    ;
+
+template_params
+    = "!", "(", template_param, { ",", template_param }, ")"
+    ;
+
+template_param
+    = identifier
+    | identifier, ":", type
+    ;
+
+type_annotation
+    = ":", type
     ;
 
 type
@@ -27,6 +57,11 @@ type
     | arraytype
     | aliastype
     | functiontype
+    | template_instantiation
+    ;
+
+template_instantiation
+    = identifier, "!", "(", type, { ",", type }, ")"
     ;
 
 primitivetype
@@ -46,7 +81,7 @@ aliastype
     ;
 
 functiontype
-    = "(", [ type { ",", type } ], ")", type
+    = "(", [ type, { ",", type } ], ")", type
     ;
 
 stmtblock
@@ -130,4 +165,3 @@ alphachar
 numchar
     = ? numeric characters ?
     ;
-
