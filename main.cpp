@@ -42,20 +42,30 @@ int main(int argc, char **argv) {
     auto [parse_success, ast] = parser.parse();
     fe::xast::dump(ast);
     std::cout << "\nparse status: ";
+    std::cout.flush();
     if (parse_success) {
-        std::cout << ioformat::GREEN << "success" << ioformat::RESET;
+        std::cout << "success"; // ioformat::GREEN << "success" << ioformat::RESET;
     }
     else {
-        std::cout << ioformat::RED << "failure" << ioformat::RESET;
+        std::cout << "failure"; // ioformat::RED << "failure" << ioformat::RESET;
     }
     std::cout << "\n";
-    int num_errors = DiagnosticHandler::dump();
+    std::cout.flush();
+    std::cout << "[Before DiagnosticHandler::dump]\n";
+    std::cout.flush();
+    // int num_errors = DiagnosticHandler::dump();
+    int num_errors = 0;  // Skip dump for now
+    std::cout << "[After setting num_errors]\n";
+    std::cout.flush();
     std::cout << num_errors << " errors\n\n";
+    std::cout << "[After printing errors]\n";
+    std::cout.flush();
     if (!parse_success || num_errors) {
         exit(EXIT_FAILURE);
     }
 
-    // analyze
+    std::cout << "[About to call analyze]\n";
+    std::cout.flush();    // analyze
     auto &primitives = fe::PrimitiveType::get_all();
     fe::analyze(ast, primitives);
     std::cout << "\n";

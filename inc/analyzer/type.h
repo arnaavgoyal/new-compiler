@@ -212,63 +212,69 @@ public:
 
 struct DeclType : public Type {
     xast::Node *decl;
-    std::string ident;
+    std::string ident;  // local name
+    std::string scoped_ident;  // fully scoped name (e.g., "Outer::Inner")
 
-    DeclType(typekind tk, unsigned sz, Type *canonical, xast::Node *decl)
+    DeclType(typekind tk, unsigned sz, Type *canonical, xast::Node *decl, std::string scoped_ident = "")
     : Type(tk, sz, canonical), decl(decl) {
-        assert(decl->ident);
-        ident = decl->ident;
+        if (decl && decl->ident) {
+            ident = decl->ident;
+            this->scoped_ident = scoped_ident.empty() ? ident : scoped_ident;
+        } else {
+            ident = "";
+            this->scoped_ident = scoped_ident;
+        }
     }
-    std::string stringify() override { return ident; }
+    std::string stringify() override { 
+        return scoped_ident; 
+    }
 };
 
 struct AliasType : public DeclType {
     Type *aliasee;
 
-    AliasType(xast::Node *decl, Type *aliasee)
+    AliasType(xast::Node *decl, Type *aliasee, std::string scoped_ident = "")
     : DeclType(typekind::alias_t, (assert(aliasee), aliasee->get_size()),
-        aliasee->get_canonical(), decl)
+        aliasee->get_canonical(), decl, scoped_ident)
     , aliasee(aliasee) { }
 };
 
-struct TemplatedType : public DeclType {
-    TemplatedType(xast::Node *decl)
-    : DeclType(typekind::templated_t, 0, nullptr, decl) { }
-};
-
 struct PlaceholderType : public DeclType {
-    PlaceholderType(xast::Node *decl)
-    : DeclType(typekind::placeholder_t, 0, nullptr, decl) { }
+    PlaceholderType(xast::Node *decl, std::string scoped_ident = "")
+    : DeclType(typekind::placeholder_t, 0, nullptr, decl, scoped_ident) { }
 };
 
-struct StructType : public Type {
-    xast::Node *node;
-    StructType(xast::Node *node)
-    : Type(typekind::struct_t, 0, nullptr)
-    , node(node) {
-        // TODO
-    }
-    std::string stringify() override { return "<struct>"; }
+struct StructType : public DeclType {
+    StructType(xast::Node *decl, std::string scoped_ident = "")
+    : DeclType(typekind::struct_t, 0, nullptr, decl, scoped_ident) { }
 };
 
-struct UnionType : public Type {
-    xast::Node *node;
-    UnionType(xast::Node *node)
-    : Type(typekind::union_t, 0, nullptr)
-    , node(node) {
-        // TODO
-    }
-    std::string stringify() override { return "<union>"; }
+struct UnionType : public DeclType {
+    UnionType(xast::Node *decl, std::string scoped_ident = "")
+    : DeclType(typekind::union_t, 0, nullptr, decl, scoped_ident) { }
 };
 
 struct InstantiatedType : public Type {
-    TemplatedType *tmpl;
-    InstantiatedType(TemplatedType *tmpl)
+    std::string template_name;
+    std::vector<Type *> template_args;
+    xast::Node *instantiation_node;
+    
+    InstantiatedType(std::string template_name, std::vector<Type *> template_args, xast::Node *inst_node = nullptr)
     : Type(typekind::instantiated_t, 0, nullptr)
-    , tmpl(tmpl) {
-        // TODO
+    , template_name(template_name)
+    , template_args(template_args)
+    , instantiation_node(inst_node) { }
+    
+    std::string stringify() override {
+        std::string str = template_name;
+        str += "!(";
+        for (size_t i = 0; i < template_args.size(); ++i) {
+            if (i > 0) str += ",";
+            str += template_args[i]->stringify();
+        }
+        str += ")";
+        return str;
     }
-    std::string stringify() override { return std::string("<inst:") + tmpl->stringify() + ">"; }
 };
 
 }

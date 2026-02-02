@@ -6,10 +6,6 @@
 #define DECL(x, num_concrete, children) NK(x, num_concrete, children)
 #endif
 
-#ifndef TYPE_EXPR
-#define TYPE_EXPR(x, num_concrete, children) NK(x, num_concrete, children)
-#endif
-
 #ifndef ACCESSOR
 #define ACCESSOR(nodekind, accessor_name, child_index)
 #endif
@@ -39,6 +35,10 @@ DECL(typebind, 2,
 DECL(struct_, 0,
 )
 
+DECL(field, 1,
+    ACCESSOR(field, type_annot, 0)
+)
+
 // UNION: 0 concrete children
 DECL(union_, 0,
 )
@@ -48,8 +48,8 @@ DECL(param, 1,
     ACCESSOR(param, type_annot, 0)
 )
 
-// VARIANT: 0 concrete children
-DECL(variant, 0,
+DECL(variant, 1,
+    ACCESSOR(variant, payload, 0)
 )
 
 // TMPLDECL: wraps a declaration with template parameters (2 concrete children)
@@ -62,27 +62,12 @@ DECL(tmpldecl, 1,
 DECL(tmplparamdecl, 0,
 )
 
-// TE_NAME: 0 concrete children (can be wrapped by tmplinstantiation)
-TYPE_EXPR(te_name, 0,
+// ADJACENCY: 0 concrete, variadic children (adjacent expressions combined)
+// Used to represent: "expr1 expr2 expr3" which implicitly applies expr1 to (expr2, expr3, ...)
+NK(adjacency, 0,
+    VARIADIC_ACCESSOR(adjacency, child, 0)
 )
 
-// TE_POINTER: 1 concrete child
-TYPE_EXPR(te_pointer, 1,
-    ACCESSOR(te_pointer, pointee, 0)
-)
-
-// TE_ARRAY: 1 concrete child
-TYPE_EXPR(te_array, 1,
-    ACCESSOR(te_array, element_ty, 0)
-)
-
-// TE_FUNCTION: 0 concrete from start, variadic params (0..n-1), return type at -1
-TYPE_EXPR(te_function, 1,
-    VARIADIC_ACCESSOR(te_function, param, 1)
-    ACCESSOR(te_function, return_ty, 0)
-)
-
-NK(type, 0,) // TODO: remove
 NK(prog, 0,)
 NK(error, 0,) // is this still needed?
 NK(null, 0,)
@@ -98,10 +83,25 @@ NK(int_lit, 0,)
 NK(char_lit, 0,)
 NK(str_lit, 0,)
 
-// TMPLINSTANTIATION: base, variadic args (1..n)
-NK(tmplinstantiation, 1,
+// TMPLINSTANTIATION: base, comma_expr
+NK(tmplinstantiation, 2,
     ACCESSOR(tmplinstantiation, base, 0)
-    VARIADIC_ACCESSOR(tmplinstantiation, arg, 1)
+    ACCESSOR(tmplinstantiation, args, 1)
+)
+
+// INSTANTIATEDTMPL: result of template instantiation with substituted args and decl
+// Child 0: the decl node from the template (with substitutions applied)
+// Variadic children from index 1: substituted argument expressions
+NK(instantiatedtmpl, 1,
+    ACCESSOR(instantiatedtmpl, decl, 0)
+    VARIADIC_ACCESSOR(instantiatedtmpl, arg, 1)
+)
+
+// TMPLINSTANTIATIONS: container node that replaces tmpldecl in the AST
+// Holds all instantiatedtmpl nodes for a particular template declaration
+// Variadic children: instantiatedtmpl nodes
+NK(tmplinstantiations, 0,
+    VARIADIC_ACCESSOR(tmplinstantiations, instantiation, 0)
 )
 
 // LOOP: 2 concrete children
@@ -125,15 +125,19 @@ NK(block, 0,
 // REF: 0 concrete children (name stored in sym field)
 NK(ref, 0,)
 
-// CALL: 1 concrete child (function at 0), variadic args (1..n)
-NK(call, 1,
-    ACCESSOR(call, called, 0)
-    VARIADIC_ACCESSOR(call, arg, 1)
+// CALL: called function + comma expr
+NK(call, 2,
+    ACCESSOR(call, callable, 0)
+    ACCESSOR(call, args, 1)
 )
 
 // PAREN_EXPR: 1 concrete child
 NK(paren_expr, 1,
     ACCESSOR(paren_expr, inner, 0)
+)
+
+NK(comma_expr, 0,
+    VARIADIC_ACCESSOR(comma_expr, expr, 0)
 )
 
 // SUBSCRIPT: 2 concrete children
@@ -142,9 +146,9 @@ NK(subscript, 2,
     ACCESSOR(subscript, index, 1)
 )
 
-// CAST: 1 concrete child
-NK(cast, 1,
+NK(cast, 2,
     ACCESSOR(cast, expr, 0)
+    ACCESSOR(cast, type, 1)
 )
 
 // UNARY_OP: 1 concrete child (operand at 0), op kind in op field

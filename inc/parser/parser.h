@@ -123,6 +123,8 @@ private:
     */
     xast::Node *parse_postfix(xast::Node *node);
 
+    xast::Node *parse_ident();
+
     /**
      * OPERATOR PRECEDENCE [1, 2].
      * 
@@ -138,11 +140,32 @@ private:
     xast::Node *parse_prefix();
 
     /**
-     * Parses a cast expression of the form '<unit expr> as <type>'.
+     * OPERATOR PRECEDENCE [1, 2] - Adjacency.
+     * 
+     * In the unified grammar, adjacent expressions are implicitly applied.
+     * For example, "f x y" is parsed as adjacency with three children.
+     * During semantic analysis, this is interpreted as f(x, y) or f x y depending on context.
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    xast::Node *parse_cast(); // NOTE: Cannot parse type here, semantic phase required.
+    xast::Node *parse_adjacency();
+
+    /**
+     * OPERATOR PRECEDENCE [1, 2] - Unary.
+     * 
+     * Parses a unary expression (prefix operators).
+     * 
+     * @return the generated result or nullptr if no expression was found
+    */
+    xast::Node *parse_unary();
+
+    /**
+     * Helper to check if the current token can start an adjacency expression.
+     * Used to determine when to continue parsing adjacent expressions.
+     * 
+     * @return true if current token can start a unary expression
+    */
+    bool can_start_adjacency_expr() const;
 
     /**
      * OPERATOR PRECEDENCE [1, 3].
@@ -157,6 +180,16 @@ private:
      * @return the generated result or nullptr if no expression was found
     */
     xast::Node *parse_multiplicative();
+
+    /**
+     * OPERATOR PRECEDENCE - Function Type Arrow
+     * 
+     * Parses a function type expression with -> operator.
+     * Right-associative, so A -> B -> C is parsed as A -> (B -> C).
+     * 
+     * @return the generated result or nullptr if no expression was found
+    */
+    xast::Node *parse_function_type();
 
     /**
      * OPERATOR PRECEDENCE [1, 4].
@@ -254,7 +287,7 @@ private:
      * 
      * @return the generated result or nullptr if no expression was found
     */
-    xast::Node *parse_comma();
+    xast::Node *parse_comma(std::optional<token::token_type> end = std::nullopt);
 
     /**
      * This function serves as the entry point for parsing expressions. It

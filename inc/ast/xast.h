@@ -26,22 +26,12 @@ enum class nk : uint8_t {
 
     __decl_end,
 
-    // type exprs
-    __te_start,
- 
-#define TYPE_EXPR(x, n, c) x,
-#include "ast/nodekinds"
-
-    __te_end,
-
 #define NK(x, n, c) x,
 #define DECL(x, n, c)
-#define TYPE_EXPR(x, n, c)
 #include "ast/nodekinds"
 
 };
 
-bool is_type_expr(nk k);
 bool is_decl(nk k);
 
 struct Node;
@@ -73,8 +63,15 @@ struct Node {
     Op op;
 
     // populated during analysis
-    Scope *scope; // if this node creates a new scope
-    Type *type;
+    Scope *scope = nullptr; // if this node creates a new scope
+    Type *type = nullptr;
+    
+    // For instantiatedtmpl nodes: points to the original tmpldecl
+    Node *tmpl_origin = nullptr;
+    // For instantiatedtmpl nodes: points to the first tmplinstantiation that created this
+    Node *tmpl_instantiation_site = nullptr;
+    // For cloned typebind nodes inside instantiatedtmpl: points back to the instantiatedtmpl
+    Node *instantiation_parent = nullptr;
 
     // Default constructor
     Node() : ival{} { }

@@ -77,6 +77,11 @@ public:
         d.args.push_back(str);
         return *this;
     }
+    DiagnosticBuilder &add(std::string_view str) {
+        assert(valid);
+        d.args.push_back(std::string(str));
+        return *this;
+    }
     DiagnosticBuilder &add(char const *str) {
         assert(valid);
         d.args.push_back(str);

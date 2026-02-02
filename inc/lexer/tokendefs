@@ -54,6 +54,7 @@ OPERATOR(leftparen, "(")
 OPERATOR(rightparen, ")")
 OPERATOR(leftbracket, "[")
 OPERATOR(rightbracket, "]")
+OPERATOR(lrbracket, "[]")
 OPERATOR(leftbrace, "{")
 OPERATOR(rightbrace, "}")
 OPERATOR(plusplus, "++")
@@ -83,6 +84,8 @@ OPERATOR(semicolon, ";")
 OPERATOR(colon, ":")
 OPERATOR(coloncolon, "::")
 OPERATOR(equalgreater, "=>")
+OPERATOR(dot, ".")
+OPERATOR(minusgreater, "->")
 
 #undef OPERATOR
 #undef TYPE

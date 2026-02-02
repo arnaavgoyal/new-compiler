@@ -30,11 +30,22 @@ public:
         transparent_string_hash, std::equal_to<>>;
 
     owning_sv_map<xast::Node *> symbols;
-    owning_sv_map<Type *> types;
     Scope *parent;
+    std::string namespace_name;  // for namespaced scopes (e.g., "TypeA" for types in TypeA's where block)
+    
+    // Template instantiation cache: maps (template_name + arg_stringification) -> instantiated node
+    owning_sv_map<xast::Node *> template_instantiations;
 
 
-    Scope() { parent = nullptr; }
+    Scope() : parent(nullptr), namespace_name("") { }
+    
+    // Get fully scoped name for a symbol (e.g., "Outer::Inner::Symbol")
+    std::string get_scoped_name(const std::string &local_name) const {
+        if (namespace_name.empty()) {
+            return local_name;
+        }
+        return namespace_name + "::" + local_name;
+    }
 
     int dump(int ind = 0) {
         std::string indstr;
@@ -42,29 +53,15 @@ public:
             ind = parent->dump(ind);
         }
         indstr = std::string(ind, ' ');
-        for (auto [ident, node] : symbols) {
-            std::cout
-                << indstr << "sym " << ident
-                << std::endl;
-        }
-        for (auto [ident, type] : types) {
-            std::cout
-                << indstr << "type " << ident
-                << std::endl;
+        for (auto [ident, entry] : symbols) {
+            std::cout << indstr << "sym " << ident << std::endl;
         }
         return ind + 2;
     }
 
     void dump_me() {
-        for (auto [ident, node] : symbols) {
-            std::cout
-                << "sym " << ident
-                << std::endl;
-        }
-        for (auto [ident, type] : types) {
-            std::cout
-                << "type " << ident
-                << std::endl;
+        for (auto [ident, entry] : symbols) {
+            std::cout << "sym " << ident << std::endl;
         }
     }
 };

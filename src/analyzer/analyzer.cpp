@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
+#include "ast/op.h"
 #include "ast/scope.h"
 #include "ast/visitor.h"
 #include "diag/diagnostic.h"
@@ -15,6 +18,37 @@
 using namespace fe;
 
 using xast::Identifier;
+
+// Type interning cache - maps string representation to canonical type
+static std::unordered_map<std::string, Type *> type_cache;
+
+Type *intern_type(Type *ty) {
+    if (!ty) return nullptr;
+    
+    std::string key = ty->stringify();
+    auto it = type_cache.find(key);
+    if (it != type_cache.end()) {
+        // Found existing type with same string representation
+        return it->second;
+    }
+    
+    // New type - intern it
+    type_cache[key] = ty;
+    return ty;
+}
+
+// IMPORTANT: User-defined types with where clauses create BOTH a type AND a namespace
+// with the same name. For example:
+//   type TypeA { ... where { ... } }
+// creates:
+//   1. A type TypeA (struct/union type)
+//   2. A namespace TypeA (for symbols declared in the where block)
+//
+// This has implications for the dot operator:
+//   - TypeA.field could be field access into the struct
+//   - TypeA::Member could be namespace access (though written as TypeA.Member in this language)
+//
+// The type system currently stores the type, and the Scope system stores the namespace.
 
 xast::Node *find_symbol_in_current_scope(
     Identifier ident,
@@ -30,20 +64,6 @@ xast::Node *find_symbol_in_current_scope(
     return iter->second;
 }
 
-Type *find_type_in_current_scope(
-    Identifier ident,
-    Scope *scope
-) {
-    auto iter = scope->types.find(*ident),
-         end = scope->types.end();
-
-    if (iter == end) {
-        return nullptr;
-    }
-
-    return iter->second;
-}
-
 xast::Node *find_symbol_in_any_active_scope(
     Identifier ident,
     Scope *scope
@@ -51,8 +71,8 @@ xast::Node *find_symbol_in_any_active_scope(
 
     Scope *curr = scope;
     while (curr) {
-        auto ptr = find_symbol_in_current_scope(ident, curr);
-        if (ptr) return ptr;
+        auto r = find_symbol_in_current_scope(ident, curr);
+        if (r) return r;
 
         curr = curr->parent;
     }
@@ -61,76 +81,243 @@ xast::Node *find_symbol_in_any_active_scope(
     return nullptr;
 }
 
-Type *find_type_in_any_active_scope(
-    Identifier ident,
-    Scope *scope
-) {
-
-    Scope *curr = scope;
-    while (curr) {
-        auto ptr = find_type_in_current_scope(ident, curr);
-        if (ptr) return ptr;
-
-        curr = curr->parent;
+// Helper to stringify a template argument for cache key generation
+std::string stringify_arg(xast::Node *arg) {
+    if (!arg) return "null";
+    if (arg->kind == xast::nk::ref && arg->ident) {
+        return std::string(*arg->ident);
     }
-
-    // not found
-    return nullptr;
+    // For now, use a simple representation; could be enhanced
+    return std::to_string((uintptr_t)arg);
 }
 
-Type *typify(xast::Node *n, Scope *s) {
+// Generate a cache key for template instantiation: "TemplateName:Arg1:Arg2:..."
+std::string make_template_cache_key(xast::Node *tmpl_decl, const std::vector<xast::Node *> &args) {
+    assert(tmpl_decl && tmpl_decl->kind == xast::nk::tmpldecl && tmpl_decl->ident);
+    
+    std::string key = std::string(*tmpl_decl->ident);
+    for (auto arg : args) {
+        key += ":";
+        key += stringify_arg(arg);
+    }
+    return key;
+}
+
+// Get the fully scoped name for a declaration node in its scope
+std::string get_scoped_name_for_decl(xast::Node *decl, Scope *s) {
+    if (!decl || !decl->ident) return "";
+    if (!s) return std::string(*decl->ident);
+    return s->get_scoped_name(std::string(*decl->ident));
+}
+
+// Full type expression typifier that validates and creates types
+// Returns nullptr if the expression is not a valid type expression in this context
+// decl_parent: optional parent declaration node (typebind or tmpldecl) that has the type's name
+Type *typify_expr(xast::Node *n, Scope *s, xast::Node *decl_parent = nullptr) {
+    if (!n) return nullptr;
+    
     Type *ty = nullptr;
     switch (n->kind) {
     case xast::nk::struct_: {
-        ty = new StructType(n);
+        // The struct/union node itself has no ident; get it from parent (typebind or tmpldecl)
+        std::string scoped_name = "";
+        if (decl_parent && decl_parent->ident) {
+            scoped_name = s ? s->get_scoped_name(std::string(*decl_parent->ident)) : std::string(*decl_parent->ident);
+        }
+        // Pass the struct_ node itself as the decl_node; the scoped_name will be used for stringify
+        ty = new StructType(n, scoped_name);
         break;
     }
     case xast::nk::union_: {
-        ty = new UnionType(n);
+        // The struct/union node itself has no ident; get it from parent (typebind or tmpldecl)
+        std::string scoped_name = "";
+        if (decl_parent && decl_parent->ident) {
+            scoped_name = s ? s->get_scoped_name(std::string(*decl_parent->ident)) : std::string(*decl_parent->ident);
+        }
+        // Pass the union_ node itself as the decl_node; the scoped_name will be used for stringify
+        ty = new UnionType(n, scoped_name);
         break;
     }
-    case xast::nk::te_name: {
+    case xast::nk::ref: {
+        // In unified grammar, a reference (identifier) can be a type
         assert(n->ident);
-        ty = find_type_in_any_active_scope(n->ident, s);
-        if (!ty) {
-            DiagnosticHandler::make(diag::id::use_of_undeclared_type, n->sloc)
-                .add(std::string((*n->ident)))
+        auto sym = find_symbol_in_any_active_scope(n->ident, s);
+        if (sym) {
+            if (sym->type) {
+                ty = sym->type;
+            } else {
+                // Symbol exists but type not yet resolved - allow forward reference
+                // Create a placeholder that will be resolved later
+                ty = new PlaceholderType(sym);
+            }
+        }
+        else {
+            DiagnosticHandler::make(diag::id::ref_undeclared_symbol, n->sloc)
+                .add(*n->ident)
                 .finish();
             ty = ErrorType::get();
         }
+        break;
+    }
+    case xast::nk::unary_op: {
+        std::cerr << "typify_expr: unary_op case\n";
+        // Handle pointer and array types in unified grammar
+        if (n->op.kind == op::indirect) {
+            // Pointer type: * pointee
+            auto pointee = xast::c::unary_op::operand(n);
+            Type *pointee_ty = typify_expr(pointee, s);
+            if (!pointee_ty) {
+                std::cerr << "typify_expr: pointer pointee returned nullptr\n";
+                return nullptr;
+            }
+            // Canonicalize pointee type before creating pointer
+            if (pointee_ty->get_canonical()) {
+                pointee_ty = pointee_ty->get_canonical();
+            }
+            ty = intern_type(new PointerType(nullptr, pointee_ty));
+        }
+        else if (n->op.kind == op::slice) {
+            // Array type: [] element
+            auto element = xast::c::unary_op::operand(n);
+            Type *element_ty = typify_expr(element, s);
+            if (!element_ty) {
+                std::cerr << "typify_expr: array element returned nullptr\n";
+                return nullptr;
+            }
+            // Canonicalize element type before creating array
+            if (element_ty->get_canonical()) {
+                element_ty = element_ty->get_canonical();
+            }
+            ty = intern_type(new ArrayType(nullptr, element_ty, 0));  // 0 indicates unbounded array
+        }
+        else {
+            // Invalid unary op for types
+            std::cerr << "typify_expr: invalid unary op for types\n";
+            return nullptr;
+        }
+        break;
+    }
+    case xast::nk::binary_op: {
+        std::cerr << "typify_expr: binary_op case\n";
+        // Handle function types: (param_types) -> return_type
+        if (n->op.kind == op::arrow) {
+            auto lhs = xast::c::binary_op::lhs(n);
+            auto rhs = xast::c::binary_op::rhs(n);
+            if (!lhs || !rhs) return nullptr;
+            
+            // LHS should be a paren_expr containing the parameter list
+            std::vector<Type *> param_types;
+            if (lhs->kind == xast::nk::paren_expr) {
+                auto inner = xast::c::paren_expr::inner(lhs);
+                if (inner) {
+                    // Inner could be a single param type or a comma_expr of param types
+                    if (inner->kind == xast::nk::comma_expr) {
+                        for (int i = 0; i < xast::c::comma_expr::expr_count(inner); ++i) {
+                            auto param_expr = xast::c::comma_expr::expr(inner, i);
+                            Type *param_ty = typify_expr(param_expr, s);
+                            if (!param_ty) return nullptr;
+                            param_types.push_back(param_ty);
+                        }
+                    } else {
+                        Type *param_ty = typify_expr(inner, s);
+                        if (!param_ty) return nullptr;
+                        param_types.push_back(param_ty);
+                    }
+                }
+            } else {
+                return nullptr;  // LHS must be paren_expr
+            }
+            
+            // RHS should be the return type
+            Type *return_ty = typify_expr(rhs, s);
+            if (!return_ty) return nullptr;
+            
+            ty = new FunctionType(nullptr, return_ty, param_types);
+        }
+        else {
+            // Other binary ops are not valid types
+            return nullptr;
+        }
+        break;
+    }
+    case xast::nk::paren_expr: {
+        // Parenthesized type expression - just typify the inner expression
+        auto inner = xast::c::paren_expr::inner(n);
+        ty = typify_expr(inner, s);
         break;
     }
     case xast::nk::tmplinstantiation: {
-        assert(n->opedges.size());
-        auto tmpl = n->opedges.back()->used();
-        assert(tmpl->kind == xast::nk::te_name && tmpl->ident);
-        auto tmplty = find_type_in_any_active_scope(tmpl->ident, s);
-        if (!tmplty) {
-            DiagnosticHandler::make(diag::id::use_of_undeclared_type, n->sloc)
-                .add(std::string((*n->ident)))
-                .finish();
-            ty = ErrorType::get();
+        // Template instantiation - look up in scope's template_instantiations cache
+        auto base = xast::c::tmplinstantiation::base(n);
+        if (!base || base->kind != xast::nk::ref || !base->ident) {
+            std::cerr << "tmplinstantiation: base invalid\n";
+            return nullptr;
         }
-        else if (tmplty->get_kind() != typekind::templated_t) {
-            DiagnosticHandler::make(diag::id::type_is_not_templated, tmpl->sloc)
-                .add(tmplty->stringify())
-                .finish();
-            ty = ErrorType::get();
+        
+        auto sym = find_symbol_in_any_active_scope(base->ident, s);
+        if (!sym || sym->kind != xast::nk::tmpldecl) {
+            std::cerr << "tmplinstantiation: template not found or not tmpldecl\n";
+            return nullptr;
         }
-        else {
-            assert(tmplty && tmplty->get_kind() == typekind::templated_t);
-            ty = new InstantiatedType((TemplatedType *)tmplty);
+        
+        // Extract template arguments
+        std::vector<xast::Node *> args;
+        auto args_expr = xast::c::tmplinstantiation::args(n);
+        if (args_expr) {
+            if (args_expr->kind == xast::nk::comma_expr) {
+                for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                    args.push_back(xast::c::comma_expr::expr(args_expr, i));
+                }
+            } else {
+                args.push_back(args_expr);
+            }
+        }
+        
+        // Generate cache key and look up
+        std::string cache_key = make_template_cache_key((xast::Node *)sym, args);
+        std::cerr << "Looking up template instantiation: " << cache_key << "\n";
+        
+        // Search up through scopes for the cached instantiation
+        Scope *curr = s;
+        while (curr) {
+            auto it = curr->template_instantiations.find(cache_key);
+            if (it != curr->template_instantiations.end()) {
+                auto instantiated = it->second;
+                // The instantiated node should have a type set by now
+                if (instantiated->type) {
+                    std::cerr << "Found instantiation in cache with type: " << instantiated->type->stringify() << "\n";
+                    ty = instantiated->type;
+                } else {
+                    std::cerr << "Found instantiation in cache but no type set\n";
+                    return nullptr;
+                }
+                break;
+            }
+            curr = curr->parent;
+        }
+        
+        if (!ty) {
+            // Template instantiation not found in cache
+            std::cerr << "Template instantiation NOT found in cache\n";
+            return nullptr;
         }
         break;
     }
-    default: assert(false && "invalid type expr");
+    default:
+        // Not a type expression
+        return nullptr;
     }
 
-    assert(ty);
     return ty;
+
 }
 
-struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
+// Legacy typify function (maintains backward compatibility, delegates to typify_expr)
+Type *typify(xast::Node *n, Scope *s, xast::Node *decl_parent = nullptr) {
+    return typify_expr(n, s, decl_parent);
+}
+
+struct TypeDeclIndexingPass : xast::Visitor<void, Scope *, Identifier> {
 
     void setup_tmpl(xast::Node *tmpl, Scope *s) {
         for (int i = 0; i < xast::c::tmpldecl::param_count(tmpl); ++i) {
@@ -139,25 +326,40 @@ struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
             case xast::nk::tmplparamdecl: {
                 // type param
                 assert(param->ident);
-                auto otype = find_type_in_current_scope(param->ident, s);
-                if (otype) {
-                    assert(otype->is_decl());
-                    DiagnosticHandler::make(diag::id::type_redeclaration, param->ident.sloc)
-                        .add(std::string((*param->ident)))
-                        .finish();
-                    DiagnosticHandler::make(diag::id::note_original_declaration,
-                            ((DeclType *)otype)->decl->sloc)
-                        .finish();
+                auto existing = find_symbol_in_current_scope(param->ident, s);
+                if (existing) {
+                    if (existing->type && existing->type->is_decl()) {
+                        DiagnosticHandler::make(diag::id::symbol_redeclaration, param->ident.sloc)
+                            .add(std::string((*param->ident)))
+                            .finish();
+                        DiagnosticHandler::make(diag::id::note_original_declaration,
+                                ((DeclType *)existing->type)->decl->sloc)
+                            .finish();
+                    } else {
+                        DiagnosticHandler::make(diag::id::symbol_redeclaration, param->ident.sloc)
+                            .add(std::string((*param->ident)))
+                            .finish();
+                    }
                 }
                 else {
-                    s->types[std::string((*param->ident))] = new PlaceholderType(param);
+                    param->type = new PlaceholderType(param);
+                    s->symbols[std::string((*param->ident))] = param;
                 }
                 break;
             }
             case xast::nk::param:
                 // value param
                 assert(param->ident);
-                s->symbols[std::string((*param->ident))] = param;
+                {
+                    auto existing = find_symbol_in_current_scope(param->ident, s);
+                    if (existing) {
+                        DiagnosticHandler::make(diag::id::symbol_redeclaration, param->ident.sloc)
+                            .add(std::string((*param->ident)))
+                            .finish();
+                    } else {
+                        s->symbols[std::string((*param->ident))] = param;
+                    }
+                }
                 break;
             default: assert(false && "non-type, non-value tmpl param?");
             }
@@ -186,19 +388,25 @@ struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
         if (decl_node->kind == xast::nk::typebind) {
             
             // Check for redeclaration in parent scope
-            auto otype = find_type_in_current_scope(node->ident, s);
-            if (otype) {
-                assert(otype->is_decl());
-                DiagnosticHandler::make(diag::id::type_redeclaration, node->ident.sloc)
-                    .add(std::string((*node->ident)))
-                    .finish();
-                DiagnosticHandler::make(diag::id::note_original_declaration,
-                        ((DeclType *)otype)->decl->sloc)
-                    .finish();
+            auto existing = find_symbol_in_current_scope(node->ident, s);
+            if (existing) {
+                if (existing->type && existing->type->is_decl()) {
+                    DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
+                        .add(std::string((*node->ident)))
+                        .finish();
+                    DiagnosticHandler::make(diag::id::note_original_declaration,
+                            ((DeclType *)existing->type)->decl->sloc)
+                        .finish();
+                } else {
+                    DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
+                        .add(std::string((*node->ident)))
+                        .finish();
+                }
             }
             else {
-                // Register as templated type in parent scope
-                s->types[std::string((*node->ident))] = new TemplatedType(node);
+                // Register typebind node in parent scope
+                // Type will be resolved in DeclTypeResolutionPass
+                s->symbols[std::string((*node->ident))] = node;
             }
         }
         else {
@@ -217,28 +425,15 @@ struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
 
         decl_node->scope = tmpl_scope;
 
-        for (auto e : node->opedges) {
-            dispatch(e->used(), tmpl_scope, node->ident);
-        }
+        // Only dispatch to the decl child (at index 0)
+        // Template parameter children (indices 1+) have already been set up in setup_tmpl
+        // and should not be visited again to avoid duplicate registration
+        dispatch(decl_node, tmpl_scope, node->ident);
     }
 
     void visit_valbind(xast::Node *node, Scope *s, Identifier parent_name) override {
-
-        if (node->ident) {
-            auto osym = find_symbol_in_current_scope(node->ident, s);
-            if (osym) {
-                DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
-                    .add(std::string((*node->ident)))
-                    .finish();
-                DiagnosticHandler::make(diag::id::note_original_declaration, osym->ident.sloc)
-                    .finish();
-            }
-            else {
-                s->symbols[std::string((*node->ident))] = node;
-            }
-        }
-        // else, it is templated
-
+        // Don't index valbinds here - they should be added to scope as encountered during type checking
+        // to prevent forward references to variables (unlike types which can have forward references)
         for (auto e : node->opedges) {
             dispatch(e->used(), s, parent_name);
         }
@@ -292,26 +487,29 @@ struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
         
         if(node->ident) {
 
-            auto otype = find_type_in_current_scope(node->ident, s);
-            if (otype) {
-                assert(otype->is_decl());
-                DiagnosticHandler::make(diag::id::type_redeclaration, node->ident.sloc)
-                    .add(std::string((*node->ident)))
-                    .finish();
-                DiagnosticHandler::make(diag::id::note_original_declaration,
-                        ((DeclType *)otype)->decl->sloc)
-                    .finish();
+            auto existing = find_symbol_in_current_scope(node->ident, s);
+            if (existing) {
+                if (existing->type && existing->type->is_decl()) {
+                    DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
+                        .add(std::string((*node->ident)))
+                        .finish();
+                    DiagnosticHandler::make(diag::id::note_original_declaration,
+                            ((DeclType *)existing->type)->decl->sloc)
+                        .finish();
+                } else {
+                    DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
+                        .add(std::string((*node->ident)))
+                        .finish();
+                }
             }
             else {
-                // Non-templated case - typify the definition
-                assert(node->opedges.size() >= 1);
-                auto def = node->opedges[0]->used();
-                Type *ty = typify(def, s);
-                s->types[std::string((*node->ident))] = ty;
+                // Store the typebind node. Type will be resolved in DeclTypeResolutionPass
+                s->symbols[std::string((*node->ident))] = node;
             }
 
             newscope = new Scope;
             newscope->parent = s;
+            newscope->namespace_name = std::string((*node->ident));  // Set namespace for where-block types
             node->scope = newscope;
             parent_name = node->ident;
         }
@@ -340,6 +538,3028 @@ struct IndexingPass : xast::Visitor<void, Scope *, Identifier> {
             dispatch(e->used(), s, parent_name);
         }
     }
+
+    void visit_block(xast::Node *node, Scope *s, Identifier parent_name) override {
+        // Index all declarations in the block
+        for (int i = 0; i < xast::c::block::stmt_count(node); ++i) {
+            auto stmt = xast::c::block::stmt(node, i);
+            if (stmt) {
+                dispatch(stmt, s, parent_name);
+            }
+        }
+    }
+};
+
+// ExprChecker: Context-based expression validation
+// This runs AFTER TypeDeclIndexingPass and BEFORE TemplateInstantiationCycleDetector
+// Validates that expressions are semantically valid in their context (type expr vs value expr)
+struct ExprChecker : xast::Visitor<void, Scope *, bool> {
+    // is_type_context: true if validating type expressions, false for value expressions
+
+    void visit_prog(xast::Node *node, Scope *s, bool is_type_context) override {
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s, false);  // prog children are value expressions
+        }
+    }
+
+    void visit_tmpldecl(xast::Node *node, Scope *s, bool is_type_context) override {
+        // Visit the inner declaration with template scope
+        if (node->scope) {
+            auto decl = xast::c::tmpldecl::decl(node);
+            if (decl) {
+                // For template typebinds, visit in type context
+                bool ctx = (decl->kind == xast::nk::typebind);
+                dispatch(decl, node->scope, ctx);
+            }
+        }
+    }
+
+    void visit_typebind(xast::Node *node, Scope *s, bool is_type_context) override {
+        // Typebind definition should be a type expression
+        auto type_expr = xast::c::typebind::def(node);
+        if (type_expr) {
+            validate_type_expr(type_expr, s);
+        }
+        
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope, true);  // Children in type context
+            }
+        }
+    }
+
+    void visit_valbind(xast::Node *node, Scope *s, bool is_type_context) override {
+        // Type annotation should be a type expression if present
+        auto type_annot = xast::c::valbind::type_annot(node);
+        if (type_annot) {
+            validate_type_expr(type_annot, s);
+        }
+        
+        // Definition should be a value expression
+        auto def = xast::c::valbind::def(node);
+        if (def) {
+            validate_value_expr(def, s);
+        }
+    }
+
+    void visit_funcbind(xast::Node *node, Scope *s, bool is_type_context) override {
+        auto func = xast::c::funcbind::def(node);
+        if (func && func->kind == xast::nk::func) {
+            // Return type annotation should be type expr
+            auto ret_ty = xast::c::func::return_ty(func);
+            if (ret_ty) {
+                validate_type_expr(ret_ty, s);
+            }
+            
+            // Parameters: type annotation should be type expr
+            for (int i = 0; i < xast::c::func::param_count(func); ++i) {
+                auto param = xast::c::func::param(func, i);
+                if (param && param->kind == xast::nk::param) {
+                    auto param_ty = xast::c::param::type_annot(param);
+                    if (param_ty) {
+                        validate_type_expr(param_ty, s);
+                    }
+                }
+            }
+            
+            // Body should be value expressions
+            auto body = xast::c::func::body(func);
+            if (body) {
+                validate_value_expr(body, s);
+            }
+        }
+    }
+
+    void visit_func(xast::Node *node, Scope *s, bool is_type_context) override {
+        // Return type should be type expr
+        auto ret_ty = xast::c::func::return_ty(node);
+        if (ret_ty) {
+            validate_type_expr(ret_ty, s);
+        }
+        
+        // Parameters should have type exprs
+        for (int i = 0; i < xast::c::func::param_count(node); ++i) {
+            auto param = xast::c::func::param(node, i);
+            if (param && param->kind == xast::nk::param) {
+                auto param_ty = xast::c::param::type_annot(param);
+                if (param_ty) {
+                    validate_type_expr(param_ty, s);
+                }
+            }
+        }
+        
+        // Body should be value expressions
+        auto body = xast::c::func::body(node);
+        if (body && node->scope) {
+            validate_value_expr(body, node->scope);
+        }
+    }
+
+    void visit_param(xast::Node *node, Scope *s, bool is_type_context) override {
+        auto type_annot = xast::c::param::type_annot(node);
+        if (type_annot) {
+            validate_type_expr(type_annot, s);
+        }
+    }
+
+    void visit_field(xast::Node *node, Scope *s, bool is_type_context) override {
+        auto type_annot = xast::c::field::type_annot(node);
+        if (type_annot) {
+            validate_type_expr(type_annot, s);
+        }
+    }
+
+    void visit_tmplinstantiation(xast::Node *node, Scope *s, bool is_type_context) override {
+        // Get the base template to determine argument validation context
+        auto base = xast::c::tmplinstantiation::base(node);
+        if (!base || base->kind != xast::nk::ref || !base->ident) return;
+        
+        auto sym = find_symbol_in_any_active_scope(base->ident, s);
+        if (!sym || sym->kind != xast::nk::tmpldecl) return;
+        
+        // Validate each argument based on the corresponding template parameter
+        auto args_expr = xast::c::tmplinstantiation::args(node);
+        if (!args_expr) return;
+        
+        std::vector<xast::Node *> args;
+        extract_args(args_expr, args);
+        
+        for (size_t i = 0; i < args.size() && i < xast::c::tmpldecl::param_count(sym); ++i) {
+            auto param = xast::c::tmpldecl::param(sym, i);
+            if (!param) continue;
+            
+            auto arg = args[i];
+            
+            // Type params: argument should be type expr
+            // Value params: argument should be value expr
+            if (param->kind == xast::nk::tmplparamdecl) {
+                validate_type_expr(arg, s);
+            } else if (param->kind == xast::nk::param) {
+                validate_value_expr(arg, s);
+            }
+        }
+    }
+
+private:
+    void validate_type_expr(xast::Node *expr, Scope *s) {
+        if (!expr) return;
+        
+        switch (expr->kind) {
+        // Valid type expressions
+        case xast::nk::ref:
+        case xast::nk::struct_:
+        case xast::nk::union_:
+        case xast::nk::tmplinstantiation:
+            break;
+        
+        case xast::nk::unary_op:
+            // Only pointer (*) and array ([]) operators are valid in type context
+            if (expr->op.kind == op::indirect || expr->op.kind == op::slice) {
+                auto operand = xast::c::unary_op::operand(expr);
+                if (operand) validate_type_expr(operand, s);
+            } else {
+                DiagnosticHandler::make(diag::id::expected_type, expr->sloc)
+                    .finish();
+            }
+            break;
+        
+        case xast::nk::binary_op:
+            // Only arrow (->) and dot (.) operators are valid in type context
+            if (expr->op.kind == op::arrow || expr->op.kind == op::dot) {
+                auto lhs = xast::c::binary_op::lhs(expr);
+                auto rhs = xast::c::binary_op::rhs(expr);
+                if (lhs) validate_type_expr(lhs, s);
+                if (rhs) validate_type_expr(rhs, s);
+            } else {
+                // Other binary operators are not valid in type context
+                DiagnosticHandler::make(diag::id::expected_type, expr->sloc)
+                    .finish();
+            }
+            break;
+        
+        case xast::nk::paren_expr: {
+            auto inner = xast::c::paren_expr::inner(expr);
+            if (inner) validate_type_expr(inner, s);
+            break;
+        }
+        
+        case xast::nk::comma_expr:
+            // Comma expressions are allowed in type context if all subexpressions are type exprs
+            for (int i = 0; i < xast::c::comma_expr::expr_count(expr); ++i) {
+                auto e = xast::c::comma_expr::expr(expr, i);
+                if (e) validate_type_expr(e, s);
+            }
+            break;
+        
+        // Invalid type expressions
+        case xast::nk::call:
+        case xast::nk::subscript:
+        case xast::nk::cast:
+        case xast::nk::int_lit:
+        case xast::nk::char_lit:
+        case xast::nk::str_lit:
+        case xast::nk::block:
+        case xast::nk::branch:
+        case xast::nk::loop:
+            DiagnosticHandler::make(diag::id::expected_type, expr->sloc)
+                .finish();
+            break;
+        
+        default:
+            // Conservatively treat unknown nodes as invalid in type context
+            break;
+        }
+    }
+
+    void validate_value_expr(xast::Node *expr, Scope *s) {
+        if (!expr) return;
+        
+        switch (expr->kind) {
+        // Valid value expressions
+        case xast::nk::ref:
+        case xast::nk::int_lit:
+        case xast::nk::char_lit:
+        case xast::nk::str_lit:
+        case xast::nk::call:
+        case xast::nk::subscript:
+        case xast::nk::cast:
+        case xast::nk::block:
+        case xast::nk::branch:
+        case xast::nk::loop:
+            // Recursively validate children
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                if (child) validate_value_expr(child, s);
+            }
+            break;
+        
+        case xast::nk::binary_op:
+            // Arrow operator (->) is not valid in value context (only in types for function signatures)
+            if (expr->op.kind == op::arrow) {
+                DiagnosticHandler::make(diag::id::expected_expression, expr->sloc)
+                    .finish();
+            } else {
+                // Other binary ops are valid
+                auto lhs = xast::c::binary_op::lhs(expr);
+                auto rhs = xast::c::binary_op::rhs(expr);
+                if (lhs) validate_value_expr(lhs, s);
+                if (rhs) validate_value_expr(rhs, s);
+            }
+            break;
+        
+        case xast::nk::unary_op:
+            // All unary ops are valid in value context
+            {
+                auto operand = xast::c::unary_op::operand(expr);
+                if (operand) validate_value_expr(operand, s);
+            }
+            break;
+        
+        case xast::nk::paren_expr: {
+            auto inner = xast::c::paren_expr::inner(expr);
+            if (inner) validate_value_expr(inner, s);
+            break;
+        }
+        
+        case xast::nk::comma_expr:
+            for (int i = 0; i < xast::c::comma_expr::expr_count(expr); ++i) {
+                auto e = xast::c::comma_expr::expr(expr, i);
+                if (e) validate_value_expr(e, s);
+            }
+            break;
+        
+        // Invalid value expressions (type-only constructs)
+        case xast::nk::struct_:
+        case xast::nk::union_:
+        case xast::nk::tmplinstantiation:
+            DiagnosticHandler::make(diag::id::expected_expression, expr->sloc)
+                .finish();
+            break;
+        
+        default:
+            // Conservatively treat unknown nodes as potentially valid
+            break;
+        }
+    }
+
+    void extract_args(xast::Node *args_expr, std::vector<xast::Node *> &args) {
+        if (!args_expr) return;
+        
+        if (args_expr->kind == xast::nk::comma_expr) {
+            for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                auto arg = xast::c::comma_expr::expr(args_expr, i);
+                if (arg) args.push_back(arg);
+            }
+        } else {
+            args.push_back(args_expr);
+        }
+    }
+};
+
+// TemplateInstantiationCycleDetector: Detects cycles in template definitions
+// This runs BEFORE instantiation to catch recursive template definitions like A!(T) -> B!(T) -> A!(T)
+struct TemplateInstantiationCycleDetector : xast::Visitor<void, Scope *> {
+    std::vector<std::vector<xast::Node *>> cycles;
+
+    void visit_prog(xast::Node *node, Scope *s) override {
+        // Detect cycles in all template declarations
+        detect_cycles_in_scope(s);
+        
+        // Deduplicate cycles - same cycle detected from different starting points
+        deduplicate_template_cycles();
+        
+        // Report deduplicated cycles
+        for (auto &cycle : cycles) {
+            report_template_cycle(cycle);
+        }
+        
+        // Continue visiting children
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s);
+        }
+    }
+    
+    void visit_tmpldecl(xast::Node *node, Scope *s) override {
+        // Visit the inner declaration with template scope
+        if (node->scope) {
+            auto decl = xast::c::tmpldecl::decl(node);
+            if (decl) {
+                dispatch(decl, node->scope);
+            }
+        }
+    }
+
+    void visit_typebind(xast::Node *node, Scope *s) override {
+        // Visit nested scope if present
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope);
+            }
+        }
+    }
+    
+    void detect_cycles_in_scope(Scope *s) {
+        // Collect and sort symbols by their AST allocation order (pointer addresses)
+        // This approximates declaration order since AST nodes are allocated sequentially
+        std::vector<std::pair<std::string, xast::Node *>> ordered_symbols;
+        for (auto &[name, sym] : s->symbols) {
+            if (sym && sym->kind == xast::nk::tmpldecl) {
+                ordered_symbols.push_back({name, sym});
+            }
+        }
+        
+        // Sort by node pointer address to preserve declaration order
+        std::sort(ordered_symbols.begin(), ordered_symbols.end(),
+            [](const auto &a, const auto &b) {
+                return reinterpret_cast<uintptr_t>(a.second) < reinterpret_cast<uintptr_t>(b.second);
+            });
+        
+        // Detect cycles among template declarations in declaration order
+        for (auto &[name, sym] : ordered_symbols) {
+            std::vector<xast::Node *> path;
+            std::unordered_set<xast::Node *> in_path;
+            std::unordered_set<xast::Node *> visited;
+            
+            detect_cycle(sym, path, in_path, visited, s);
+        }
+        
+        // Recursively check nested scopes
+        for (auto &[name, sym] : s->symbols) {
+            if (sym && sym->scope) {
+                detect_cycles_in_scope(sym->scope);
+            }
+        }
+    }
+    
+    bool detect_cycle(xast::Node *start_node,
+                      std::vector<xast::Node *> &path,
+                      std::unordered_set<xast::Node *> &in_path,
+                      std::unordered_set<xast::Node *> &visited,
+                      Scope *scope) {
+        if (visited.count(start_node)) {
+            return false;
+        }
+        
+        if (in_path.count(start_node)) {
+            // Found a cycle!
+            std::vector<xast::Node *> cycle;
+            bool recording = false;
+            for (auto node : path) {
+                if (node == start_node) {
+                    recording = true;
+                }
+                if (recording) {
+                    cycle.push_back(node);
+                }
+            }
+            cycle.push_back(start_node);
+            cycles.push_back(cycle);
+            return true;
+        }
+        
+        path.push_back(start_node);
+        in_path.insert(start_node);
+        
+        // Get template dependencies
+        std::vector<xast::Node *> deps;
+        get_template_dependencies(start_node, deps, scope);
+        
+        for (auto dep : deps) {
+            if (dep) {
+                detect_cycle(dep, path, in_path, visited, scope);
+            }
+        }
+        
+        path.pop_back();
+        in_path.erase(start_node);
+        visited.insert(start_node);
+        
+        return false;
+    }
+    
+    void get_template_dependencies(xast::Node *tmpl_decl, std::vector<xast::Node *> &deps, Scope *scope) {
+        if (!tmpl_decl || tmpl_decl->kind != xast::nk::tmpldecl) return;
+        
+        auto decl = xast::c::tmpldecl::decl(tmpl_decl);
+        if (!decl) return;
+        
+        // Extract template instantiation references from the declaration
+        extract_template_instantiation_refs(decl, deps, scope);
+    }
+    
+    void extract_template_instantiation_refs(xast::Node *node, std::vector<xast::Node *> &deps, Scope *scope) {
+        if (!node) return;
+        
+        if (node->kind == xast::nk::tmplinstantiation) {
+            // Found a template instantiation - extract the template being instantiated
+            auto base = xast::c::tmplinstantiation::base(node);
+            if (base && base->kind == xast::nk::ref && base->ident) {
+                auto sym = find_symbol_in_any_active_scope(base->ident, scope);
+                if (sym && sym->kind == xast::nk::tmpldecl) {
+                    deps.push_back(sym);
+                }
+            }
+        }
+        
+        // Skip recursion through indirection operators (pointers, slices)
+        // Pointers and slices don't create direct type dependencies
+        if (node->kind == xast::nk::unary_op) {
+            if (node->op.kind == op::indirect || node->op.kind == op::slice) {
+                return;  // Don't recurse into pointer/slice operands
+            }
+        }
+        
+        // Recursively check children
+        for (auto edge : node->opedges) {
+            auto child = edge->used();
+            extract_template_instantiation_refs(child, deps, scope);
+        }
+    }
+    
+    void report_template_cycle(const std::vector<xast::Node *> &cycle) {
+        if (cycle.empty()) return;
+        
+        // Build cycle string
+        std::string cycle_str;
+        for (size_t i = 0; i < cycle.size(); ++i) {
+            if (i > 0) cycle_str += "->";
+            if (cycle[i] && cycle[i]->ident) {
+                cycle_str += std::string(*cycle[i]->ident);
+                cycle_str += "!(...)";  // Mark as parameterized template
+            }
+        }
+        
+        // Report error at first node
+        if (cycle[0] && cycle[0]->ident) {
+            DiagnosticHandler::make(diag::id::type_cycle_detected, cycle[0]->sloc)
+                .add(cycle_str)
+                .finish();
+        }
+        
+        // Report notes for each edge in the cycle (except the final wraparound edge)
+        for (size_t i = 0; i < cycle.size() - 1; ++i) {
+            auto from_node = cycle[i];
+            auto to_node = cycle[i + 1];
+            
+            if (!from_node || !from_node->ident || !to_node || !to_node->ident) {
+                continue;
+            }
+            
+            std::string from_name = std::string(*from_node->ident);
+            std::string to_name = std::string(*to_node->ident);
+            
+            // Find the reference location in the template's type expression
+            bool found = false;
+            if (from_node->kind == xast::nk::tmpldecl) {
+                auto decl = xast::c::tmpldecl::decl(from_node);
+                if (decl && decl->kind == xast::nk::typebind && decl->opedges.size() > 0) {
+                    auto type_expr = decl->opedges[0]->used();
+                    // Search for the reference to to_name and report at that location
+                    find_and_report_template_reference_in_cycle(type_expr, to_name, from_name);
+                    found = true;
+                }
+            }
+            
+            // Fallback: report at the declaration if we didn't find the reference
+            if (!found) {
+                DiagnosticHandler::make(diag::id::note_type_requires, from_node->sloc)
+                    .add(from_name + "!(T)")
+                    .add(to_name + "!(T)")
+                    .finish();
+            }
+        }
+    }
+    
+    void find_and_report_template_reference_in_cycle(xast::Node *expr, const std::string &to_name, const std::string &from_name) {
+        if (!expr) return;
+        
+        switch (expr->kind) {
+        case xast::nk::ref: {
+            if (expr->ident && std::string(*expr->ident) == to_name) {
+                // Found the reference to the dependent type
+                DiagnosticHandler::make(diag::id::note_type_requires, expr->sloc)
+                    .add(from_name + "!(T)")
+                    .add(to_name + "!(T)")
+                    .finish();
+                return;  // Found it, stop searching
+            }
+            break;
+        }
+        case xast::nk::tmplinstantiation: {
+            // Check if this instantiation uses the template we're looking for
+            auto base = xast::c::tmplinstantiation::base(expr);
+            if (base && base->ident && std::string(*base->ident) == to_name) {
+                // This is an instantiation of the template we're looking for
+                DiagnosticHandler::make(diag::id::note_type_requires, expr->sloc)
+                    .add(from_name + "!(T)")
+                    .add(to_name + "!(T)")
+                    .finish();
+                return;
+            }
+            // Continue searching in arguments
+            for (auto edge : expr->opedges) {
+                find_and_report_template_reference_in_cycle(edge->used(), to_name, from_name);
+            }
+            break;
+        }
+        case xast::nk::struct_: {
+            // Walk through struct fields
+            for (auto edge : expr->opedges) {
+                auto field = edge->used();
+                if (field && field->kind == xast::nk::field) {
+                    auto type_expr_field = xast::c::field::type_annot(field);
+                    if (type_expr_field) {
+                        find_and_report_template_reference_in_cycle(type_expr_field, to_name, from_name);
+                    }
+                }
+            }
+            break;
+        }
+        default:
+            // Recursively search children
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                find_and_report_template_reference_in_cycle(child, to_name, from_name);
+            }
+            break;
+        }
+    }
+    
+    // Generate a canonical signature for a cycle (handles rotations)
+    std::string get_template_cycle_signature(const std::vector<xast::Node *> &cycle) {
+        if (cycle.empty()) return "";
+        
+        // Extract names from cycle nodes
+        std::vector<std::string> names;
+        for (size_t i = 0; i < cycle.size() - 1; ++i) {  // -1 to skip duplicate end node
+            auto node = cycle[i];
+            if (node && node->ident) {
+                names.push_back(std::string(*node->ident));
+            }
+        }
+        
+        if (names.empty()) return "";
+        
+        // Find the lexicographically smallest rotation to normalize
+        size_t min_idx = 0;
+        for (size_t i = 1; i < names.size(); ++i) {
+            bool names_i_is_smaller = false;
+            for (size_t j = 0; j < names.size(); ++j) {
+                const std::string &a = names[(min_idx + j) % names.size()];
+                const std::string &b = names[(i + j) % names.size()];
+                if (b < a) {
+                    names_i_is_smaller = true;
+                    break;
+                } else if (a < b) {
+                    break;
+                }
+            }
+            if (names_i_is_smaller) {
+                min_idx = i;
+            }
+        }
+        
+        // Build signature from the minimum rotation
+        std::string sig;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) sig += "|";
+            sig += names[(min_idx + i) % names.size()];
+        }
+        return sig;
+    }
+    
+    // Deduplicate cycles - keep only first occurrence of each unique cycle
+    void deduplicate_template_cycles() {
+        std::unordered_set<std::string> seen_signatures;
+        std::vector<std::vector<xast::Node *>> unique_cycles;
+        
+        for (auto &cycle : cycles) {
+            std::string sig = get_template_cycle_signature(cycle);
+            if (sig.empty()) continue;
+            
+            if (seen_signatures.find(sig) == seen_signatures.end()) {
+                seen_signatures.insert(sig);
+                unique_cycles.push_back(cycle);
+            }
+        }
+        
+        cycles = unique_cycles;
+    }
+
+};
+
+// TemplateInstantiator: Creates concrete types from template instantiations
+// Stores instantiated templates in Scope's template_instantiations cache instead of AST
+struct TemplateInstantiator : xast::Visitor<void, Scope *> {
+    // Map from (template_decl, substitution) to concrete typebind
+    std::unordered_map<xast::Node *, xast::Node *> instantiation_cache;
+    // Maximum template instantiation depth to prevent infinite recursion
+    static const int MAX_TEMPLATE_DEPTH = 256;
+    
+    // Find the global scope by walking up the scope chain
+    Scope *get_global_scope(Scope *s) {
+        if (!s) return nullptr;
+        while (s->parent) {
+            s = s->parent;
+        }
+        return s;
+    }
+    
+    void visit_prog(xast::Node *node, Scope *s) override {
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s);
+        }
+    }
+
+    void visit_typebind(xast::Node *node, Scope *s) override {
+        // Process type expression to instantiate templates
+        if (node->opedges.size() > 0) {
+            auto type_expr = node->opedges[0]->used();
+            if (type_expr) {
+                instantiate_templates_in_expr(type_expr, s, 0);
+            }
+        }
+        
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope);
+            }
+        }
+    }
+    
+    void visit_valbind(xast::Node *node, Scope *s) override {
+        // Process valbind type annotation to instantiate templates
+        auto type_annot = xast::c::valbind::type_annot(node);
+        if (type_annot) {
+            instantiate_templates_in_expr(type_annot, s, 0);
+        }
+        
+        // Process definition if present
+        auto def = xast::c::valbind::def(node);
+        if (def) {
+            instantiate_templates_in_expr(def, s, 0);
+        }
+    }
+    
+    void visit_tmpldecl(xast::Node *node, Scope *s) override {
+        if (node->scope) {
+            auto decl = xast::c::tmpldecl::decl(node);
+            if (decl) {
+                dispatch(decl, node->scope);
+            }
+        }
+    }
+
+    void visit_func(xast::Node *node, Scope *s) override {
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope);
+            }
+        }
+    }
+    
+    void visit_block(xast::Node *node, Scope *s) override {
+        // Process all statements in the block
+        for (int i = 0; i < xast::c::block::stmt_count(node); ++i) {
+            auto stmt = xast::c::block::stmt(node, i);
+            if (stmt) {
+                dispatch(stmt, s);
+            }
+        }
+    }
+    
+    // Recursively instantiate templates in type expressions
+    void instantiate_templates_in_expr(xast::Node *expr, Scope *s, int depth = 0) {
+        if (!expr || depth >= MAX_TEMPLATE_DEPTH) return;
+        
+        switch (expr->kind) {
+        case xast::nk::struct_:
+        case xast::nk::union_: {
+            // Recursively process fields/variants
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                if (!child) continue;
+                
+                if (child->kind == xast::nk::field) {
+                    auto type_annot = xast::c::field::type_annot(child);
+                    if (type_annot) {
+                        instantiate_templates_in_expr(type_annot, s, depth);
+                    }
+                } else if (child->kind == xast::nk::variant) {
+                    for (auto var_edge : child->opedges) {
+                        auto var_child = var_edge->used();
+                        instantiate_templates_in_expr(var_child, s, depth);
+                    }
+                }
+            }
+            break;
+        }
+        case xast::nk::unary_op: {
+            auto operand = xast::c::unary_op::operand(expr);
+            if (operand) {
+                instantiate_templates_in_expr(operand, s, depth);
+            }
+            break;
+        }
+        case xast::nk::tmplinstantiation: {
+            // Create a concrete type for this instantiation and cache it
+            instantiate_template_node(expr, s, depth + 1);
+            break;
+        }
+        case xast::nk::comma_expr: {
+            for (int i = 0; i < xast::c::comma_expr::expr_count(expr); ++i) {
+                auto e = xast::c::comma_expr::expr(expr, i);
+                if (e) instantiate_templates_in_expr(e, s, depth);
+            }
+            break;
+        }
+        default:
+            // Recursively process children
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                instantiate_templates_in_expr(child, s, depth);
+            }
+            break;
+        }
+    }
+    
+    // Create or retrieve concrete type for a template instantiation
+    // Stores the result in Scope's template_instantiations cache, does NOT modify AST
+    xast::Node *instantiate_template_node(xast::Node *tmpl_inst, Scope *s, int depth = 0) {
+        assert(tmpl_inst->kind == xast::nk::tmplinstantiation);
+        
+        auto base = xast::c::tmplinstantiation::base(tmpl_inst);
+        assert(base && base->kind == xast::nk::ref && base->ident);
+        
+        auto sym = find_symbol_in_any_active_scope(base->ident, s);
+        if (!sym) {
+            DiagnosticHandler::make(diag::id::ref_undeclared_symbol, base->sloc)
+                .add(*base->ident)
+                .finish();
+            return nullptr;
+        }
+        
+        // Find the template declaration
+        xast::Node *tmpl_decl = nullptr;
+        if (sym->kind == xast::nk::tmpldecl) {
+            tmpl_decl = sym;
+        } else {
+            DiagnosticHandler::make(diag::id::type_is_not_templated, base->sloc)
+                .add(std::string(*base->ident))
+                .finish();
+            return nullptr;
+        }
+        
+        // Extract template arguments
+        std::vector<xast::Node *> args;
+        auto args_expr = xast::c::tmplinstantiation::args(tmpl_inst);
+        if (args_expr) {
+            extract_args(args_expr, args);
+        }
+        
+        // Check cache first
+        std::string cache_key = make_template_cache_key(tmpl_decl, args);
+        
+        // Always use global scope for caching
+        Scope *global_scope = get_global_scope(s);
+        
+        auto it = global_scope->template_instantiations.find(cache_key);
+        if (it != global_scope->template_instantiations.end()) {
+            return it->second;  // Already instantiated
+        }
+        
+        // Create concrete instantiated template by substituting arguments
+        auto instantiated_tmpl = create_concrete_typebind(tmpl_decl, args, s, tmpl_inst, depth);
+        
+        if (!instantiated_tmpl) {
+            return nullptr;  // Error already reported
+        }
+        
+        // Store in global scope cache
+        global_scope->template_instantiations[cache_key] = instantiated_tmpl;
+        
+        return instantiated_tmpl;
+    }
+    
+    void extract_args(xast::Node *args_expr, std::vector<xast::Node *> &args) {
+        if (!args_expr) return;
+        
+        if (args_expr->kind == xast::nk::comma_expr) {
+            for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                auto arg = xast::c::comma_expr::expr(args_expr, i);
+                if (arg) args.push_back(arg);
+            }
+        } else {
+            args.push_back(args_expr);
+        }
+    }
+    
+    // Create a concrete instantiated template node by substituting template parameters with arguments
+    // This creates a NEW node but does NOT insert it into the AST
+    // instantiation_site: the tmplinstantiation node that triggered this instantiation (for diagnostics)
+    xast::Node *create_concrete_typebind(xast::Node *tmpl_decl, std::vector<xast::Node *> &args, Scope *s, xast::Node *instantiation_site = nullptr, int depth = 0) {
+        assert(tmpl_decl->kind == xast::nk::tmpldecl);
+        
+        auto decl = xast::c::tmpldecl::decl(tmpl_decl);
+        assert(decl && decl->kind == xast::nk::typebind);
+        
+        // Create a mapping from parameter names to argument expressions
+        std::unordered_map<std::string, xast::Node *> param_map;
+        for (size_t i = 0; i < args.size() && i < xast::c::tmpldecl::param_count(tmpl_decl); ++i) {
+            auto param = xast::c::tmpldecl::param(tmpl_decl, i);
+            if (param && param->ident) {
+                param_map[std::string(*param->ident)] = args[i];
+            }
+        }
+        
+        // Clone the type definition with parameters substituted
+        auto substituted_decl = substitute_expr_recursive(decl, param_map);
+        
+        // Create instantiatedtmpl node to hold the substituted decl and args
+        // Use default constructor and set kind manually to avoid pre-filled null children
+        auto instantiated = new xast::Node();
+        instantiated->kind = xast::nk::instantiatedtmpl;
+        instantiated->add(substituted_decl);  // Child 0: the substituted decl
+        
+        // Mark the cloned decl so we can trace it back to this instantiation
+        substituted_decl->instantiation_parent = instantiated;
+        
+        // Add substituted arguments as variadic children
+        for (auto arg : args) {
+            auto substituted_arg = substitute_expr_recursive(arg, param_map);
+            instantiated->add(substituted_arg);
+        }
+        
+        // Store metadata for diagnostics
+        instantiated->tmpl_origin = tmpl_decl;
+        instantiated->tmpl_instantiation_site = instantiation_site;
+        
+        // The type will be resolved in TypeGraphResolver
+        return instantiated;
+    }
+    
+    // Substitute template parameters in a type expression
+    xast::Node *substitute_in_expr(xast::Node *expr, xast::Node *tmpl_decl, std::vector<xast::Node *> &args) {
+        if (!expr) return nullptr;
+        
+        // Create a mapping from parameter names to argument expressions
+        std::unordered_map<std::string, xast::Node *> param_map;
+        for (size_t i = 0; i < args.size() && i < xast::c::tmpldecl::param_count(tmpl_decl); ++i) {
+            auto param = xast::c::tmpldecl::param(tmpl_decl, i);
+            if (param && param->ident) {
+                param_map[std::string(*param->ident)] = args[i];
+            }
+        }
+        
+        return substitute_expr_recursive(expr, param_map);
+    }
+    
+    xast::Node *substitute_expr_recursive(xast::Node *expr, const std::unordered_map<std::string, xast::Node *> &param_map) {
+        if (!expr) return nullptr;
+        
+        // Check if this is a reference to a template parameter
+        if (expr->kind == xast::nk::ref && expr->ident) {
+            auto it = param_map.find(std::string(*expr->ident));
+            if (it != param_map.end()) {
+                // Return the argument (cloning if necessary for proper substitution)
+                return it->second;  // For now, reuse the argument node
+            }
+        }
+        
+        // Clone the node WITHOUT using the constructor that pre-fills null children
+        auto result = new xast::Node();
+        result->kind = expr->kind;
+        result->ident = expr->ident;
+        result->op = expr->op;
+        result->sloc = expr->sloc;
+        
+        // Clone and recursively substitute all children
+        for (auto edge : expr->opedges) {
+            auto child = edge->used();
+            auto substituted = substitute_expr_recursive(child, param_map);
+            result->add(substituted);
+        }
+        
+        return result;
+    }
+};
+
+// ASTTransformationPass: Replaces tmplinstantiation nodes with instantiatedtmpl nodes from cache
+// and removes tmpldecl nodes from the main AST
+struct ASTTransformationPass : xast::Visitor<void, Scope *> {
+    void visit_prog(xast::Node *node, Scope *s) override {
+        // Replace tmpldecl nodes with their instantiated versions
+        replace_template_declarations_with_instantiations(node, s);
+        
+        // Continue visiting
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s);
+        }
+    }
+    
+    void visit_typebind(xast::Node *node, Scope *s) override {
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope);
+            }
+        }
+    }
+    
+    void visit_tmpldecl(xast::Node *node, Scope *s) override {
+        // Skip visiting inside tmpldecl - it will be replaced
+    }
+
+    void visit_tmplinstantiations(xast::Node *node, Scope *s) override {
+        // Visit all instantiatedtmpl children
+        for (int i = 0; i < xast::c::tmplinstantiations::instantiation_count(node); ++i) {
+            auto inst = xast::c::tmplinstantiations::instantiation(node, i);
+            if (inst) {
+                dispatch(inst, s);
+            }
+        }
+    }
+
+    void visit_func(xast::Node *node, Scope *s) override {
+        if (node->scope) {
+            for (auto e : node->opedges) {
+                dispatch(e->used(), node->scope);
+            }
+        }
+    }
+    
+    // Replace each tmpldecl in prog's children with tmplinstantiations node containing all instantiated versions
+    void replace_template_declarations_with_instantiations(xast::Node *prog_node, Scope *s) {
+        if (!prog_node || prog_node->kind != xast::nk::prog) return;
+        
+        // Replace tmpldecl edges with tmplinstantiations nodes
+        for (auto edge : prog_node->opedges) {
+            auto child = edge->used();
+            if (child && child->kind == xast::nk::tmpldecl) {
+                // Find all instantiations of this template in the cache
+                std::vector<xast::Node *> instantiations = find_instantiations_for_template(child, s);
+                
+                if (!instantiations.empty()) {
+                    // Create a tmplinstantiations node to hold all instantiatedtmpl nodes
+                    auto tmpl_insts = new xast::Node(xast::nk::tmplinstantiations);
+                    for (auto inst : instantiations) {
+                        tmpl_insts->add(inst);
+                    }
+                    
+                    // Replace the tmpldecl with tmplinstantiations using the edge
+                    edge->set(tmpl_insts);
+                }
+            }
+        }
+    }
+    
+    // Find all instantiations of a template in the cache that match this tmpldecl
+    std::vector<xast::Node *> find_instantiations_for_template(xast::Node *tmpl_decl, Scope *s) {
+        std::vector<xast::Node *> result;
+        
+        if (!tmpl_decl->ident) return result;
+        std::string tmpl_name = std::string(*tmpl_decl->ident);
+        
+        // Iterate through cache entries looking for ones that start with this template's name
+        for (auto &[cache_key, instantiated_node] : s->template_instantiations) {
+            // Cache key format: "TemplateName:Arg1:Arg2:..."
+            if (cache_key.find(tmpl_name) == 0 && 
+                (cache_key.size() == tmpl_name.size() || cache_key[tmpl_name.size()] == ':')) {
+                result.push_back(instantiated_node);
+            }
+        }
+        
+        return result;
+    }
+};
+
+struct TypeGraphResolver : xast::Visitor<void, Scope *> {
+    std::vector<std::vector<xast::Node *>> cycles;
+    std::unordered_set<std::string> reported_cycle_signatures;  // To deduplicate cycles
+
+    // Resolves types for all type declarations in a scope
+    void resolve_types_in_scope(Scope *s) {
+        // First pass: resolve all original typebinds and tmpldecls with typebind children
+        for (auto &[name, sym] : s->symbols) {
+            if (!sym || !sym->ident) continue;
+
+            if (sym->kind == xast::nk::typebind && !sym->type) {
+                // Non-templated type declaration
+                // Pass sym itself as decl_parent since it has the ident
+                sym->type = resolve_typebind(sym, s, sym);
+            } else if (sym->kind == xast::nk::tmpldecl) {
+                // Templated type declaration - get the inner typebind and resolve it
+                auto decl = xast::c::tmpldecl::decl(sym);
+                if (decl && decl->kind == xast::nk::typebind && !decl->type) {
+                    // Pass sym (the tmpldecl which has the type name) as decl_parent
+                    decl->type = resolve_typebind(decl, decl->scope ? decl->scope : s, sym);
+                    // Also set the tmpldecl's type to match
+                    sym->type = decl->type;
+                }
+            }
+        }
+        
+        // Second pass: resolve instantiated templates in the cache
+        // (now that original typebinds have their types set)
+        for (auto &[cache_key, instantiated] : s->template_instantiations) {
+            if (instantiated && instantiated->kind == xast::nk::instantiatedtmpl && !instantiated->type) {
+                // Get the substituted decl
+                auto decl = xast::c::instantiatedtmpl::decl(instantiated);
+                if (decl && decl->kind == xast::nk::typebind && !decl->type) {
+                    // Pass tmpl_origin (the original tmpldecl) as decl_parent so struct/union names are properly resolved
+                    decl->type = resolve_typebind(decl, s, instantiated->tmpl_origin);
+                    
+                    // For instantiated templates, wrap the concrete struct/union type in an InstantiatedType
+                    // that preserves the template name and arguments
+                    if (decl->type && instantiated->tmpl_origin && instantiated->tmpl_origin->ident) {
+                        std::string template_name = std::string(*instantiated->tmpl_origin->ident);
+                        std::vector<Type *> template_args;
+                        
+                        // Extract the types of the template arguments from the instantiated node
+                        // Arguments should have been substituted, but might not be typed yet
+                        // We'll extract type information by stringifying the argument nodes
+                        // to build the InstantiatedType
+                        size_t total_children = xast::c::count(instantiated);
+                        for (size_t i = 1; i < total_children; ++i) {
+                            auto arg_node = xast::c::at(instantiated, i);
+                            if (!arg_node) {
+                                template_args.push_back(ErrorType::get());
+                                continue;
+                            }
+                            
+                            // Try to get type from the node if already set
+                            // Otherwise, for substituted arguments that are simple refs,
+                            // we can look them up directly
+                            if (arg_node->type) {
+                                template_args.push_back(arg_node->type);
+                            } else if (arg_node->kind == xast::nk::ref && arg_node->ident) {
+                                // Simple type reference like "i32" or "Node"
+                                // Look it up in the original scope
+                                auto arg_sym = find_symbol_in_any_active_scope(arg_node->ident, s);
+                                if (arg_sym && arg_sym->type) {
+                                    template_args.push_back(arg_sym->type);
+                                } else {
+                                    template_args.push_back(ErrorType::get());
+                                }
+                            } else {
+                                // Complex type expression - for now use error type
+                                // In a full implementation, we'd need to typify this properly
+                                template_args.push_back(ErrorType::get());
+                            }
+                        }
+                        
+                        // Create the InstantiatedType
+                        instantiated->type = new InstantiatedType(template_name, template_args, instantiated);
+                    } else {
+                        instantiated->type = decl->type;
+                    }
+                }
+            }
+        }
+    }
+
+        Type *resolve_typebind(xast::Node *typebind_node, Scope *parent_scope, xast::Node *decl_parent = nullptr) {
+        // For typebind nodes, resolve the RHS type expression
+        assert(typebind_node->kind == xast::nk::typebind);
+        assert(typebind_node->opedges.size() > 0);
+
+        auto type_expr = typebind_node->opedges[0]->used();
+        // Use parent scope for resolving types
+        // But if the typebind has its own scope (for templates), use that instead
+        Scope *resolve_scope = typebind_node->scope ? typebind_node->scope : parent_scope;
+        
+        // For instantiatedtmpl decls (which have already had template substitutions applied),
+        // we don't check for unresolved references - just resolve them.
+        // Check if this typebind is inside an instantiatedtmpl
+        bool is_instantiated_decl = typebind_node->instantiation_parent && 
+                                   typebind_node->instantiation_parent->kind == xast::nk::instantiatedtmpl;
+        
+        // Check if type expression has any unresolved references
+        // If so, skip resolution to avoid errors on forward references
+        // (unless this is an instantiated template decl, which should always be resolvable)
+        if (!is_instantiated_decl && has_unresolved_references(type_expr, resolve_scope)) {
+            return nullptr;  // Will be resolved later if needed
+        }
+        
+        // Pass the decl_parent so struct/union types can get the type name
+        // decl_parent should be either the typebind itself (for non-templated) or tmpldecl (for templated)
+        return typify(type_expr, resolve_scope, decl_parent ? decl_parent : typebind_node);
+    }
+    
+    bool has_unresolved_references(xast::Node *expr, Scope *s) {
+        if (!expr) return false;
+        
+        if (expr->kind == xast::nk::ref && expr->ident) {
+            auto sym = find_symbol_in_any_active_scope(expr->ident, s);
+            if (!sym || !sym->type) {
+                return true;  // Unresolved reference
+            }
+        }
+        
+        // For tmplinstantiation nodes, don't check sym->type since the referenced
+        // template might not have its type set yet. Instead, just check that the
+        // template declaration exists.
+        if (expr->kind == xast::nk::tmplinstantiation) {
+            auto base = xast::c::tmplinstantiation::base(expr);
+            if (!base || base->kind != xast::nk::ref || !base->ident) {
+                return true;
+            }
+            auto sym = find_symbol_in_any_active_scope(base->ident, s);
+            if (!sym) {
+                return true;
+            }
+            // Found the template, that's enough - don't check sym->type
+        }
+        
+        // Recursively check children
+        for (auto edge : expr->opedges) {
+            auto child = edge->used();
+            if (has_unresolved_references(child, s)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // Get all type dependencies from an AST node (before type resolution)
+    void extract_type_references_from_ast(xast::Node *expr, std::vector<xast::Node *> &refs) {
+        if (!expr) return;
+
+        switch (expr->kind) {
+        case xast::nk::ref: {
+            // Direct reference to a type
+            if (expr->ident) {
+                // We'll look up the actual node later
+                refs.push_back(expr);
+            }
+            break;
+        }
+        case xast::nk::struct_: {
+            // Struct has fields
+            for (auto edge : expr->opedges) {
+                auto field = edge->used();
+                if (field && field->kind == xast::nk::field) {
+                    auto type_expr = xast::c::field::type_annot(field);
+                    assert(type_expr);
+                    extract_type_references_from_ast(type_expr, refs);
+                }
+            }
+            break;
+        }
+        case xast::nk::union_: {
+            // Union has variants
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                if (!child) continue;
+                
+                if (child->kind == xast::nk::variant) {
+                    // Variant node with optional type (e.g., One(Inner) has ref 'Inner' as child)
+                    // Recursively extract refs from variant's operands
+                    for (auto var_edge : child->opedges) {
+                        auto var_child = var_edge->used();
+                        extract_type_references_from_ast(var_child, refs);
+                    }
+                } else if (child->kind == xast::nk::field) {
+                    // Field in union (for struct-style unions)
+                    auto type_expr = xast::c::field::type_annot(child);
+                    if (type_expr) {
+                        extract_type_references_from_ast(type_expr, refs);
+                    }
+                }
+            }
+            break;
+        }
+        case xast::nk::unary_op: {
+            // Pointer or array type
+            // IMPORTANT: References through pointers or slices are NOT structural dependencies
+            // because pointers and slices only need the type to be declared, not its layout.
+            // Size of *T or [T] is constant regardless of T's size.
+            auto op = expr->op.kind;
+            if (op == op::indirect || op == op::slice) {
+                // *T and [T] do not depend on T's layout, skip them
+                break;
+            }
+            // Arrays and other unary ops still need to extract references
+            auto operand = xast::c::unary_op::operand(expr);
+            extract_type_references_from_ast(operand, refs);
+            break;
+        }
+        case xast::nk::tmplinstantiation: {
+            // Template instantiation - do NOT extract the base template reference
+            // instead, we'll handle this in extract_instantiations_from_ast
+            // which will look up the concrete instantiated type from the cache
+            break;
+        }
+        case xast::nk::instantiatedtmpl: {
+            // Instantiated template - extract references from the substituted decl
+            auto decl = xast::c::instantiatedtmpl::decl(expr);
+            if (decl) {
+                extract_type_references_from_ast(decl, refs);
+            }
+            break;
+        }
+        default:
+            // Recursively process all operand edges
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                extract_type_references_from_ast(child, refs);
+            }
+            break;
+        }
+    }
+
+    // Get all types referenced by a given typebind node
+    void get_typebind_dependencies(xast::Node *typebind_node, std::vector<xast::Node *> &deps, 
+                                   Scope *s) {
+        assert(typebind_node->kind == xast::nk::typebind);
+        assert(typebind_node->opedges.size() > 0);
+
+        auto type_expr = typebind_node->opedges[0]->used();
+        
+        // Extract all template instantiations and ref nodes from the type expression
+        // For template instantiations, we need to depend on the actual instantiated concrete type
+        std::vector<xast::Node *> refs;
+        std::vector<xast::Node *> instantiations;
+        extract_type_references_from_ast(type_expr, refs);
+        extract_instantiations_from_ast(type_expr, instantiations, s);
+
+        // Convert ref nodes to actual type declarations (typebind or tmpldecl)
+        for (auto ref_node : refs) {
+            if (ref_node && ref_node->ident) {
+                auto sym = find_symbol_in_any_active_scope(ref_node->ident, s);
+                if (!sym) continue;
+                
+                // Handle both regular type bindings and template declarations
+                xast::Node *type_decl = nullptr;
+                if (sym->kind == xast::nk::typebind) {
+                    type_decl = sym;
+                } else if (sym->kind == xast::nk::tmpldecl) {
+                    // For template declarations, get the inner typebind
+                    type_decl = xast::c::tmpldecl::decl(sym);
+                    if (!type_decl || type_decl->kind != xast::nk::typebind) {
+                        continue;  // Skip non-type templates (valbind, funcbind)
+                    }
+                }
+                
+                if (type_decl) {
+                    deps.push_back(type_decl);
+                }
+            }
+        }
+        
+        // For template instantiations, depend on the instantiated concrete type (the substituted decl)
+        for (auto inst : instantiations) {
+            if (inst && inst->kind == xast::nk::instantiatedtmpl) {
+                auto decl = xast::c::instantiatedtmpl::decl(inst);
+                if (decl && decl->kind == xast::nk::typebind) {
+                    deps.push_back(decl);
+                }
+            }
+        }
+    }
+    
+    // Extract instantiatedtmpl nodes from an AST expression  
+    void extract_instantiations_from_ast(xast::Node *expr, std::vector<xast::Node *> &insts, Scope *s) {
+        if (!expr) return;
+        
+        if (expr->kind == xast::nk::tmplinstantiation) {
+            // Look up this instantiation in the cache
+            auto instantiated = resolve_template_instantiation(expr, s);
+            if (instantiated && instantiated->kind == xast::nk::instantiatedtmpl) {
+                insts.push_back(instantiated);
+            }
+        } else if (expr->kind == xast::nk::instantiatedtmpl) {
+            insts.push_back(expr);
+        } else if (expr->kind == xast::nk::unary_op) {
+            // Skip recursion through pointers and slices
+            // References through pointers/slices don't create type dependencies
+            auto op = expr->op.kind;
+            if (op == op::indirect || op == op::slice) {
+                return;  // Don't recurse into pointer/slice operands
+            }
+            // Recurse into other unary ops
+            auto operand = xast::c::unary_op::operand(expr);
+            extract_instantiations_from_ast(operand, insts, s);
+        } else {
+            // Recurse into children
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                extract_instantiations_from_ast(child, insts, s);
+            }
+        }
+    }
+    
+    // Resolve a tmplinstantiation node to its cached instantiatedtmpl node
+    xast::Node *resolve_template_instantiation(xast::Node *tmpl_inst, Scope *s) {
+        if (tmpl_inst->kind != xast::nk::tmplinstantiation) return nullptr;
+        
+        auto base = xast::c::tmplinstantiation::base(tmpl_inst);
+        if (!base || base->kind != xast::nk::ref || !base->ident) return nullptr;
+        
+        auto sym = find_symbol_in_any_active_scope(base->ident, s);
+        if (!sym || sym->kind != xast::nk::tmpldecl) return nullptr;
+        
+        // Extract arguments and generate cache key
+        std::vector<xast::Node *> args;
+        auto args_expr = xast::c::tmplinstantiation::args(tmpl_inst);
+        if (args_expr) {
+            if (args_expr->kind == xast::nk::comma_expr) {
+                for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                    auto arg = xast::c::comma_expr::expr(args_expr, i);
+                    if (arg) args.push_back(arg);
+                }
+            } else {
+                args.push_back(args_expr);
+            }
+        }
+        
+        std::string cache_key = make_template_cache_key((xast::Node *)sym, args);
+        
+        // Look up in cache - traverse all scopes from current to root
+        Scope *curr = s;
+        while (curr) {
+            auto it = curr->template_instantiations.find(cache_key);
+            if (it != curr->template_instantiations.end()) {
+                return it->second;
+            }
+            curr = curr->parent;
+        }
+        
+        return nullptr;
+    }
+    
+    // Extract template arguments from an expression (for template instantiations)
+    // Detect cycles using DFS - uses in_path to detect cycles, no global visited needed
+    bool detect_cycle(xast::Node *start_node, 
+                      std::vector<xast::Node *> &path,
+                      std::unordered_set<xast::Node *> &in_path,
+                      std::unordered_set<xast::Node *> &visited,  // unused, kept for signature
+                      Scope *base_scope,
+                      int depth = 0) {
+        const int MAX_DEPTH = 100;  // Prevent infinite recursion
+        
+        // Depth limit to prevent stack overflow on deep type graphs
+        if (depth > MAX_DEPTH) {
+            return false;
+        }
+        
+        // Check if this node is already on the current path (cycle detected!)
+        if (in_path.count(start_node)) {
+            // Found a cycle! Record it
+            std::vector<xast::Node *> cycle;
+            bool recording = false;
+            for (auto node : path) {
+                if (node == start_node) {
+                    recording = true;
+                }
+                if (recording) {
+                    cycle.push_back(node);
+                }
+            }
+            cycle.push_back(start_node);  // Complete the cycle
+            cycles.push_back(cycle);
+            return true;
+        }
+
+        // Add to current path
+        path.push_back(start_node);
+        in_path.insert(start_node);
+
+        // Get type dependencies and recurse
+        std::vector<xast::Node *> deps;
+        get_typebind_dependencies(start_node, deps, base_scope);
+
+        for (auto dep_node : deps) {
+            if (dep_node) {
+                detect_cycle(dep_node, path, in_path, visited, base_scope, depth + 1);
+            }
+        }
+
+        // Backtrack: remove from current path
+        path.pop_back();
+        in_path.erase(start_node);
+
+        return false;
+    }
+
+    void detect_cycles_in_scope(Scope *s, xast::Node *prog_root) {
+        // Detect cycles in this scope's symbols (both typebind and tmpldecl)
+        for (auto &[name, sym] : s->symbols) {
+            if (!sym) {
+                continue;
+            }
+            
+            // Handle both regular type bindings and template declarations
+            xast::Node *type_node = nullptr;
+            if (sym->kind == xast::nk::typebind) {
+                type_node = sym;
+            } else if (sym->kind == xast::nk::tmpldecl) {
+                // For template declarations, get the inner declaration (could be typebind, valbind, funcbind)
+                auto decl_node = xast::c::tmpldecl::decl(sym);
+                if (decl_node && decl_node->kind == xast::nk::typebind) {
+                    type_node = decl_node;
+                }
+                // Note: valbind and funcbind cycles are not currently detected
+                // as they don't have type dependencies like typebind does
+            } else {
+                continue;
+            }
+            
+            if (type_node) {
+                // Check for simple cycles - FRESH visited set for each starting node
+                std::vector<xast::Node *> path;
+                std::unordered_set<xast::Node *> in_path;
+                std::unordered_set<xast::Node *> visited;  // FRESH set per starting node
+                // Use the typebind's own scope if it has one, otherwise use the passed scope
+                Scope *sym_scope = (type_node->scope) ? type_node->scope : s;
+                detect_cycle(type_node, path, in_path, visited, sym_scope, 0);
+            }
+        }
+        
+        // Also detect cycles in instantiated templates in the cache
+        for (auto &[cache_key, instantiated] : s->template_instantiations) {
+            if (instantiated && instantiated->kind == xast::nk::instantiatedtmpl) {
+                // Get the substituted decl and check for cycles
+                auto decl = xast::c::instantiatedtmpl::decl(instantiated);
+                if (decl && decl->kind == xast::nk::typebind) {
+                    std::vector<xast::Node *> path;
+                    std::unordered_set<xast::Node *> in_path;
+                    std::unordered_set<xast::Node *> visited;  // FRESH set per starting node
+                    Scope *decl_scope = (decl->scope) ? decl->scope : s;
+                    detect_cycle(decl, path, in_path, visited, decl_scope, 0);
+                }
+            }
+        }
+
+        // Recursively detect cycles in nested scopes (from where-blocks, function definitions, etc.)
+        // Any symbol that has a scope might contain type declarations
+        for (auto &[name, sym] : s->symbols) {
+            if (sym && sym->scope) {
+                detect_cycles_in_scope(sym->scope, prog_root);
+            }
+        }
+    }
+
+    void visit_prog(xast::Node *node, Scope *s) override {
+        // First pass: detect cycles in all scopes (BEFORE type resolution)
+        // This must happen first so we detect cycles regardless of forward references
+        detect_cycles_in_scope(s, node);
+
+        // Normalize cycles to start from the earliest node in each cycle
+        for (auto &cycle : cycles) {
+            normalize_cycle_order(cycle, node);
+        }
+
+        // Deduplicate cycles (same cycle detected from different nodes)
+        deduplicate_cycles();
+
+        // Sort cycles by their starting node's AST position
+        sort_cycles_by_ast_order(node);
+
+        // Report cycles (now in AST order)
+        // Note: Template cycles are already reported by TemplateInstantiationCycleDetector
+        // We only report new cycles found here (concrete types and their instantiations)
+        for (auto &cycle : cycles) {
+            auto sig = get_cycle_signature(cycle);
+            if (reported_cycle_signatures.find(sig) == reported_cycle_signatures.end()) {
+                reported_cycle_signatures.insert(sig);
+                report_cycle(cycle, s);
+            }
+        }
+
+        // Second pass: resolve all types in the global scope (skip unresolved ones)
+        resolve_types_in_scope(s);
+
+        // Continue visiting children
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s);
+        }
+    }
+
+    void visit_tmplinstantiations(xast::Node *node, Scope *s) override {
+        // Visit all instantiatedtmpl children
+        for (int i = 0; i < xast::c::tmplinstantiations::instantiation_count(node); ++i) {
+            auto inst = xast::c::tmplinstantiations::instantiation(node, i);
+            if (inst) {
+                dispatch(inst, s);
+            }
+        }
+    }
+
+    void sort_cycles_by_ast_order(xast::Node *prog_node) {
+        std::sort(cycles.begin(), cycles.end(), 
+            [this, prog_node](const std::vector<xast::Node *> &a, const std::vector<xast::Node *> &b) {
+                if (!a.empty() && !b.empty()) {
+                    return this->node_appears_earlier(a[0], b[0], prog_node);
+                }
+                return false;
+            });
+    }
+
+    // Generate a canonical signature for a cycle to detect duplicates
+    // Normalizes the cycle so that rotations of the same cycle have the same signature
+    std::string get_cycle_signature(const std::vector<xast::Node *> &cycle) {
+        if (cycle.empty()) return "";
+        
+        // Create a signature from node names/identifiers using qualified names when possible
+        // To handle rotations, find the minimum lexicographic rotation
+        std::vector<std::string> names;
+        for (size_t i = 0; i < cycle.size() - 1; ++i) {  // -1 to skip duplicate end node
+            auto node = cycle[i];
+            std::string name;
+            
+            // Use qualified name if available
+            if (node && node->ident && node->scope && node->scope->parent) {
+                // Build qualified name from parent scopes (skip node's own scope)
+                name = std::string(*node->ident);
+                std::vector<std::string> qualifiers;
+                Scope *curr = node->scope->parent;  // Start from parent
+                
+                while (curr && curr->parent) {  // Stop before global scope
+                    if (!curr->namespace_name.empty()) {
+                        qualifiers.push_back(curr->namespace_name);
+                    }
+                    curr = curr->parent;
+                }
+                
+                // Build qualified name from outer to inner
+                if (!qualifiers.empty()) {
+                    std::string result;
+                    for (int j = qualifiers.size() - 1; j >= 0; --j) {
+                        if (!result.empty()) result += ".";
+                        result += qualifiers[j];
+                    }
+                    result += ".";
+                    result += name;
+                    name = result;
+                }
+            } else if (node && node->ident) {
+                name = std::string(*node->ident);
+            } else {
+                name = "node_" + std::to_string(reinterpret_cast<uintptr_t>(node));
+            }
+            
+            names.push_back(name);
+        }
+        
+        if (names.empty()) return "";
+        
+        // Find the lexicographically smallest rotation
+        size_t min_idx = 0;
+        for (size_t i = 1; i < names.size(); ++i) {
+            bool names_i_is_smaller = false;
+            for (size_t j = 0; j < names.size(); ++j) {
+                const std::string &a = names[(min_idx + j) % names.size()];
+                const std::string &b = names[(i + j) % names.size()];
+                if (b < a) {
+                    names_i_is_smaller = true;
+                    break;
+                } else if (a < b) {
+                    break;
+                }
+            }
+            if (names_i_is_smaller) {
+                min_idx = i;
+            }
+        }
+        
+        // Build signature from the minimum rotation
+        std::string sig;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) sig += "|";
+            sig += names[(min_idx + i) % names.size()];
+        }
+        return sig;
+    }
+
+    // Deduplicate cycles that are the same but detected from different starting points
+    void deduplicate_cycles() {
+        std::vector<std::vector<xast::Node *>> unique_cycles;
+        std::unordered_set<std::string> seen_sigs;  // Local dedup set, don't mark as reported yet
+        for (auto &cycle : cycles) {
+            std::string sig = get_cycle_signature(cycle);
+            if (seen_sigs.find(sig) == seen_sigs.end()) {
+                seen_sigs.insert(sig);
+                unique_cycles.push_back(cycle);
+            }
+        }
+        cycles = unique_cycles;
+    }
+    
+    void normalize_cycle_order(std::vector<xast::Node *> &cycle, xast::Node *prog_node) {
+        if (cycle.size() <= 1) return;
+        
+        // Find the index of the earliest node in the cycle (in AST order)
+        int earliest_idx = 0;
+        for (size_t i = 1; i < cycle.size() - 1; ++i) {  // -1 because last is duplicate of first
+            if (node_appears_earlier(cycle[i], cycle[earliest_idx], prog_node)) {
+                earliest_idx = i;
+            }
+        }
+        
+        // Rotate cycle to start from earliest node
+        if (earliest_idx != 0) {
+            std::vector<xast::Node *> normalized;
+            for (size_t i = 0; i < cycle.size() - 1; ++i) {
+                normalized.push_back(cycle[(earliest_idx + i) % (cycle.size() - 1)]);
+            }
+            normalized.push_back(normalized[0]);  // Complete the cycle
+            cycle = normalized;
+        }
+    }
+    
+    bool node_appears_earlier(xast::Node *a, xast::Node *b, xast::Node *prog_node) {
+        // Recursively search for nodes in the AST, checking both top-level and nested nodes
+        return check_ast_order(a, b, prog_node) < 0;
+    }
+
+    // Returns: -1 if a appears first, 1 if b appears first, 0 if neither found
+    int check_ast_order(xast::Node *a, xast::Node *b, xast::Node *node) {
+        if (!node) return 0;
+        
+        // Check if this node is a or b
+        if (node == a) return -1;  // a found first
+        if (node == b) return 1;   // b found first
+        
+        // Recursively check children in order
+        for (auto edge : node->opedges) {
+            auto child = edge->used();
+            int result = check_ast_order(a, b, child);
+            if (result != 0) return result;
+        }
+        
+        return 0;  // Neither found in this subtree
+    }
+
+    // Build a fully qualified name from a typebind by walking the scope chain
+    std::string get_qualified_name(xast::Node *typebind_node, Scope *s) {
+        if (!typebind_node || !typebind_node->ident) {
+            return get_typebind_name(typebind_node, s);  // Fall back to original logic
+        }
+        
+        std::string name = std::string(*typebind_node->ident);
+        
+        // Build qualified name from parent scopes
+        if (s && s->parent) {  // Start from parent of this typebind's scope
+            std::vector<std::string> qualifiers;
+            Scope *curr = s->parent;
+            
+            // Walk up collecting namespace names, but stop at global scope
+            while (curr && curr->parent) {  // Stop before global scope
+                if (!curr->namespace_name.empty()) {
+                    // This namespace_name represents a parent typebind
+                    qualifiers.push_back(curr->namespace_name);
+                }
+                curr = curr->parent;
+            }
+            
+            // Build the qualified name from outer to inner
+            // qualifiers are collected in reverse order (innermost to outermost)
+            // so we need to reverse them
+            if (!qualifiers.empty()) {
+                std::string result;
+                for (int i = qualifiers.size() - 1; i >= 0; --i) {
+                    if (!result.empty()) result += ".";
+                    result += qualifiers[i];
+                }
+                result += ".";
+                result += name;
+                name = result;
+            }
+        }
+        
+        return name;
+    }
+
+    // Get the display name for a typebind node
+    std::string get_typebind_name(xast::Node *typebind_node, Scope *s) {
+        if (!typebind_node) return "?unknown?";
+        
+        // Handle tmplinstantiation nodes (which represent template references in expressions)
+        if (typebind_node->kind == xast::nk::tmplinstantiation) {
+            auto base = xast::c::tmplinstantiation::base(typebind_node);
+            if (base && base->kind == xast::nk::ref && base->ident) {
+                std::string result = std::string(*base->ident);
+                result += "!(";
+                
+                auto args_expr = xast::c::tmplinstantiation::args(typebind_node);
+                std::vector<xast::Node *> args;
+                if (args_expr) {
+                    if (args_expr->kind == xast::nk::comma_expr) {
+                        for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                            auto arg = xast::c::comma_expr::expr(args_expr, i);
+                            if (arg) args.push_back(arg);
+                        }
+                    } else {
+                        args.push_back(args_expr);
+                    }
+                }
+                
+                // Format arguments
+                for (size_t i = 0; i < args.size(); ++i) {
+                    if (i > 0) result += ", ";
+                    result += get_typebind_name(args[i], s);
+                }
+                
+                result += ")";
+                return result;
+            }
+            return "?unknown?";
+        }
+        
+        // If it's a ref, return the identifier
+        if (typebind_node->kind == xast::nk::ref && typebind_node->ident) {
+            return std::string(*typebind_node->ident);
+        }
+        
+        if (typebind_node->ident) {
+            return std::string(*typebind_node->ident);
+        }
+        
+        // Check if this is a cloned typebind from an instantiatedtmpl
+        // First, check if it has a direct back-pointer
+        if (typebind_node->instantiation_parent && 
+            typebind_node->instantiation_parent->kind == xast::nk::instantiatedtmpl) {
+            auto instantiated = typebind_node->instantiation_parent;
+            auto tmpl_origin = instantiated->tmpl_origin;
+            if (tmpl_origin && tmpl_origin->ident) {
+                std::string tmpl_name = std::string(*tmpl_origin->ident);
+                tmpl_name += "!(";
+                // Add arg names
+                for (int i = 0; i < xast::c::instantiatedtmpl::arg_count(instantiated); ++i) {
+                    if (i > 0) tmpl_name += ", ";
+                    auto arg = xast::c::instantiatedtmpl::arg(instantiated, i);
+                    tmpl_name += get_typebind_name(arg, s);
+                }
+                tmpl_name += ")";
+                return tmpl_name;
+            }
+        }
+        
+        // Otherwise, look for instantiatedtmpl nodes that use this decl in cache
+        Scope *curr = s;
+        while (curr) {
+            for (auto &[cache_key, instantiated] : curr->template_instantiations) {
+                if (instantiated && instantiated->kind == xast::nk::instantiatedtmpl) {
+                    auto decl = xast::c::instantiatedtmpl::decl(instantiated);
+                    if (decl == typebind_node) {
+                        // Found the instantiatedtmpl that uses this decl
+                        // Extract the template name and args from the cache key or instantiated node
+                        auto tmpl_origin = instantiated->tmpl_origin;
+                        if (tmpl_origin && tmpl_origin->ident) {
+                            std::string tmpl_name = std::string(*tmpl_origin->ident);
+                            tmpl_name += "!(";
+                            // Add arg names
+                            for (int i = 0; i < xast::c::instantiatedtmpl::arg_count(instantiated); ++i) {
+                                if (i > 0) tmpl_name += ", ";
+                                auto arg = xast::c::instantiatedtmpl::arg(instantiated, i);
+                                tmpl_name += get_typebind_name(arg, s);
+                            }
+                            tmpl_name += ")";
+                            return tmpl_name;
+                        }
+                    }
+                }
+            }
+            curr = curr->parent;
+        }
+        
+        // For unnamed typebinds (like those inside tmpldecl), look up in scope (including parent scopes)
+        // Find which symbol in the scope points to this typebind
+        curr = s;
+        while (curr) {
+            for (auto &[name, sym] : curr->symbols) {
+                if (sym) {
+                    if (sym == typebind_node && typebind_node->kind == xast::nk::typebind) {
+                        return name;
+                    }
+                    if (sym->kind == xast::nk::tmpldecl) {
+                        auto decl = xast::c::tmpldecl::decl(sym);
+                        if (decl == typebind_node) {
+                            return name;
+                        }
+                    }
+                }
+            }
+            curr = curr->parent;
+        }
+        
+        return "?unknown?";
+    }
+
+    // Format template instantiation with parameter bindings (e.g., "Alias13!(T=A13)")
+    std::string format_template_instantiation_with_params(xast::Node *instantiated_node, Scope *s) {
+        if (!instantiated_node || instantiated_node->kind != xast::nk::instantiatedtmpl) {
+            return get_typebind_name(instantiated_node, s);
+        }
+        
+        auto tmpl_origin = instantiated_node->tmpl_origin;
+        if (!tmpl_origin || !tmpl_origin->ident) {
+            return get_typebind_name(instantiated_node, s);
+        }
+        
+        std::string result = std::string(*tmpl_origin->ident);
+        result += "!(";
+        
+        // Add parameter bindings
+        int param_idx = 0;
+        int arg_count = xast::c::instantiatedtmpl::arg_count(instantiated_node);
+        
+        for (int i = 0; i < xast::c::tmpldecl::param_count(tmpl_origin); ++i) {
+            auto param = xast::c::tmpldecl::param(tmpl_origin, i);
+            if (!param || !param->ident) continue;
+            
+            if (param_idx > 0) result += ", ";
+            
+            // Add parameter name
+            result += std::string(*param->ident);
+            result += "=";
+            
+            // Add argument value
+            if (i < arg_count) {
+                auto arg = xast::c::instantiatedtmpl::arg(instantiated_node, i);
+                if (arg) {
+                    // For non-type arguments (literals), show a placeholder
+                    if (arg->kind == xast::nk::int_lit) {
+                        // Integer literal - don't show a value, just mark it as literal
+                        result += "<lit>";
+                    } else {
+                        result += get_typebind_name(arg, s);
+                    }
+                } else {
+                    result += "?";
+                }
+            } else {
+                result += "?";
+            }
+            
+            param_idx++;
+        }
+        
+        result += ")";
+        return result;
+    }
+
+    void report_cycle(std::vector<xast::Node *> &cycle, Scope *base_scope) {
+        if (cycle.empty()) return;
+
+        // Check if this cycle involves template instantiations
+        bool has_instantiations = false;
+        for (auto node : cycle) {
+            if (node->instantiation_parent && 
+                node->instantiation_parent->kind == xast::nk::instantiatedtmpl) {
+                has_instantiations = true;
+                break;
+            }
+        }
+
+        // For template instantiation cycles, reorder to show in instantiation order
+        // (start with the concrete type, not the template instantiation)
+        std::vector<xast::Node *> display_cycle = cycle;
+        if (has_instantiations && cycle.size() > 1) {
+            // Find the first non-instantiated node (a concrete type, not a cloned template decl)
+            int start_idx = -1;
+            // The cycle has size-1 unique nodes (first is duplicated at end), so check only to size-1
+            for (size_t i = 0; i < cycle.size() - 1; ++i) {
+                auto node = cycle[i];
+                if (!node->instantiation_parent || 
+                    node->instantiation_parent->kind != xast::nk::instantiatedtmpl) {
+                    start_idx = i;
+                    break;
+                }
+            }
+            
+            // Rotate the cycle to start from the non-instantiated node
+            // Keep the cycle size the same (with duplicate at end maintained)
+            if (start_idx > 0 && start_idx < (int)(cycle.size() - 1)) {
+                display_cycle.clear();
+                // Rotate the unique portion (everything except the last duplicate)
+                for (size_t i = 0; i < cycle.size() - 1; ++i) {
+                    display_cycle.push_back(cycle[(start_idx + i) % (cycle.size() - 1)]);
+                }
+                // Add back the duplicate of the first node at the end
+                display_cycle.push_back(display_cycle[0]);
+            }
+        }
+
+        // Build cycle string representation using qualified names
+        // The cycle already has the first node repeated at the end, so just format it as-is
+        std::string cycle_str;
+        for (size_t i = 0; i < display_cycle.size(); ++i) {
+            if (i > 0) cycle_str += "->";
+            
+            auto node = display_cycle[i];
+            if (node && node->type) {
+                // Use stringify() for fully qualified names if type is available
+                cycle_str += node->type->stringify();
+            } else if (node && node->ident && node->scope) {
+                // Use qualified name from scope chain
+                cycle_str += get_qualified_name(node, node->scope);
+            } else {
+                // Fall back to identifier-based name
+                cycle_str += get_typebind_name(node, base_scope);
+            }
+        }
+
+        // Report main error with appropriate diagnostic at the first node in display order
+        if (has_instantiations) {
+            DiagnosticHandler::make(diag::id::template_instantiation_cycle_detected, display_cycle[0]->sloc)
+                .add(cycle_str)
+                .finish();
+        } else {
+            DiagnosticHandler::make(diag::id::type_cycle_detected, display_cycle[0]->sloc)
+                .add(cycle_str)
+                .finish();
+        }
+
+        // Collect all instantiated templates in the cycle and emit instantiation notes
+        std::unordered_set<xast::Node *> reported_instantiations;
+        
+        // Report notes for each edge in the cycle (except the final wraparound edge)
+        // Interleave instantiation notes with dependency notes to maintain cycle order
+        for (size_t i = 0; i < display_cycle.size() - 1; ++i) {
+            auto from_node = display_cycle[i];
+            auto to_node = display_cycle[i + 1];
+            
+            // First, emit instantiation note if from_node is a cloned decl from an instantiatedtmpl
+            if (from_node->instantiation_parent && 
+                from_node->instantiation_parent->kind == xast::nk::instantiatedtmpl) {
+                auto instantiated = from_node->instantiation_parent;
+                
+                // Only report each instantiation once
+                if (!reported_instantiations.count(instantiated)) {
+                    reported_instantiations.insert(instantiated);
+                    
+                    // Emit instantiation note with parameter bindings
+                    std::string inst_name = format_template_instantiation_with_params(instantiated, base_scope);
+                    
+                    // Find the location of the instantiation request
+                    auto tmpl_inst_site = instantiated->tmpl_instantiation_site;
+                    if (tmpl_inst_site && tmpl_inst_site->kind == xast::nk::tmplinstantiation) {
+                        // Emit a specialized template instantiation note
+                        DiagnosticHandler::make(diag::id::note_template_instantiation, tmpl_inst_site->sloc)
+                            .add(inst_name)
+                            .finish();
+                    }
+                }
+            }
+            
+            // Then, emit dependency note for the edge
+            std::string from_name;
+            std::string to_name;
+            
+            // Use qualified names when available
+            if (from_node && from_node->type) {
+                from_name = from_node->type->stringify();
+            } else if (from_node && from_node->ident && from_node->scope) {
+                from_name = get_qualified_name(from_node, from_node->scope);
+            } else {
+                from_name = get_typebind_name(from_node, base_scope);
+            }
+            
+            if (to_node && to_node->type) {
+                to_name = to_node->type->stringify();
+            } else if (to_node && to_node->ident && to_node->scope) {
+                to_name = get_qualified_name(to_node, to_node->scope);
+            } else {
+                to_name = get_typebind_name(to_node, base_scope);
+            }
+            
+            // For instantiated templates, use formatted name with parameter bindings
+            if (has_instantiations && from_node->instantiation_parent && 
+                from_node->instantiation_parent->kind == xast::nk::instantiatedtmpl) {
+                auto instantiated = from_node->instantiation_parent;
+                from_name = format_template_instantiation_with_params(instantiated, base_scope);
+            }
+
+            // Special handling for instantiated templates: find the parameter in the original template
+            if (has_instantiations && from_node->instantiation_parent && 
+                from_node->instantiation_parent->kind == xast::nk::instantiatedtmpl) {
+                auto instantiated = from_node->instantiation_parent;
+                auto tmpl_origin = instantiated->tmpl_origin;
+                
+                // First, try to find which template parameter corresponds to to_node
+                // by looking at the instantiation arguments
+                bool found_param = false;
+                for (int idx = 0; idx < xast::c::instantiatedtmpl::arg_count(instantiated); ++idx) {
+                    auto arg = xast::c::instantiatedtmpl::arg(instantiated, idx);
+                    if (arg && get_typebind_name(arg, base_scope) == get_typebind_name(to_node, base_scope)) {
+                        // Found the argument that matches to_node
+                        // Now find the corresponding parameter in the original template
+                        if (idx < xast::c::tmpldecl::param_count(tmpl_origin)) {
+                            auto param = xast::c::tmpldecl::param(tmpl_origin, idx);
+                            if (param && param->ident) {
+                                // Report at the template declaration pointing to where the param is used
+                                auto orig_decl = xast::c::tmpldecl::decl(tmpl_origin);
+                                if (orig_decl && orig_decl->kind == xast::nk::typebind && 
+                                    orig_decl->opedges.size() > 0) {
+                                    auto type_expr = orig_decl->opedges[0]->used();
+                                    // Find where this parameter is referenced
+                                    std::string param_name = std::string(*param->ident);
+                                    find_and_report_reference_location(type_expr, param_name, from_name, param_name, true);
+                                    found_param = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we didn't find a parameter match, try searching for template references
+                // (for cases where to_node is a templated type, not a parameter)
+                if (!found_param) {
+                    std::string search_name = to_name;
+                    size_t paren_pos = search_name.find('!');
+                    if (paren_pos != std::string::npos) {
+                        search_name = search_name.substr(0, paren_pos);
+                    }
+                    
+                    auto orig_decl = xast::c::tmpldecl::decl(tmpl_origin);
+                    if (orig_decl && orig_decl->kind == xast::nk::typebind && orig_decl->opedges.size() > 0) {
+                        auto type_expr = orig_decl->opedges[0]->used();
+                        find_and_report_template_reference(type_expr, search_name, from_name, to_name);
+                    }
+                }
+            }
+            // Regular type bindings: find dependency location in their type expression
+            else if (from_node->kind == xast::nk::typebind && from_node->opedges.size() > 0) {
+                auto type_expr = from_node->opedges[0]->used();
+                // Extract the unqualified name (last component after the last dot) for matching
+                std::string unqualified_to_name = to_name;
+                size_t last_dot = to_name.rfind('.');
+                if (last_dot != std::string::npos) {
+                    unqualified_to_name = to_name.substr(last_dot + 1);
+                }
+                find_and_report_reference_location(type_expr, unqualified_to_name, from_name, to_name, has_instantiations);
+            } else {
+                // Fallback: report at the type declaration itself
+                if (has_instantiations) {
+                    DiagnosticHandler::make(diag::id::note_template_dependency, from_node->sloc)
+                        .add(from_name)
+                        .add(to_name)
+                        .finish();
+                } else {
+                    DiagnosticHandler::make(diag::id::note_type_requires, from_node->sloc)
+                        .add(from_name)
+                        .add(to_name)
+                        .finish();
+                }
+            }
+        }
+    }
+
+    void find_and_report_template_reference(xast::Node *expr, const std::string &tmpl_name, const std::string &from_name, const std::string &to_name, bool use_template_diagnostic = false) {
+        if (!expr) return;
+
+        switch (expr->kind) {
+        case xast::nk::tmplinstantiation: {
+            // Check if this tmplinstantiation is for the template we're looking for
+            auto base = xast::c::tmplinstantiation::base(expr);
+            if (base && base->kind == xast::nk::ref && base->ident && std::string(*base->ident) == tmpl_name) {
+                // Found the template reference, report diagnostic at this location
+                DiagnosticHandler::make(diag::id::note_template_dependency, expr->sloc)
+                    .add(from_name)
+                    .add(to_name)
+                    .finish();
+                return;  // Found it, stop searching
+            }
+            break;
+        }
+        case xast::nk::struct_:
+        case xast::nk::union_: {
+            // Recursively process fields/variants
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                if (!child) continue;
+                
+                if (child->kind == xast::nk::field) {
+                    auto type_annot = xast::c::field::type_annot(child);
+                    if (type_annot) {
+                        find_and_report_template_reference(type_annot, tmpl_name, from_name, to_name, use_template_diagnostic);
+                    }
+                } else if (child->kind == xast::nk::variant) {
+                    for (auto var_edge : child->opedges) {
+                        auto var_child = var_edge->used();
+                        find_and_report_template_reference(var_child, tmpl_name, from_name, to_name, use_template_diagnostic);
+                    }
+                }
+            }
+            break;
+        }
+        case xast::nk::unary_op: {
+            auto operand = xast::c::unary_op::operand(expr);
+            find_and_report_template_reference(operand, tmpl_name, from_name, to_name, use_template_diagnostic);
+            break;
+        }
+        case xast::nk::comma_expr: {
+            for (int i = 0; i < xast::c::comma_expr::expr_count(expr); ++i) {
+                auto e = xast::c::comma_expr::expr(expr, i);
+                if (e) find_and_report_template_reference(e, tmpl_name, from_name, to_name, use_template_diagnostic);
+            }
+            break;
+        }
+        default:
+            // Recursively process children
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                find_and_report_template_reference(child, tmpl_name, from_name, to_name, use_template_diagnostic);
+            }
+            break;
+        }
+    }
+
+    void find_and_report_reference_location(xast::Node *expr, const std::string &ref_name, const std::string &from_name, const std::string &to_name, bool use_template_diagnostic = false) {
+        if (!expr) return;
+
+        switch (expr->kind) {
+        case xast::nk::ref: {
+            if (expr->ident && std::string(*expr->ident) == ref_name) {
+                // Found the reference, report diagnostic at this location
+                if (use_template_diagnostic) {
+                    DiagnosticHandler::make(diag::id::note_template_dependency, expr->sloc)
+                        .add(from_name)
+                        .add(to_name)
+                        .finish();
+                } else {
+                    DiagnosticHandler::make(diag::id::note_type_requires, expr->sloc)
+                        .add(from_name)
+                        .add(to_name)
+                        .finish();
+                }
+                return;  // Found it, stop searching
+            }
+            break;
+        }
+        case xast::nk::struct_: {
+            for (auto edge : expr->opedges) {
+                auto field = edge->used();
+                if (field && field->kind == xast::nk::field) {
+                    auto type_expr_field = xast::c::field::type_annot(field);
+                    if (type_expr_field) {
+                        find_and_report_reference_location(type_expr_field, ref_name, from_name, to_name, use_template_diagnostic);
+                    }
+                }
+            }
+            break;
+        }
+        case xast::nk::union_: {
+            // Union has variants and/or fields
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                if (!child) continue;
+                
+                if (child->kind == xast::nk::variant) {
+                    // Recursively check variant's children for the ref
+                    for (auto var_edge : child->opedges) {
+                        auto var_child = var_edge->used();
+                        find_and_report_reference_location(var_child, ref_name, from_name, to_name, use_template_diagnostic);
+                    }
+                } else if (child->kind == xast::nk::field) {
+                    auto type_expr_var = xast::c::field::type_annot(child);
+                    if (type_expr_var) {
+                        find_and_report_reference_location(type_expr_var, ref_name, from_name, to_name, use_template_diagnostic);
+                    }
+                } else {
+                    find_and_report_reference_location(child, ref_name, from_name, to_name, use_template_diagnostic);
+                }
+            }
+            break;
+        }
+        case xast::nk::unary_op: {
+            auto operand = xast::c::unary_op::operand(expr);
+            find_and_report_reference_location(operand, ref_name, from_name, to_name, use_template_diagnostic);
+            break;
+        }
+        case xast::nk::tmplinstantiation: {
+            auto base = xast::c::tmplinstantiation::base(expr);
+            find_and_report_reference_location(base, ref_name, from_name, to_name, use_template_diagnostic);
+            break;
+        }
+        default:
+            // Recursively check operands
+            for (auto edge : expr->opedges) {
+                auto child = edge->used();
+                find_and_report_reference_location(child, ref_name, from_name, to_name, use_template_diagnostic);
+            }
+            break;
+        }
+    }
+
+    void visit_typebind(xast::Node *node, Scope *s) override {
+        // Ensure this type is resolved
+        if (!node->type) {
+            node->type = resolve_typebind(node, s);
+        }
+    }
+};
+
+// TypeChecker: Concrete type-checking after type graph resolution
+// This runs AFTER TypeGraphResolver and performs type conformance checking
+struct TypeChecker : xast::Visitor<void, Scope *> {
+
+    void visit_prog(xast::Node *node, Scope *s) override {
+        for (auto e : node->opedges) {
+            dispatch(e->used(), s);
+        }
+    }
+
+    void visit_valbind(xast::Node *node, Scope *s) override {
+        // Add this valbind to the scope as we encounter it during type checking
+        if (node->ident) {
+            auto existing = find_symbol_in_current_scope(node->ident, s);
+            if (existing) {
+                DiagnosticHandler::make(diag::id::symbol_redeclaration, node->ident.sloc)
+                    .add(std::string((*node->ident)))
+                    .finish();
+                DiagnosticHandler::make(diag::id::note_original_declaration, existing->ident.sloc)
+                    .finish();
+            } else {
+                s->symbols[std::string((*node->ident))] = node;
+            }
+        }
+        
+        // If there's a type annotation, the value must conform to it
+        auto type_annot = xast::c::valbind::type_annot(node);
+        auto def = xast::c::valbind::def(node);
+        
+        if (type_annot && def) {
+            // Resolve the annotated type
+            Type *annotated_ty = typify_expr(type_annot, s);
+            if (!annotated_ty) {
+                annotated_ty = ErrorType::get();
+            }
+            
+            // Get the type of the value expression
+            Type *value_ty = check_expr(def, s);
+            if (!value_ty) {
+                value_ty = ErrorType::get();
+            }
+            
+            // Check if value can be assigned to the annotated type
+            if (!can_assign(value_ty, annotated_ty)) {
+                DiagnosticHandler::make(diag::id::call_expr_typecheck_argument, def->sloc)
+                    .add(annotated_ty->stringify())
+                    .add(value_ty->stringify())
+                    .finish();
+            }
+            
+            // Store the type on the node
+            node->type = annotated_ty;
+        } else if (type_annot) {
+            // Type annotation but no definition - resolve the type anyway
+            Type *annotated_ty = typify_expr(type_annot, s);
+            if (!annotated_ty) {
+                annotated_ty = ErrorType::get();
+            }
+            node->type = annotated_ty;
+        } else if (def) {
+            // No annotation, infer from the definition
+            node->type = check_expr(def, s);
+        }
+    }
+
+    void visit_funcbind(xast::Node *node, Scope *s) override {
+        auto func = xast::c::funcbind::def(node);
+        if (func && func->kind == xast::nk::func) {
+            // Check the function and set funcbind's type to the function's type
+            check_func(func, s);
+            // The funcbind's type is the type of the function it contains
+            node->type = check_expr(func, s);
+        }
+    }
+
+    void visit_func(xast::Node *node, Scope *s) override {
+        check_func(node, s);
+    }
+
+    void visit_typebind(xast::Node *node, Scope *s) override {
+        // Typebind should already be resolved by TypeGraphResolver
+        if (!node->type) {
+            auto type_expr = xast::c::typebind::def(node);
+            if (type_expr) {
+                // Pass the typebind node as decl_parent so struct/union can get the name
+                node->type = typify_expr(type_expr, s, node);
+            }
+        }
+    }
+
+    void visit_block(xast::Node *node, Scope *s) override {
+        // Check all statements in the block
+        for (int i = 0; i < xast::c::block::stmt_count(node); ++i) {
+            auto stmt = xast::c::block::stmt(node, i);
+            if (stmt) {
+                check_statement(stmt, s);
+            }
+        }
+    }
+
+private:
+    // Check a statement and ensure proper typing
+    void check_statement(xast::Node *stmt, Scope *s) {
+        if (!stmt) return;
+        
+        switch (stmt->kind) {
+        case xast::nk::valbind:
+            visit_valbind(stmt, s);
+            break;
+        case xast::nk::typebind:
+            visit_typebind(stmt, s);
+            break;
+        case xast::nk::funcbind:
+            visit_funcbind(stmt, s);
+            break;
+        case xast::nk::block:
+            visit_block(stmt, s);
+            break;
+        case xast::nk::branch:
+            check_branch(stmt, s);
+            break;
+        case xast::nk::loop:
+            check_loop(stmt, s);
+            break;
+        default:
+            // Expression statements
+            check_expr(stmt, s);
+            break;
+        }
+    }
+
+    // Check a branch (if-else) statement
+    void check_branch(xast::Node *node, Scope *s) {
+        auto cond = xast::c::branch::cond(node);
+        if (cond) {
+            Type *cond_ty = check_expr(cond, s);
+            // Condition should be integral (like bool)
+            if (cond_ty && !Type::is_integral(cond_ty->get_kind())) {
+                DiagnosticHandler::make(diag::id::unary_negate_typecheck, cond->sloc)
+                    .add(cond_ty->stringify())
+                    .finish();
+            }
+        }
+        
+        auto then_block = xast::c::branch::then(node);
+        if (then_block) {
+            check_statement(then_block, s);
+        }
+        
+        auto else_block = xast::c::branch::else_(node);
+        if (else_block) {
+            check_statement(else_block, s);
+        }
+    }
+
+    // Check a loop statement
+    void check_loop(xast::Node *node, Scope *s) {
+        auto cond = xast::c::loop::cond(node);
+        if (cond) {
+            Type *cond_ty = check_expr(cond, s);
+            // Condition should be integral
+            if (cond_ty && !Type::is_integral(cond_ty->get_kind())) {
+                DiagnosticHandler::make(diag::id::unary_negate_typecheck, cond->sloc)
+                    .add(cond_ty->stringify())
+                    .finish();
+            }
+        }
+        
+        auto body = xast::c::loop::body(node);
+        if (body) {
+            check_statement(body, s);
+        }
+    }
+
+    // Check a function and verify parameter/return types
+    void check_func(xast::Node *func_node, Scope *s) {
+        assert(func_node && func_node->kind == xast::nk::func);
+        
+        // Ensure func has a scope (should be set by TypeDeclIndexingPass, but create one if not)
+        if (!func_node->scope) {
+            auto newscope = new Scope;
+            newscope->parent = s;
+            func_node->scope = newscope;
+        }
+        
+        // Check return type is a valid type
+        auto ret_ty_expr = xast::c::func::return_ty(func_node);
+        Type *ret_ty = nullptr;
+        if (ret_ty_expr) {
+            ret_ty = typify_expr(ret_ty_expr, s);
+            if (!ret_ty) {
+                ret_ty = ErrorType::get();
+            }
+        }
+        
+        // Check all parameters
+        for (int i = 0; i < xast::c::func::param_count(func_node); ++i) {
+            auto param = xast::c::func::param(func_node, i);
+            if (param && param->kind == xast::nk::param) {
+                check_param(param, s);
+            }
+        }
+        
+        // Check function body
+        auto body = xast::c::func::body(func_node);
+        if (body) {
+            check_statement(body, func_node->scope);
+        }
+    }
+
+    // Check a parameter
+    void check_param(xast::Node *param_node, Scope *s) {
+        auto type_annot = xast::c::param::type_annot(param_node);
+        if (type_annot) {
+            Type *param_ty = typify_expr(type_annot, s);
+            if (!param_ty) {
+                DiagnosticHandler::make(diag::id::expected_type, type_annot->sloc)
+                    .finish();
+            } else {
+                param_node->type = param_ty;
+            }
+        }
+    }
+
+    // Check an expression and return its type
+    Type *check_expr(xast::Node *expr, Scope *s) {
+        if (!expr) return nullptr;
+        
+        Type *ty = nullptr;
+        
+        switch (expr->kind) {
+        case xast::nk::int_lit:
+            // Integer literals default to i64
+            ty = PrimitiveType::get_i64_type();
+            break;
+        
+        case xast::nk::char_lit:
+            // Character literals are u8
+            ty = PrimitiveType::get_u8_type();
+            break;
+        
+        case xast::nk::str_lit:
+            // String literals are pointer to u8
+            ty = intern_type(new PointerType(nullptr, PrimitiveType::get_u8_type()));
+            break;
+        
+        case xast::nk::ref: {
+            // Look up symbol
+            if (expr->ident) {
+                auto sym = find_symbol_in_any_active_scope(expr->ident, s);
+                if (sym) {
+                    // Get the type from the symbol's type field
+                    ty = sym->type ? sym->type : ErrorType::get();
+                } else {
+                    DiagnosticHandler::make(diag::id::ref_undeclared_symbol, expr->sloc)
+                        .add(*expr->ident)
+                        .finish();
+                    ty = ErrorType::get();
+                    expr->type = ty;
+                    return ty;
+                }
+            }
+            break;
+        }
+        
+        case xast::nk::func: {
+            // Function literal - type is (param_types) -> return_type
+            auto return_ty_expr = xast::c::func::return_ty(expr);
+            Type *return_ty = nullptr;
+            
+            if (return_ty_expr) {
+                return_ty = typify_expr(return_ty_expr, s);
+            }
+            if (!return_ty) {
+                return_ty = ErrorType::get();
+            }
+            
+            // Intern return type and its canonical form
+            return_ty = intern_type(return_ty);
+            Type *canonical_return_ty = return_ty->get_canonical();
+            canonical_return_ty = intern_type(canonical_return_ty);
+            
+            // Collect parameter types
+            std::vector<Type *> param_tys;
+            for (size_t i = 0; i < xast::c::func::param_count(expr); ++i) {
+                auto param = xast::c::func::param(expr, i);
+                if (param && param->kind == xast::nk::param) {
+                    auto param_ty_expr = xast::c::param::type_annot(param);
+                    Type *param_ty = nullptr;
+                    if (param_ty_expr) {
+                        param_ty = typify_expr(param_ty_expr, s);
+                    }
+                    if (!param_ty) {
+                        param_ty = ErrorType::get();
+                    }
+                    
+                    // Intern param type and its canonical form
+                    param_ty = intern_type(param_ty);
+                    Type *canonical_param_ty = param_ty->get_canonical();
+                    canonical_param_ty = intern_type(canonical_param_ty);
+                    param_tys.push_back(canonical_param_ty);
+                }
+            }
+            
+            // Create function type with canonical types
+            ty = intern_type(new FunctionType(nullptr, canonical_return_ty, param_tys));
+            break;
+        }
+        
+        case xast::nk::unary_op: {
+            auto operand = xast::c::unary_op::operand(expr);
+            Type *operand_ty = check_expr(operand, s);
+            if (!operand_ty) {
+                operand_ty = ErrorType::get();
+            }
+            
+            // If operand is an error, propagate immediately
+            if (operand_ty->get_kind() == typekind::error_t) {
+                ty = ErrorType::get();
+                expr->type = ty;
+                return ty;
+            }
+            
+            switch (expr->op.kind) {
+            case op::indirect: {
+                // Dereference operator: *T -> T
+                if (operand_ty->get_kind() == typekind::pointer_t) {
+                    auto ptr_ty = static_cast<PointerType *>(operand_ty);
+                    ty = ptr_ty->get_pointee();
+                } else {
+                    DiagnosticHandler::make(diag::id::indirection_typecheck, operand->sloc)
+                        .add(operand_ty->stringify())
+                        .finish();
+                    ty = ErrorType::get();
+                }
+                break;
+            }
+            case op::slice: {
+                // Array operator: [T] (slice)
+                ty = intern_type(new PointerType(nullptr, operand_ty));
+                break;
+            }
+            default:
+                // Arithmetic unary ops preserve type
+                ty = operand_ty;
+                break;
+            }
+            break;
+        }
+        
+        case xast::nk::binary_op: {
+            auto lhs = xast::c::binary_op::lhs(expr);
+            auto rhs = xast::c::binary_op::rhs(expr);
+            
+            // Handle dot operator (field access) specially
+            if (expr->op.kind == op::dot) {
+                Type *lhs_ty = check_expr(lhs, s);
+                if (!lhs_ty) lhs_ty = ErrorType::get();
+                
+                // If LHS is an error, propagate
+                if (lhs_ty->get_kind() == typekind::error_t) {
+                    ty = ErrorType::get();
+                    expr->type = ty;
+                    rhs->type = ty;  // Also set error on RHS
+                    return ty;
+                }
+                
+                // RHS can be a ref (simple field) or another binary_op (nested dot)
+                if (rhs->kind == xast::nk::binary_op && rhs->op.kind == op::dot) {
+                    // Nested dot: check the RHS as a dot expression with lhs_ty as base
+                    // This is like: (lhs).rhs where rhs is a complex selector
+                    Type *rhs_ty = check_expr(rhs, s);
+                    if (!rhs_ty) rhs_ty = ErrorType::get();
+                    ty = rhs_ty;
+                } else if (rhs->kind == xast::nk::ref && rhs->ident) {
+                    // Simple field reference
+                    // Get the struct type - unwrap pointer if needed
+                    Type *struct_ty = lhs_ty;
+                    if (struct_ty->get_kind() == typekind::pointer_t) {
+                        auto ptr = static_cast<PointerType *>(struct_ty);
+                        struct_ty = ptr->get_pointee();
+                    }
+                    
+                    // Look up field in struct
+                    if (struct_ty->get_kind() == typekind::struct_t || struct_ty->get_kind() == typekind::union_t) {
+                        auto decl_ty = static_cast<DeclType *>(struct_ty);
+                        auto decl_node = decl_ty->decl;
+                        
+                        // Search for the field in the struct/union
+                        std::string field_name = std::string(*rhs->ident);
+                        bool found = false;
+                        Type *field_ty = nullptr;
+                        
+                        if (decl_node && (decl_node->kind == xast::nk::struct_ || decl_node->kind == xast::nk::union_)) {
+                            for (auto edge : decl_node->opedges) {
+                                auto child = edge->used();
+                                if (child && child->kind == xast::nk::field) {
+                                    // Field nodes have their name in the ident field
+                                    if (child->ident) {
+                                        auto field_type_expr = xast::c::field::type_annot(child);
+                                        std::string field_name_in_struct = std::string(*child->ident);
+                                        
+                                        if (field_name_in_struct == field_name) {
+                                            // Found the field!
+                                            found = true;
+                                            if (field_type_expr) {
+                                                field_ty = typify_expr(field_type_expr, s);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (found && field_ty) {
+                            ty = field_ty;
+                            rhs->type = ty;  // Set type on field ref node
+                        } else {
+                            DiagnosticHandler::make(diag::id::ref_undeclared_symbol, rhs->sloc)
+                                .add(field_name)
+                                .finish();
+                            ty = ErrorType::get();
+                            rhs->type = ty;  // Also set error type on field ref node
+                        }
+                    } else {
+                        DiagnosticHandler::make(diag::id::binary_op_typecheck, lhs->sloc)
+                            .add("field access on non-struct type")
+                            .add("")
+                            .add(lhs_ty->stringify())
+                            .finish();
+                        ty = ErrorType::get();
+                        rhs->type = ty;  // Set error type on rhs as well
+                    }
+                } else {
+                    DiagnosticHandler::make(diag::id::expected_expression, rhs->sloc)
+                        .finish();
+                    ty = ErrorType::get();
+                    rhs->type = ty;
+                }
+                break;
+            }
+            
+            // For other binary operators
+            Type *lhs_ty = check_expr(lhs, s);
+            Type *rhs_ty = check_expr(rhs, s);
+            
+            if (!lhs_ty) lhs_ty = ErrorType::get();
+            if (!rhs_ty) rhs_ty = ErrorType::get();
+            
+            // If either operand is an error, poison this node and propagate the error
+            if (lhs_ty->get_kind() == typekind::error_t || rhs_ty->get_kind() == typekind::error_t) {
+                ty = ErrorType::get();
+                expr->type = ty;
+                return ty;
+            }
+            
+            // For now, both operands must have compatible types
+            if (!can_assign(rhs_ty, lhs_ty)) {
+                DiagnosticHandler::make(diag::id::binary_op_typecheck, rhs->sloc)
+                    .add("(unknown)")
+                    .add(rhs_ty->stringify())
+                    .add(lhs_ty->stringify())
+                    .finish();
+            }
+            
+            // Result type is typically LHS type (except for comparisons, which return i1)
+            // For now, just return LHS type
+            ty = lhs_ty;
+            break;
+        }
+        
+        case xast::nk::call: {
+            auto callable = xast::c::call::callable(expr);
+            Type *func_ty = check_expr(callable, s);
+            
+            if (!func_ty) {
+                func_ty = ErrorType::get();
+            }
+            
+            // If callable is an error, propagate immediately
+            if (func_ty->get_kind() == typekind::error_t) {
+                ty = ErrorType::get();
+                expr->type = ty;
+                return ty;
+            }
+            
+            if (func_ty->get_kind() == typekind::function_t) {
+                auto fn_ty = static_cast<FunctionType *>(func_ty);
+                
+                // Check arguments
+                auto args = xast::c::call::args(expr);
+                if (args) {
+                    std::vector<Type *> arg_tys;
+                    extract_arg_types(args, s, arg_tys);
+                    
+                    // Verify argument count and types
+                    auto param_tys = fn_ty->get_params();
+                    if (arg_tys.size() != param_tys.size()) {
+                        DiagnosticHandler::make(
+                            (arg_tys.size() < param_tys.size()) ? 
+                                diag::id::call_expr_too_few_arguments : 
+                                diag::id::call_expr_too_many_arguments,
+                            expr->sloc)
+                            .add(std::to_string(arg_tys.size()))
+                            .add(std::to_string(param_tys.size()))
+                            .add(func_ty->stringify())
+                            .finish();
+                    } else {
+                        for (size_t i = 0; i < arg_tys.size(); ++i) {
+                            if (!can_assign(arg_tys[i], param_tys[i])) {
+                                DiagnosticHandler::make(diag::id::call_expr_typecheck_argument, args->sloc)
+                                    .add(param_tys[i]->stringify())
+                                    .add(arg_tys[i]->stringify())
+                                    .finish();
+                            }
+                        }
+                    }
+                }
+                
+                ty = fn_ty->get_return_ty();
+            } else {
+                DiagnosticHandler::make(diag::id::noncallable_expression, callable->sloc)
+                    .add(func_ty->stringify())
+                    .finish();
+                ty = ErrorType::get();
+            }
+            break;
+        }
+        
+        case xast::nk::subscript: {
+            auto array = xast::c::subscript::array(expr);
+            auto index = xast::c::subscript::index(expr);
+            
+            Type *array_ty = check_expr(array, s);
+            Type *index_ty = check_expr(index, s);
+            
+            if (!array_ty) array_ty = ErrorType::get();
+            if (!index_ty) index_ty = ErrorType::get();
+            
+            // If either operand is an error, propagate immediately
+            if (array_ty->get_kind() == typekind::error_t || index_ty->get_kind() == typekind::error_t) {
+                ty = ErrorType::get();
+                expr->type = ty;
+                return ty;
+            }
+            
+            // Array type should be array or pointer
+            if (array_ty->get_kind() == typekind::array_t) {
+                auto arr_ty = static_cast<ArrayType *>(array_ty);
+                ty = arr_ty->get_element_ty();
+            } else if (array_ty->get_kind() == typekind::pointer_t) {
+                auto ptr_ty = static_cast<PointerType *>(array_ty);
+                ty = ptr_ty->get_pointee();
+            } else {
+                DiagnosticHandler::make(diag::id::subscript_on_type, array->sloc)
+                    .finish();
+                ty = ErrorType::get();
+            }
+            
+            // Index must be integral
+            if (!Type::is_integral(index_ty->get_kind())) {
+                DiagnosticHandler::make(diag::id::unary_negate_typecheck, index->sloc)
+                    .add(index_ty->stringify())
+                    .finish();
+            }
+            break;
+        }
+        
+        case xast::nk::cast: {
+            auto cast_expr = xast::c::cast::expr(expr);
+            auto cast_type = xast::c::cast::type(expr);
+            
+            Type *from_ty = check_expr(cast_expr, s);
+            Type *to_ty = typify_expr(cast_type, s);
+            
+            if (!from_ty) from_ty = ErrorType::get();
+            if (!to_ty) to_ty = ErrorType::get();
+            
+            // For now, allow all casts
+            ty = to_ty;
+            break;
+        }
+        
+        case xast::nk::paren_expr: {
+            auto inner = xast::c::paren_expr::inner(expr);
+            ty = check_expr(inner, s);
+            if (!ty) ty = ErrorType::get();
+            if (ty->get_kind() == typekind::error_t) {
+                expr->type = ty;
+                return ty;
+            }
+            break;
+        }
+        
+        case xast::nk::comma_expr: {
+            // Type of comma expr is type of last expression
+            Type *last_ty = nullptr;
+            for (int i = 0; i < xast::c::comma_expr::expr_count(expr); ++i) {
+                auto e = xast::c::comma_expr::expr(expr, i);
+                last_ty = check_expr(e, s);
+                if (!last_ty) last_ty = ErrorType::get();
+            }
+            ty = last_ty ? last_ty : ErrorType::get();
+            if (ty->get_kind() == typekind::error_t) {
+                expr->type = ty;
+                return ty;
+            }
+            break;
+        }
+        
+        case xast::nk::block: {
+            // Type of block is type of last statement (if it's an expression)
+            Type *last_ty = nullptr;
+            for (int i = 0; i < xast::c::block::stmt_count(expr); ++i) {
+                auto stmt = xast::c::block::stmt(expr, i);
+                // Statements don't have types, but expressions do
+                if (stmt && !is_statement_kind(stmt->kind)) {
+                    last_ty = check_expr(stmt, s);
+                }
+            }
+            ty = last_ty;
+            break;
+        }
+        
+        case xast::nk::tmplinstantiation: {
+            // Template instantiation - validate argument types against parameter types
+            auto base = xast::c::tmplinstantiation::base(expr);
+            auto args_expr = xast::c::tmplinstantiation::args(expr);
+            
+            // Find the template declaration
+            if (!base || !base->ident) {
+                ty = ErrorType::get();
+                break;
+            }
+            
+            auto tmpl_sym = find_symbol_in_any_active_scope(base->ident, s);
+            if (!tmpl_sym || tmpl_sym->kind != xast::nk::tmpldecl) {
+                ty = ErrorType::get();
+                break;
+            }
+            
+            // Extract arguments
+            std::vector<xast::Node *> args;
+            if (args_expr) {
+                if (args_expr->kind == xast::nk::comma_expr) {
+                    for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                        args.push_back(xast::c::comma_expr::expr(args_expr, i));
+                    }
+                } else {
+                    args.push_back(args_expr);
+                }
+            }
+            
+            // Check argument count
+            size_t param_count = xast::c::tmpldecl::param_count(tmpl_sym);
+            if (args.size() != param_count) {
+                DiagnosticHandler::make(
+                    (args.size() < param_count) ? 
+                        diag::id::call_expr_too_few_arguments : 
+                        diag::id::call_expr_too_many_arguments,
+                    expr->sloc)
+                    .add(std::to_string(args.size()))
+                    .add(std::to_string(param_count))
+                    .finish();
+            } else {
+                // Check argument types for value parameters
+                for (size_t i = 0; i < args.size(); ++i) {
+                    auto param = xast::c::tmpldecl::param(tmpl_sym, i);
+                    if (!param) continue;
+                    
+                    auto arg = args[i];
+                    
+                    // Type params (tmplparamdecl) don't need type checking
+                    // Value params (param) need their arguments checked against param type
+                    if (param->kind == xast::nk::param) {
+                        // This is a value parameter
+                        auto param_ty_expr = xast::c::param::type_annot(param);
+                        Type *param_ty = nullptr;
+                        
+                        if (param_ty_expr) {
+                            param_ty = typify_expr(param_ty_expr, s);
+                        }
+                        
+                        if (!param_ty) {
+                            param_ty = ErrorType::get();
+                        }
+                        
+                        // Check argument type against parameter type
+                        Type *arg_ty = check_expr(arg, s);
+                        if (!arg_ty) arg_ty = ErrorType::get();
+                        
+                        if (!can_assign(arg_ty, param_ty)) {
+                            DiagnosticHandler::make(diag::id::call_expr_typecheck_argument, arg->sloc)
+                                .add(param_ty->stringify())
+                                .add(arg_ty->stringify())
+                                .finish();
+                        }
+                    }
+                }
+            }
+            
+            // Template instantiation expressions are type expressions, so the type is the instantiated type
+            ty = typify_expr(expr, s);
+            if (!ty) ty = ErrorType::get();
+            break;
+        }
+        
+        default:
+            // Unknown expression type - treat as error
+            ty = ErrorType::get();
+            break;
+        }
+        
+        // Always set the type, even if it's an error
+        expr->type = ty ? ty : ErrorType::get();
+        
+        return ty;
+    }
+
+    void extract_arg_types(xast::Node *args_expr, Scope *s, std::vector<Type *> &arg_tys) {
+        if (!args_expr) return;
+        
+        if (args_expr->kind == xast::nk::comma_expr) {
+            for (int i = 0; i < xast::c::comma_expr::expr_count(args_expr); ++i) {
+                auto arg = xast::c::comma_expr::expr(args_expr, i);
+                Type *arg_ty = check_expr(arg, s);
+                if (!arg_ty) arg_ty = ErrorType::get();
+                arg_tys.push_back(arg_ty);
+            }
+        } else {
+            Type *arg_ty = check_expr(args_expr, s);
+            if (!arg_ty) arg_ty = ErrorType::get();
+            arg_tys.push_back(arg_ty);
+        }
+    }
+
+    bool is_statement_kind(xast::nk kind) {
+        switch (kind) {
+        case xast::nk::valbind:
+        case xast::nk::typebind:
+        case xast::nk::funcbind:
+        case xast::nk::branch:
+        case xast::nk::loop:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Check if source type can be assigned to destination type
+    bool can_assign(Type *from, Type *to) {
+        if (!from || !to) return false;
+        
+        // Always compare canonical types
+        from = from->get_canonical();
+        to = to->get_canonical();
+        
+        if (!from || !to) return false;
+        
+        // Same canonical type
+        if (from == to) {
+            return true;
+        }
+        
+        return false;  // For now, strict type checking
+    }
 };
 
 namespace fe {
@@ -352,15 +3572,42 @@ void analyze(xast::Node *root, std::vector<fe::PrimitiveType *> const &primitive
     auto gscope = new Scope;
     for (auto ty : primitives) {
         std::cout << ty->stringify() << "\n";
-        gscope->types[ty->stringify()] = ty;
+        // Create a synthetic typebind node for the primitive type
+        xast::Node *tynode = new xast::Node(xast::nk::typebind);
+        tynode->type = ty;
+        gscope->symbols[ty->stringify()] = tynode;
     }
     root->scope = gscope;
-    gscope->dump();
 
-    // scanning pass
+    // Pass 1: scanning and indexing
     std::cout << "indexing\n";
-    IndexingPass()(root, gscope, Identifier{});
+    TypeDeclIndexingPass()(root, gscope, Identifier{});
 
+    // Pass 1.5: context-based expression validation (type vs value context)
+    std::cout << "checking expressions\n";
+    ExprChecker()(root, gscope, false);
+
+    // Pass 3: detect cycles in template definitions (before instantiation)
+    std::cout << "detecting template instantiation cycles\n";
+    TemplateInstantiationCycleDetector()(root, gscope);
+
+    // Pass 4: instantiate template types (stores in Scope cache, not in AST)
+    std::cout << "instantiating templates\n";
+    TemplateInstantiator()(root, gscope);
+
+    // Pass 4b: transform AST - replace tmplinstantiation with instantiatedtmpl and remove tmpldecl
+    std::cout << "transforming AST (replacing template instantiations and removing declarations)\n";
+    ASTTransformationPass()(root, gscope);
+
+    // Pass 5: type graph resolution and cycle detection
+    std::cout << "resolving type graph and detecting cycles\n";
+    TypeGraphResolver()(root, gscope);
+
+    // Pass 6: concrete type checking
+    std::cout << "type checking\n";
+    TypeChecker()(root, gscope);
+
+    xast::dump(root);
 }
 
 } // namespace fe

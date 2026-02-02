@@ -227,7 +227,12 @@ lex_start:
                 type = token::op_rightparen;
             break;
         case '[':
-            type = token::op_leftbracket;
+            if (peek() == ']') {
+                type = token::op_lrbracket;
+                c = get();
+            }
+            else
+                type = token::op_leftbracket;
             break;
         case ']':
             type = token::op_rightbracket;
@@ -250,6 +255,10 @@ lex_start:
         case '-':
             if (peek() == '-') {
                 type = token::op_minusminus;
+                c = get();
+            }
+            else if (peek() == '>') {
+                type = token::op_minusgreater;
                 c = get();
             }
             else
@@ -336,6 +345,9 @@ lex_start:
             else {
                 type = token::op_equal;
             }
+            break;
+        case '.':
+            type = token::op_dot;
             break;
         case ',':
             type = token::op_comma;

@@ -16,9 +16,19 @@ DIAGNOSTIC(type_decl_expected_assignment, fatal, "expected '=' after type declar
 
 // decls
 DIAGNOSTIC(symbol_redeclaration, error, "redeclaration of symbol '%0'")
-DIAGNOSTIC(type_redeclaration, error, "redeclaration of type '%0'")
 DIAGNOSTIC(note_original_declaration, note, "original declaration here:")
-DIAGNOSTIC(use_of_undeclared_type, error, "use of undeclared type '%0'")
+DIAGNOSTIC(ref_undeclared_symbol, error, "use of undeclared symbol '%0'")
+DIAGNOSTIC(recursive_type_definition, error, "recursive type definition detected for '%0'")
+DIAGNOSTIC(note_recursive_type_reference, note, "type '%0' is part of a recursive definition")
+DIAGNOSTIC(type_cycle_detected, error, "detected type cycle %0")
+DIAGNOSTIC(note_type_requires, note, "%0 requires %1")
+
+// template instantiation cycles
+DIAGNOSTIC(template_instantiation_cycle_detected, error, "detected type cycle during template instantiation: %0")
+DIAGNOSTIC(note_template_instantiation, note, "in instantiation of '%0' requested here")
+DIAGNOSTIC(note_template_dependency, note, "'%0' requires '%1' here")
+DIAGNOSTIC(expected_type_found_symbol, error, "expected type '%0' but found symbol instead")
+DIAGNOSTIC(expected_symbol_found_type, error, "expected symbol '%0' but found type instead")
 DIAGNOSTIC(pointer_to_function_type_invalid, error, "pointer to function is not a valid type")
 DIAGNOSTIC(type_is_not_templated, error, "type '%0' is not a templated type")
 
@@ -53,6 +63,10 @@ DIAGNOSTIC(side_effecting_unary_typecheck_integral, error, "pre/postfix incr/dec
 
 // binary operators
 DIAGNOSTIC(binary_op_typecheck, error, "incompatible operands to binary operator '%0' ('%1' and '%2')")
+DIAGNOSTIC(arrow_only_in_type_expr, error, "arrow operator '->' can only be used in type expressions, not value expressions")
+DIAGNOSTIC(invalid_operation_on_type, error, "this operation cannot be applied to type expressions")
+DIAGNOSTIC(subscript_on_type, error, "subscript operator '[]' cannot be applied to type expressions")
+DIAGNOSTIC(call_on_type, error, "call operator '()' cannot be applied to type expressions")
 
 // assignment typecheck
 DIAGNOSTIC(warn_assignment_signed_to_unsigned, warning, "value of signed type '%0' assigned to unsigned type '%1'")

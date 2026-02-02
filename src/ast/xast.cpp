@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <iostream>
 
+#include "analyzer/type.h"
 #include "utils/ioformat.h"
 #include "utils/source.h"
 
@@ -29,7 +30,6 @@ void Use::set(Node *n) {
     if (_used) _used->uses.append(this);
 }
 
-bool is_type_expr(nk k) { return k > nk::__te_start && k < nk::__te_end; }
 bool is_decl(nk k) { return k > nk::__decl_start && k < nk::__decl_end; }
 
 void dump(Node *node, std::string stem) {
@@ -56,13 +56,19 @@ void dump(Node *node, std::string stem) {
             std::cout << ioformat::YELLOW
                 << " '" << *node->ident << "'";
         }
-        // if (node->type != nullptr) {
-        //     std::cout << " "
-        //         << ioformat::GREEN
-        //         << node->type->stringify()
-        //         << ioformat::BLUE << " "
-        //         << node->type->get_canonical()->stringify();
-        // }
+        if (node->op.kind != op::unknown && token::is_operator(node->op.tok)) {
+            std::cout << " "
+                << ioformat::RED
+                << token::get_operator_string(node->op.tok);
+        }
+
+        if (node->type != nullptr) {
+            std::cout << " "
+                << ioformat::GREEN
+                << node->type->stringify()
+                << ioformat::BLUE << " "
+                << node->type->get_canonical()->stringify();
+        }
         // if (node->is_lvalue) {
         //     std::cout << ioformat::CYAN << " lval";
         // }
@@ -86,7 +92,7 @@ void dump(Node *node, std::string stem) {
     }
 
     else {
-        std::cout << stem << "`" << "node is null" << std::endl;
+        std::cout << stem << "`" << "null" << std::endl;
     }
 }
 

@@ -1,6 +1,7 @@
 #ifndef AST_OP_H
 #define AST_OP_H
 
+#include "lexer/tokentypes.h"
 #include "utils/source.h"
 
 namespace fe {
@@ -80,6 +81,10 @@ namespace op {
         group,
         // indirection
         indirect,
+        // function type arrow
+        arrow,
+        dot,
+        slice,
 
         __misc_high_bound,
     };
@@ -92,8 +97,9 @@ namespace op {
 } // op
 
 struct Op {
-    op::kind kind;
+    op::kind kind = op::unknown;
     SourceLocation sloc;
+    token::token_type tok;
 };
 
 } // fe

@@ -12,12 +12,12 @@ valdecl
     ;
 
 valdecl_content
-    = "(" [ param { ",", param } ], ")", type, stmtblock  (* function *)
-    | [ type_annotation ], [ "=", valexpr ]               (* variable *)
+    = "(", [ param { ",", param } ], ")", type_annotation, stmtblock
+    | [ type_annotation ], [ "=", expr ]
     ;
 
 param
-    = identifier, ":", type
+    = identifier, ":", expr
     ;
 
 typedecl
@@ -25,13 +25,13 @@ typedecl
     ;
 
 typedecl_content
-    = "=", type                              (* alias *)
-    | "{", { decl }, "}"                     (* struct *)
-    | "|", variant, { "|", variant }         (* union *)
+    = "=", expr
+    | "{", { decl }, "}"
+    | "|", variant, { "|", variant }
     ;
 
 variant
-    = identifier, [ "(", type, { ",", type }, ")" ]
+    = identifier, [ "(", expr, { ",", expr }, ")" ]
     ;
 
 where_clause
@@ -44,100 +44,68 @@ template_params
 
 template_param
     = identifier
-    | identifier, ":", type
+    | identifier, ":", expr
     ;
 
 type_annotation
-    = ":", type
-    ;
-
-type
-    = primitivetype
-    | pointertype
-    | arraytype
-    | aliastype
-    | functiontype
-    | template_instantiation
-    ;
-
-template_instantiation
-    = identifier, "!", "(", type, { ",", type }, ")"
-    ;
-
-primitivetype
-    = ? primitive types ?
-    ;
-
-pointertype
-    = "*", type
-    ;
-
-arraytype
-    = "[]", type
-    ;
-
-aliastype
-    = identifier
-    ;
-
-functiontype
-    = "(", [ type, { ",", type } ], ")", type
+    = ":", expr
     ;
 
 stmtblock
-    = "{"
-    , { stmt }
-    , "}"
+    = "{", { stmt }, "}"
     ;
 
 stmt
     = decl
-    | valexpr
+    | expr
     | ifthen
     | loop
     ;
 
 ifthen
-    = "if", "(", valexpr, ")"
-    , stmtblock
-    , [ "else", ( ifthen | stmtblock ) ]
+    = "if", "(", expr, ")", stmtblock,
+      [ "else", ( ifthen | stmtblock ) ]
     ;
 
 loop
-    = "while", "(", valexpr, ")"
-    , stmtblock
+    = "while", "(", expr, ")", stmtblock
     ;
 
-valexpr
-    = valexpr, binop, valexpr
-    | lvalexpr
+expr
+    = binaryexpr
+    ;
+
+binaryexpr
+    = binaryexpr, binop, unaryexpr
+    | unaryexpr
+    ;
+
+unaryexpr
+    = prefixop, unaryexpr
+    | postfixexpr
+    ;
+
+postfixexpr
+    = postfixexpr, "(", [ expr, { ",", expr } ], ")"
+    | postfixexpr, "[", expr, "]"
+    | postfixexpr, "as", expr
+    | primaryexpr
+    ;
+
+primaryexpr
+    = "(", expr, ")"
+    | identifier
     | literal
     ;
 
-binop
-    = ? binary operations ?
-    ;
-
-lvalexpr
-    = prefixop, lvalexpr
-    | unitexpr
-    ;
-
 prefixop
-    = ? prefix operations ?
+    = "*"
+    | "[]"
+    | ? other prefix operators ?
     ;
 
-unitexpr
-    = unitexpr, postop
-    | unitexpr, "(", [ valexpr, { ",", valexpr } ], ")"  (* call *)
-    | unitexpr, "[", valexpr, "]"                        (* subscript *)
-    | unitexpr, "as", type                               (* cast *)
-    | "(", valexpr, ")"                                  (* paren *)
-    | identifier                                         (* ref *)
-    ;
-
-postop
-    = ? postfix operations ?
+binop
+    = ? binary operators ?
     ;
 
 identifier
@@ -145,17 +113,17 @@ identifier
     ;
 
 literal
-    = '"', { printchar }, '"'                 (* string *)
-    | "'", [ printchar ], "'"                 (* char *)
-    | numchar, [ alphachar ], { numchar }     (* integral *)
-    | { numchar }, ".", numchar, { numchar }  (* floating point *)
+    = '"', { printchar }, '"'
+    | "'", [ printchar ], "'"
+    | numchar, [ alphachar ], { numchar }
+    | { numchar }, ".", numchar, { numchar }
     ;
 
 printchar
     = alphachar
     | numchar
-    | ? type-able characters other than \ ' " ?
-    | "\", ? escape code characters (including \ ' ") ?
+    | ? other printable characters ?
+    | "\", ? escape code ?
     ;
 
 alphachar
@@ -165,3 +133,14 @@ alphachar
 numchar
     = ? numeric characters ?
     ;
+
+(*  TYPE EXPRS - this is not relevant to parsing, but to semantics  *)
+
+expr = type_expr | val_expr
+val_expr = ...
+type_expr = ptr | slice | func | type
+ptr = "*", type_expr
+slice = "[]", type_expr
+func = "(", [ type_expr { ",", type_expr } ], ")", "->", type_expr
+type = identifier, [ tmplargs ], [ ".", type ]
+tmplargs = "!", "(", [ expr { ",", expr } ], ")"
