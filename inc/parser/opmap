@@ -1,0 +1,28 @@
+#ifndef BINOP
+#define BINOP(name, token, left_bp, right_bp)
+#endif
+
+// ---------- multiplicative ----------
+BINOP(fe::op::mult,   token::op_asterisk,  70, 71)
+BINOP(fe::op::div,    token::op_slash,  70, 71)
+BINOP(fe::op::mod,    token::op_percent,  70, 71)
+
+// ---------- additive ----------
+BINOP(fe::op::add,    token::op_plus,  60, 61)
+BINOP(fe::op::sub,    token::op_minus,  60, 61)
+
+// ---------- comparisons ----------
+BINOP(fe::op::lt,     token::op_less,  40, 41)
+BINOP(fe::op::lte,    token::op_lessequal, 40, 41)
+BINOP(fe::op::gt,     token::op_greater,  40, 41)
+BINOP(fe::op::gte,    token::op_greaterequal, 40, 41)
+
+// ---------- equality ----------
+BINOP(fe::op::eq,     token::op_equalequal, 35, 36)
+BINOP(fe::op::neq,    token::op_exclamationequal, 35, 36)
+
+// ---------- logical ----------
+BINOP(fe::op::land,   token::op_ampamp, 24, 25)
+BINOP(fe::op::lor,    token::op_pipepipe, 22, 23)
+
+#undef BINOP

@@ -9,6 +9,11 @@ ErrorType *ErrorType::get() {
     return ptr;
 }
 
+MetaType *MetaType::get() {
+    static auto ptr = new MetaType;
+    return ptr;
+}
+
 #define PRIMTYPE(name, signed, sizebytes) \
     PrimitiveType *PrimitiveType::get_##name##_type() { \
         static auto ptr = new PrimitiveType(typekind::name##_t, #name, sizebytes); \

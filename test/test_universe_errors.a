@@ -1,0 +1,31 @@
+// Test file with expression universe errors
+
+// ERROR 1: Using arithmetic + in type context
+let! BadArithType = fn!(A: type, B: type): type {
+    A + B
+}
+
+// ERROR 2: Relational op in type context (inside if! that returns type)
+let! BadRelInTypeBody = fn!(A: type, B: type): type {
+    // The condition is OK (value context)
+    // But the body tries to use > which is value-only
+    let! result = A > B
+    A
+}
+
+// Valid: if! with types is fine
+let! ValidIfType = fn!(flag: i32): type {
+    if! (flag > 0) {
+        i32
+    } else {
+        i64
+    }
+}
+
+// Valid: Regular functions work fine
+let main = fn(): i32 {
+    let x = 5
+    let y = 10
+    let sum = x + y
+    sum
+}

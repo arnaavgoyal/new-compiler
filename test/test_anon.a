@@ -1,0 +1,38 @@
+// =============================================================================
+// TEST: Anonymous and inline type expressions
+// =============================================================================
+// Tests for anonymous type declarations and composite literals
+
+// Test 1: Named composite type with where clause
+let! Point = fn!(T: type): type {
+    type as Self {
+        x: T
+        y: T
+    } where {
+        let new = fn(x: T, y: T): Self {
+            let p: Self
+            p
+        }
+    }
+}
+
+// Test 2: Instantiate and use namespace
+let! Point2D = Point!(i32)
+let origin = Point2D.new(0, 0)
+
+// Test 3: Simple struct without template (uses regular let, auto-marked meta)
+let SimpleStruct = type {
+    a: i32
+    b: i64
+}
+
+// Test 4: Simple union without template  
+let SimpleUnion = type
+    | Left(i32)
+    | Right(i64)
+
+// Test 5: Main function using types
+let main = fn(): i32 {
+    let p = Point2D.new(10, 20)
+    0
+}

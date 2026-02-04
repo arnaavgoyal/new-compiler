@@ -48,6 +48,66 @@ public:
     Node *user() { return _user; }
 };
 
+struct NodeData {
+    enum kind {
+        _none,
+        _ident,
+        _ival,
+        _op
+    } payload = _none;
+
+    union {
+        char none;
+        Identifier ident;
+        uint64_t ival;
+        Op op;
+    };
+
+    NodeData() : payload(_none), none(0) { }
+
+#define CONSTRUCTOR(type, member, enumval) \
+    NodeData(type const v) : payload(enumval), member(v) { }
+    CONSTRUCTOR(Identifier, ident, _ident)
+    CONSTRUCTOR(uint64_t, ival, _ival)
+    CONSTRUCTOR(Op, op, _op)
+#undef CONSTRUCTOR
+
+#define ASSIGNER(type, member, enumval) \
+    NodeData &operator=(type const v) {  \
+        if (payload == enumval) {       \
+            member = v;                 \
+        } else {                        \
+            member = v;                 \
+            payload = enumval;          \
+        }                               \
+        return *this;                   \
+    }
+    ASSIGNER(Identifier, ident, _ident)
+    ASSIGNER(uint64_t, ival, _ival)
+    ASSIGNER(Op, op, _op)
+#undef ASSIGNER
+
+#define CONVERTER(type, member, enumval) \
+    operator type() {                    \
+        assert(payload == enumval);      \
+        return member;                   \
+    }
+    CONVERTER(Identifier, ident, _ident)
+    CONVERTER(uint64_t, ival, _ival)
+    CONVERTER(Op, op, _op)
+#undef CONVERTER
+
+#define CHECKER(member, enumval)   \
+    bool is_##member() {           \
+        return payload == enumval; \
+    }
+    CHECKER(ident, _ident)
+    CHECKER(ival, _ival)
+    CHECKER(op, _op)
+#undef CHECKER
+
+};
+
 struct Node {
 
     // DO NOT MODIFY FROM HERE
@@ -56,25 +116,16 @@ struct Node {
 
     nk kind = nk::null;
     SourceLocation sloc;
-    union {
-        Identifier ident;
-        uint64_t ival;
-    };
-    Op op;
+    NodeData data;
+    bool meta = false;
 
     // populated during analysis
     Scope *scope = nullptr; // if this node creates a new scope
     Type *type = nullptr;
     
-    // For instantiatedtmpl nodes: points to the original tmpldecl
-    Node *tmpl_origin = nullptr;
-    // For instantiatedtmpl nodes: points to the first tmplinstantiation that created this
-    Node *tmpl_instantiation_site = nullptr;
-    // For cloned typebind nodes inside instantiatedtmpl: points back to the instantiatedtmpl
-    Node *instantiation_parent = nullptr;
 
     // Default constructor
-    Node() : ival{} { }
+    Node() = default;
 
     // Constructor that reserves concrete children based on node kind
     Node(nk k) : kind(k) {

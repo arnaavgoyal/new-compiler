@@ -40,35 +40,24 @@ int main(int argc, char **argv) {
     fe::Parser parser(lexer, nodes);
 
     auto [parse_success, ast] = parser.parse();
-    fe::xast::dump(ast);
+    // fe::xast::dump(ast);
     std::cout << "\nparse status: ";
     std::cout.flush();
     if (parse_success) {
-        std::cout << "success"; // ioformat::GREEN << "success" << ioformat::RESET;
+        std::cout << ioformat::GREEN << "success" << ioformat::RESET;
     }
     else {
-        std::cout << "failure"; // ioformat::RED << "failure" << ioformat::RESET;
+        std::cout << ioformat::RED << "failure" << ioformat::RESET;
     }
     std::cout << "\n";
-    std::cout.flush();
-    std::cout << "[Before DiagnosticHandler::dump]\n";
-    std::cout.flush();
-    // int num_errors = DiagnosticHandler::dump();
-    int num_errors = 0;  // Skip dump for now
-    std::cout << "[After setting num_errors]\n";
-    std::cout.flush();
-    std::cout << num_errors << " errors\n\n";
-    std::cout << "[After printing errors]\n";
-    std::cout.flush();
+    // fe::xast::dump(ast);
+    int num_errors = DiagnosticHandler::dump();
     if (!parse_success || num_errors) {
         exit(EXIT_FAILURE);
     }
 
-    std::cout << "[About to call analyze]\n";
-    std::cout.flush();    // analyze
     auto &primitives = fe::PrimitiveType::get_all();
-    fe::analyze(ast, primitives);
-    std::cout << "\n";
+    fe::analyze(ast, primitives, strings);
     num_errors = DiagnosticHandler::dump();
     std::cout << num_errors << " errors\n\n";
     if (num_errors) {

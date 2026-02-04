@@ -113,7 +113,8 @@ struct StringPool {
     std::string_view get(std::string_view s) {
         auto it = m.find(s);
         if (it != m.end()) { return it->second; }
-        auto str = (char *)std::memcpy(a(s.size()), s.data(), s.size());
+        auto str = (char *)std::memcpy(a(s.size() + 1), s.data(), s.size());
+        str[s.size()] = '\0';
         std::string_view sv = { str, s.size() };
         m[sv] = sv;
         return sv;

@@ -17,6 +17,9 @@ enum class typekind {
     // error
     error_t,
 
+    // for compile-time expressions that return a type
+    meta_t,
+
     // primitives
     _primitive_start,
 
@@ -121,9 +124,18 @@ public:
     bool is_decl() { return Type::is_decl(kind); }
 };
 
+struct MetaType : public Type {
+private:
+    MetaType() : Type(typekind::meta_t, 0, this) { }
+
+public:
+    std::string stringify() override { return "<type>"; }
+    static MetaType *get();
+};
+
 struct ErrorType : public Type {
 private: 
-    ErrorType() : Type(typekind::error_t, 0, nullptr) { }
+    ErrorType() : Type(typekind::error_t, 0, this) { }
 
 public:
     std::string stringify() override { return "<err>"; }
@@ -217,8 +229,8 @@ struct DeclType : public Type {
 
     DeclType(typekind tk, unsigned sz, Type *canonical, xast::Node *decl, std::string scoped_ident = "")
     : Type(tk, sz, canonical), decl(decl) {
-        if (decl && decl->ident) {
-            ident = decl->ident;
+        if (decl && decl->data.is_ident()) {
+            ident = decl->data.ident;
             this->scoped_ident = scoped_ident.empty() ? ident : scoped_ident;
         } else {
             ident = "";
@@ -244,23 +256,63 @@ struct PlaceholderType : public DeclType {
     : DeclType(typekind::placeholder_t, 0, nullptr, decl, scoped_ident) { }
 };
 
+// StructType and UnionType are "leaf" composite types.
+// They should generally not appear as user-facing types directly.
+// Instead, they should be wrapped in:
+//   - InstantiatedType for template instantiations (Vector!(i32))
+//   - AliasType for named composites (let! Foo = type { ... })
+// Field access goes through the AST node (decl), not through these types.
+// Type equality for composites is NOMINAL (identity), not structural.
+
 struct StructType : public DeclType {
     StructType(xast::Node *decl, std::string scoped_ident = "")
     : DeclType(typekind::struct_t, 0, nullptr, decl, scoped_ident) { }
+    
+    std::string stringify() override {
+        return scoped_ident.empty() ? "<struct>" : scoped_ident;
+    }
 };
 
 struct UnionType : public DeclType {
     UnionType(xast::Node *decl, std::string scoped_ident = "")
     : DeclType(typekind::union_t, 0, nullptr, decl, scoped_ident) { }
+    
+    std::string stringify() override {
+        return scoped_ident.empty() ? "<union>" : scoped_ident;
+    }
 };
+
+// InstantiatedType represents a template instantiation like Vector!(i32).
+// 
+// Key properties:
+// - template_name: The template's name ("Vector")
+// - template_args: Type* pointers to the arguments (should be canonical for comparisons)
+// - instantiation_node: The AST composite node for field lookup
+//
+// Canonicalization:
+// - Two InstantiatedTypes are equal if they have the same template_name
+//   AND all their canonical template_args match.
+// - Should be interned so Vector!(i32) always yields the same Type* pointer.
+//
+// For AliasType wrapping:
+// - IntOptVec = Vector!(Option!(i32)) creates:
+//   AliasType("IntOptVec", canonical=InstantiatedType("Vector", [canonical Option!(i32)]))
 
 struct InstantiatedType : public Type {
     std::string template_name;
-    std::vector<Type *> template_args;
-    xast::Node *instantiation_node;
+    std::vector<Type *> template_args;  // Should hold canonical Type* for comparison
+    xast::Node *instantiation_node;     // AST node for field lookup
     
     InstantiatedType(std::string template_name, std::vector<Type *> template_args, xast::Node *inst_node = nullptr)
     : Type(typekind::instantiated_t, 0, nullptr)
+    , template_name(template_name)
+    , template_args(template_args)
+    , instantiation_node(inst_node) { }
+    
+    // For interning: create with canonical as self, then intern
+    InstantiatedType(std::string template_name, std::vector<Type *> template_args, 
+                     xast::Node *inst_node, Type *canonical)
+    : Type(typekind::instantiated_t, 0, canonical)
     , template_name(template_name)
     , template_args(template_args)
     , instantiation_node(inst_node) { }
@@ -269,8 +321,28 @@ struct InstantiatedType : public Type {
         std::string str = template_name;
         str += "!(";
         for (size_t i = 0; i < template_args.size(); ++i) {
-            if (i > 0) str += ",";
-            str += template_args[i]->stringify();
+            if (i > 0) str += ", ";
+            // Non-type args are stored as nullptr, represent as "<cexpr>"
+            if (template_args[i])
+                str += template_args[i]->stringify();
+            else
+                str += "<cexpr>";
+        }
+        str += ")";
+        return str;
+    }
+    
+    // Get canonical form of this instantiation (with canonical args)
+    std::string canonical_key() const {
+        std::string str = template_name;
+        str += "!(";
+        for (size_t i = 0; i < template_args.size(); ++i) {
+            if (i > 0) str += ", ";
+            // Non-type args are stored as nullptr, represent as "<cexpr>"
+            if (template_args[i])
+                str += template_args[i]->get_canonical()->stringify();
+            else
+                str += "<cexpr>";
         }
         str += ")";
         return str;

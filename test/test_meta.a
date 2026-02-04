@@ -1,0 +1,428 @@
+// ============================================================================
+// COMPREHENSIVE META EXPRESSION TESTS
+// ============================================================================
+// Tests for: type intrinsics, constant evaluation, type constructors,
+// nested instantiations, conditional types, and pathological cases.
+
+// ============================================================================
+// SECTION 1: PRIMITIVE TYPE INTRINSICS
+// ============================================================================
+
+// --- _is_pointer tests ---
+let! PTR_I32 = _is_pointer!(*i32)         // Expected: 1
+let! PTR_I64 = _is_pointer!(*i64)         // Expected: 1
+let! PTR_U8 = _is_pointer!(*u8)           // Expected: 1
+let! PTR_PTR = _is_pointer!(**i32)        // Expected: 1 (pointer to pointer)
+let! NOT_PTR_I32 = _is_pointer!(i32)      // Expected: 0
+let! NOT_PTR_U64 = _is_pointer!(u64)      // Expected: 0
+
+// --- _is_primitive tests ---
+let! IS_PRIM_I32 = _is_primitive!(i32)    // Expected: 1
+let! IS_PRIM_U8 = _is_primitive!(u8)      // Expected: 1
+let! IS_PRIM_F32 = _is_primitive!(f32)    // Expected: 1
+let! IS_PRIM_PTR = _is_primitive!(*i32)   // Expected: 0 (pointer is not primitive)
+
+// --- _is_integral tests ---
+let! IS_INT_I32 = _is_integral!(i32)      // Expected: 1
+let! IS_INT_U64 = _is_integral!(u64)      // Expected: 1
+let! IS_INT_I8 = _is_integral!(i8)        // Expected: 1
+let! IS_INT_F32 = _is_integral!(f32)      // Expected: 0 (float is not integral)
+let! IS_INT_F64 = _is_integral!(f64)      // Expected: 0
+
+// --- _is_signed / _is_unsigned tests ---
+let! IS_SIGNED_I32 = _is_signed!(i32)     // Expected: 1
+let! IS_SIGNED_I8 = _is_signed!(i8)       // Expected: 1
+let! IS_SIGNED_U32 = _is_signed!(u32)     // Expected: 0
+let! IS_UNSIGNED_U32 = _is_unsigned!(u32) // Expected: 1
+let! IS_UNSIGNED_I32 = _is_unsigned!(i32) // Expected: 0
+
+// --- _sizeof tests ---
+let! SIZE_I8 = _sizeof!(i8)               // Expected: 1
+let! SIZE_I16 = _sizeof!(i16)             // Expected: 2
+let! SIZE_I32 = _sizeof!(i32)             // Expected: 4
+let! SIZE_I64 = _sizeof!(i64)             // Expected: 8
+let! SIZE_PTR = _sizeof!(*i32)            // Expected: 8 (64-bit pointer)
+let! SIZE_F32 = _sizeof!(f32)             // Expected: 4
+let! SIZE_F64 = _sizeof!(f64)             // Expected: 8
+
+// --- _alignof tests ---
+let! ALIGN_I8 = _alignof!(i8)             // Expected: 1
+let! ALIGN_I32 = _alignof!(i32)           // Expected: 4
+let! ALIGN_I64 = _alignof!(i64)           // Expected: 8
+let! ALIGN_PTR = _alignof!(*i32)          // Expected: 8
+
+// ============================================================================
+// SECTION 2: CONSTANT EXPRESSION EVALUATION
+// ============================================================================
+
+// --- Simple constants ---
+let! CONST_42 = 42
+let! CONST_NEG = 0 - 10                  // -10
+let! CONST_ZERO = 0
+
+// --- Arithmetic operations ---
+let! ADD_RESULT = 10 + 20                // Expected: 30
+let! SUB_RESULT = 50 - 17                // Expected: 33
+let! MUL_RESULT = 6 * 7                  // Expected: 42
+let! DIV_RESULT = 100 / 4                // Expected: 25
+let! MOD_RESULT = 17 % 5                 // Expected: 2
+let! COMPLEX_EXPR = (10 + 5) * 2 - 3     // Expected: 27
+
+// --- Comparison operations ---
+let! CMP_LT = 5 < 10                     // Expected: 1
+let! CMP_GT = 10 > 5                     // Expected: 1
+let! CMP_LE = 5 <= 5                     // Expected: 1
+let! CMP_GE = 10 >= 10                   // Expected: 1
+let! CMP_EQ = 42 == 42                   // Expected: 1
+let! CMP_NE = 42 != 43                   // Expected: 1
+let! CMP_FALSE_LT = 10 < 5               // Expected: 0
+let! CMP_FALSE_EQ = 10 == 20             // Expected: 0
+
+// --- Logical operations ---
+let! LOGIC_AND = 1 && 1                  // Expected: 1
+let! LOGIC_AND_F = 1 && 0                // Expected: 0
+let! LOGIC_OR = 0 || 1                   // Expected: 1
+let! LOGIC_OR_F = 0 || 0                 // Expected: 0
+
+// --- Bitwise operations (commented out - not supported at top level) ---
+// let! BIT_AND = 12 & 10                   
+// let! BIT_OR = 12 | 3                     
+// let! BIT_XOR = 12 ^ 10                   
+
+// --- Constants depending on other constants ---
+let! BASE_SIZE = 16
+let! DERIVED_SIZE = BASE_SIZE * 2        // Expected: 32
+let! IS_LARGE = DERIVED_SIZE > 24        // Expected: 1
+let! CHAIN_A = 10
+let! CHAIN_B = CHAIN_A + 5               // 15
+let! CHAIN_C = CHAIN_B * 2               // 30
+let! CHAIN_D = CHAIN_C - CHAIN_A         // 20
+
+// ============================================================================
+// SECTION 3: TYPE CONSTRUCTORS (SIMPLE)
+// ============================================================================
+
+// --- Simple struct type constructor ---
+let! Point = fn!(T: type): type {
+    type {
+        x: T
+        y: T
+    }
+}
+
+// --- Simple union type constructor ---
+let! Maybe = fn!(T: type): type {
+    type
+        | Just(T)
+        | Nothing
+}
+
+// --- Struct with pointer ---
+let! Box = fn!(T: type): type {
+    type {
+        ptr: *T
+        size: u64
+    }
+}
+
+// --- Self-referential struct ---
+let! LinkedNode = fn!(T: type): type {
+    type as Self {
+        value: T
+        next: *Self
+    }
+}
+
+// ============================================================================
+// SECTION 4: TYPE INSTANTIATIONS (SIMPLE)
+// ============================================================================
+
+// --- Simple instantiations ---
+let! PointI32 = Point!(i32)
+let! PointF64 = Point!(f64)
+let! MaybeI32 = Maybe!(i32)
+let! MaybeU8 = Maybe!(u8)
+let! BoxI64 = Box!(i64)
+let! NodeI32 = LinkedNode!(i32)
+
+// ============================================================================
+// SECTION 5: CONDITIONAL TYPE CONSTRUCTORS
+// ============================================================================
+
+// --- Conditional type based on integer ---
+let! CondType = fn!(T: type, AsPtr: u32): type {
+    if! (AsPtr) {
+        *T
+    } else {
+        T
+    }
+}
+
+let! CondPtr = CondType!(i32, 1)         // Expected: *i32
+let! CondVal = CondType!(i32, 0)         // Expected: i32
+
+// --- Conditional type using intrinsic ---
+let! EnsurePointer = fn!(T: type): type {
+    if! (_is_pointer!(T)) {
+        T
+    } else {
+        *T
+    }
+}
+
+let! EnsuredFromPtr = EnsurePointer!(*i32)   // Expected: *i32 (already pointer)
+let! EnsuredFromVal = EnsurePointer!(i32)    // Expected: *i32 (made pointer)
+
+// --- Conditional type based on size ---
+let! SmallOrPtr = fn!(T: type): type {
+    if! (_sizeof!(T) <= 4) {
+        T
+    } else {
+        *T
+    }
+}
+
+let! SmallI32 = SmallOrPtr!(i32)         // Expected: i32 (size 4)
+let! SmallI64 = SmallOrPtr!(i64)         // Expected: *i64 (size 8)
+
+// --- Type selection based on signedness ---
+let! ToUnsigned = fn!(T: type): type {
+    if! (_is_signed!(T)) {
+        if! (_sizeof!(T) == 1) {
+            u8
+        } else {
+            if! (_sizeof!(T) == 2) {
+                u16
+            } else {
+                if! (_sizeof!(T) == 4) {
+                    u32
+                } else {
+                    u64
+                }
+            }
+        }
+    } else {
+        T
+    }
+}
+
+let! UnsignedFromI8 = ToUnsigned!(i8)    // Expected: u8
+let! UnsignedFromI32 = ToUnsigned!(i32)  // Expected: u32
+let! UnsignedFromU64 = ToUnsigned!(u64)  // Expected: u64 (already unsigned)
+
+// ============================================================================
+// SECTION 6: NESTED TYPE INSTANTIATIONS
+// ============================================================================
+
+// --- Two levels of nesting ---
+let! MaybePoint = Maybe!(Point!(i32))    // Maybe<Point<i32>>
+let! BoxMaybe = Box!(Maybe!(i32))        // Box<Maybe<i32>>
+let! PointMaybe = Point!(Maybe!(i32))    // Point<Maybe<i32>>
+
+// --- Three levels of nesting ---
+let! DeepNest1 = Maybe!(Box!(Point!(i32)))    // Maybe<Box<Point<i32>>>
+let! DeepNest2 = Box!(Maybe!(Point!(i32)))    // Box<Maybe<Point<i32>>>
+let! DeepNest3 = Point!(Maybe!(Box!(i32)))    // Point<Maybe<Box<i32>>>
+
+// --- Self-referential with nesting ---
+let! LinkedMaybe = LinkedNode!(Maybe!(i32))   // LinkedNode<Maybe<i32>>
+let! MaybeLinked = Maybe!(LinkedNode!(i32))   // Maybe<LinkedNode<i32>>
+
+// ============================================================================
+// SECTION 7: MULTI-PARAMETER TYPE CONSTRUCTORS
+// ============================================================================
+
+// --- Two type parameters ---
+let! Pair = fn!(A: type, B: type): type {
+    type {
+        first: A
+        second: B
+    }
+}
+
+let! PairI32F64 = Pair!(i32, f64)
+let! PairU8Ptr = Pair!(u8, *i32)
+
+// --- Type and value parameter ---
+let! Array = fn!(T: type, N: u32): type {
+    type {
+        data: *T
+        count: u32
+    }
+}
+
+let! ArrayI32_10 = Array!(i32, 10)
+let! ArrayF64_100 = Array!(f64, 100)
+
+// --- Three parameters ---
+let! Triple = fn!(A: type, B: type, C: type): type {
+    type {
+        a: A
+        b: B
+        c: C
+    }
+}
+
+let! TripleTest = Triple!(i32, f32, u64)
+
+// ============================================================================
+// SECTION 8: COMPLEX COMPOSITION
+// ============================================================================
+
+// --- Pair of pairs ---
+let! PairOfPairs = Pair!(Pair!(i32, i32), Pair!(f32, f32))
+
+// --- Array of Maybe ---
+let! ArrayMaybe = Array!(Maybe!(i32), 5)
+
+// --- Nested pairs with different depths ---
+let! DeepPair = Pair!(Pair!(Pair!(i32, i32), i32), i32)
+
+// --- Conditional nested type ---
+let! ConditionalNest = fn!(T: type, UseBox: u32): type {
+    if! (UseBox) {
+        Box!(Maybe!(T))
+    } else {
+        Maybe!(T)
+    }
+}
+
+let! CondNestWithBox = ConditionalNest!(i32, 1)    // Box<Maybe<i32>>
+let! CondNestNoBox = ConditionalNest!(i32, 0)      // Maybe<i32>
+
+// ============================================================================
+// SECTION 9: INTRINSICS ON CONSTRUCTED TYPES
+// ============================================================================
+
+// --- Size/align of instantiated types (when supported) ---
+// Note: These may require struct layout to be computed
+// let! SIZE_POINT = _sizeof!(PointI32)
+// let! ALIGN_POINT = _alignof!(PointI32)
+
+// --- Is struct/union tests ---
+// let! IS_STRUCT_POINT = _is_struct!(PointI32)     // Expected: 1
+// let! IS_UNION_MAYBE = _is_union!(MaybeI32)       // Expected: 1
+// let! IS_STRUCT_MAYBE = _is_struct!(MaybeI32)     // Expected: 0
+
+// ============================================================================
+// SECTION 10: EDGE CASES AND PATHOLOGICAL TESTS
+// ============================================================================
+
+// --- Empty struct/union (removed - empty calls not supported) ---
+// let! EmptyStruct = fn!(): type {
+//     type { }
+// }
+// let! EmptyTest = EmptyStruct!()
+
+// --- Single-field struct ---
+let! Wrapper = fn!(T: type): type {
+    type {
+        value: T
+    }
+}
+let! WrapperI32 = Wrapper!(i32)
+
+// --- Single-variant union ---
+let! SingleVariant = fn!(T: type): type {
+    type
+        | Only(T)
+}
+let! SingleI32 = SingleVariant!(i32)
+
+// --- Many fields ---
+let! ManyFields = fn!(T: type): type {
+    type {
+        f1: T
+        f2: T
+        f3: T
+        f4: T
+        f5: T
+    }
+}
+let! ManyI32 = ManyFields!(i32)
+
+// --- Deeply nested conditionals ---
+let! DeepCond = fn!(N: u32): type {
+    if! (N == 0) {
+        i8
+    } else {
+        if! (N == 1) {
+            i16
+        } else {
+            if! (N == 2) {
+                i32
+            } else {
+                i64
+            }
+        }
+    }
+}
+
+let! DeepCond0 = DeepCond!(0)            // Expected: i8
+let! DeepCond1 = DeepCond!(1)            // Expected: i16
+let! DeepCond2 = DeepCond!(2)            // Expected: i32
+let! DeepCond3 = DeepCond!(3)            // Expected: i64
+
+// --- Type constructor returning based on intrinsic chain ---
+let! SelectBySize = fn!(T: type): type {
+    if! (_sizeof!(T) == 1) {
+        u8
+    } else {
+        if! (_sizeof!(T) == 2) {
+            u16
+        } else {
+            if! (_sizeof!(T) == 4) {
+                u32
+            } else {
+                if! (_sizeof!(T) == 8) {
+                    u64
+                } else {
+                    T
+                }
+            }
+        }
+    }
+}
+
+let! SelectI8 = SelectBySize!(i8)        // Expected: u8
+let! SelectI16 = SelectBySize!(i16)      // Expected: u16
+let! SelectI32 = SelectBySize!(i32)      // Expected: u32
+let! SelectI64 = SelectBySize!(i64)      // Expected: u64
+
+// --- Intrinsic result used in arithmetic ---
+let! SizeCalc = _sizeof!(i32) + _sizeof!(i64)    // Expected: 4 + 8 = 12
+let! AlignCalc = _alignof!(i64) * 2             // Expected: 8 * 2 = 16
+let! CombinedCalc = _sizeof!(*i32) + _is_pointer!(*i32)  // Expected: 8 + 1 = 9
+
+// --- Boolean intrinsic combinations ---
+let! BothPointer = _is_pointer!(*i32) && _is_pointer!(*i64)  // Expected: 1
+let! EitherPointer = _is_pointer!(i32) || _is_pointer!(*i32) // Expected: 1
+let! NeitherPointer = _is_pointer!(i32) && _is_pointer!(i64) // Expected: 0
+
+// ============================================================================
+// SECTION 11: REGULAR (NON-META) CODE FOR COMPLETENESS
+// ============================================================================
+
+let main = fn(): i32 {
+    let x: i32 = 42
+    let y = 10
+    let z = x + y
+    
+    if (z > 50) {
+        1
+    } else {
+        0
+    }
+}
+
+let add = fn(a: i32, b: i32): i32 {
+    a + b
+}
+
+let factorial = fn(n: i32): i32 {
+    if (n <= 1) {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}

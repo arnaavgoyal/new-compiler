@@ -14,124 +14,92 @@
 #define VARIADIC_ACCESSOR(nodekind, accessor_name, start_index)
 #endif
 
-// VALBIND: 2 concrete children
-DECL(valbind, 2,
-    ACCESSOR(valbind, type_annot, 0)
-    ACCESSOR(valbind, def, 1)
+DECL(bind, 2,
+    ACCESSOR(bind, type_annot, 0)
+    ACCESSOR(bind, def, 1)
 )
 
-// FUNCBIND: 1 concrete child
-DECL(funcbind, 1,
-    ACCESSOR(funcbind, def, 0)
+NK(composite, 3,
+    ACCESSOR(composite, tmpname, 0)
+    ACCESSOR(composite, layout, 1)
+    ACCESSOR(composite, namespc, 2)
 )
 
-// TYPEBIND: 2 concrete children
-DECL(typebind, 2,
-    ACCESSOR(typebind, def, 0)
-    ACCESSOR(typebind, namespace_, 1)
+NK(struct_, 0,
+    VARIADIC_ACCESSOR(struct_, field, 0)
 )
 
-// STRUCT: 0 concrete children
-DECL(struct_, 0,
-)
-
+// name is in the ident
 DECL(field, 1,
     ACCESSOR(field, type_annot, 0)
 )
 
-// UNION: 0 concrete children
-DECL(union_, 0,
+NK(union_, 0,
+    VARIADIC_ACCESSOR(union_, variant, 1)
 )
 
-// PARAM: 1 concrete child
-DECL(param, 1,
-    ACCESSOR(param, type_annot, 0)
-)
-
+// name is in the ident
 DECL(variant, 1,
     ACCESSOR(variant, payload, 0)
-)
-
-// TMPLDECL: wraps a declaration with template parameters (2 concrete children)
-DECL(tmpldecl, 1,
-    VARIADIC_ACCESSOR(tmpldecl, param, 1)
-    ACCESSOR(tmpldecl, decl, 0)
-)
-
-// TMPLPARAMDECL: template parameter declaration
-DECL(tmplparamdecl, 0,
-)
-
-// ADJACENCY: 0 concrete, variadic children (adjacent expressions combined)
-// Used to represent: "expr1 expr2 expr3" which implicitly applies expr1 to (expr2, expr3, ...)
-NK(adjacency, 0,
-    VARIADIC_ACCESSOR(adjacency, child, 0)
 )
 
 NK(prog, 0,)
 NK(error, 0,) // is this still needed?
 NK(null, 0,)
 
-// FUNC: 0 concrete from start, variadic params (0..n-2), return type at -2, body at -1
-NK(func, 2,
-    VARIADIC_ACCESSOR(func, param, 2)
-    ACCESSOR(func, return_ty, 0)
-    ACCESSOR(func, body, 1)
+NK(func, 4,
+    ACCESSOR(func, captures, 0)
+    ACCESSOR(func, params, 1)
+    ACCESSOR(func, return_ty, 2)
+    ACCESSOR(func, body, 3)
+)
+
+NK(captures, 0,
+    VARIADIC_ACCESSOR(captures, capture, 0)
+)
+
+NK(params, 0,
+    VARIADIC_ACCESSOR(params, param, 0)
+)
+
+// name is in the ident
+DECL(param, 1,
+    ACCESSOR(param, type_annot, 0)
 )
 
 NK(int_lit, 0,)
 NK(char_lit, 0,)
 NK(str_lit, 0,)
 
-// TMPLINSTANTIATION: base, comma_expr
-NK(tmplinstantiation, 2,
-    ACCESSOR(tmplinstantiation, base, 0)
-    ACCESSOR(tmplinstantiation, args, 1)
-)
-
-// INSTANTIATEDTMPL: result of template instantiation with substituted args and decl
-// Child 0: the decl node from the template (with substitutions applied)
-// Variadic children from index 1: substituted argument expressions
-NK(instantiatedtmpl, 1,
-    ACCESSOR(instantiatedtmpl, decl, 0)
-    VARIADIC_ACCESSOR(instantiatedtmpl, arg, 1)
-)
-
-// TMPLINSTANTIATIONS: container node that replaces tmpldecl in the AST
-// Holds all instantiatedtmpl nodes for a particular template declaration
-// Variadic children: instantiatedtmpl nodes
-NK(tmplinstantiations, 0,
-    VARIADIC_ACCESSOR(tmplinstantiations, instantiation, 0)
-)
-
-// LOOP: 2 concrete children
 NK(loop, 2,
     ACCESSOR(loop, cond, 0)
     ACCESSOR(loop, body, 1)
 )
 
-// BRANCH: 3 concrete children (cond, then_block, optional else_block)
+// (cond, then_block, optional else_block)
 NK(branch, 3,
     ACCESSOR(branch, cond, 0)
     ACCESSOR(branch, then, 1)
     ACCESSOR(branch, else_, 2)
 )
 
-// BLOCK: 0 concrete, variadic statements (0..n)
 NK(block, 0,
     VARIADIC_ACCESSOR(block, stmt, 0)
 )
 
-// REF: 0 concrete children (name stored in sym field)
+// name is in the ident
 NK(ref, 0,)
 
-// CALL: called function + comma expr
+// Internal reference - no identifier, type pointer is set directly
+// Used after meta instantiation to reference concrete types
+NK(internalref, 0,)
+
+// called function + comma expr
 NK(call, 2,
     ACCESSOR(call, callable, 0)
     ACCESSOR(call, args, 1)
 )
 
-// PAREN_EXPR: 1 concrete child
 NK(paren_expr, 1,
     ACCESSOR(paren_expr, inner, 0)
 )
@@ -140,7 +108,6 @@ NK(comma_expr, 0,
     VARIADIC_ACCESSOR(comma_expr, expr, 0)
 )
 
-// SUBSCRIPT: 2 concrete children
 NK(subscript, 2,
     ACCESSOR(subscript, array, 0)
     ACCESSOR(subscript, index, 1)
@@ -151,12 +118,10 @@ NK(cast, 2,
     ACCESSOR(cast, type, 1)
 )
 
-// UNARY_OP: 1 concrete child (operand at 0), op kind in op field
 NK(unary_op, 1,
     ACCESSOR(unary_op, operand, 0)
 )
 
-// BINARY_OP: 2 concrete children
 NK(binary_op, 2,
     ACCESSOR(binary_op, lhs, 0)
     ACCESSOR(binary_op, rhs, 1)

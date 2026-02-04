@@ -52,14 +52,20 @@ void dump(Node *node, std::string stem) {
         }
 
         std::cout << stem << "`" << kind_str;
-        if (node->ident) {
-            std::cout << ioformat::YELLOW
-                << " '" << *node->ident << "'";
+
+        if (node->meta) {
+            std::cout << ioformat::RED << "!";
         }
-        if (node->op.kind != op::unknown && token::is_operator(node->op.tok)) {
-            std::cout << " "
-                << ioformat::RED
-                << token::get_operator_string(node->op.tok);
+
+        std::cout << ioformat::YELLOW;
+        if (node->data.is_ident()) {
+            std::cout << " '" << *node->data.ident << "'";
+        }
+        else if (node->data.is_ival()) {
+            std::cout << " " << node->data.ival;
+        }
+        else if (node->data.is_op()) {
+            std::cout << " " << token::get_operator_string(node->data.op.tok);
         }
 
         if (node->type != nullptr) {

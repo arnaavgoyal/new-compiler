@@ -1,0 +1,144 @@
+// =============================================================================
+// TEST: Where-clause function scoping
+// =============================================================================
+// Tests that variables declared in where-clause functions are properly scoped
+
+// -----------------------------------------------------------------------------
+// 1. Basic variable declaration in where-clause function
+// -----------------------------------------------------------------------------
+let! Simple = fn!(T: type): type {
+    type as Self {
+        data: T
+    } where {
+        let create = fn(): Self {
+            let result: Self  // This must be found during type checking
+            result            // Reference to result must resolve
+        }
+    }
+}
+
+let! SimpleInt = Simple!(i32)
+let s1 = SimpleInt.create()
+
+// -----------------------------------------------------------------------------
+// 2. Multiple variables in where-clause function
+// -----------------------------------------------------------------------------
+let! Multi = fn!(T: type): type {
+    type as Self {
+        a: T
+        b: T
+    } where {
+        let make = fn(): Self {
+            let x: Self
+            let y: i32
+            let z: i64
+            x  // Return x, y and z are just local vars
+        }
+    }
+}
+
+let! MultiInt = Multi!(i32)
+let m1 = MultiInt.make()
+
+// -----------------------------------------------------------------------------
+// 3. Variables with same name in different where-clause functions
+// -----------------------------------------------------------------------------
+let! SameName = fn!(T: type): type {
+    type as Self {
+        value: T
+    } where {
+        let first = fn(): Self {
+            let v: Self  // 'v' in first
+            v
+        }
+        
+        let second = fn(): Self {
+            let v: Self  // 'v' in second (different scope)
+            v
+        }
+    }
+}
+
+let! SameNameInt = SameName!(i32)
+let sn1 = SameNameInt.first()
+let sn2 = SameNameInt.second()
+
+// -----------------------------------------------------------------------------
+// 4. Nested blocks in where-clause function
+// -----------------------------------------------------------------------------
+let! Nested = fn!(T: type): type {
+    type as Self {
+        data: T
+    } where {
+        let complex = fn(): Self {
+            let outer: Self
+            if (1) {
+                let inner: i32  // Inner scope variable
+                inner
+            } else {
+                0
+            }
+            outer
+        }
+    }
+}
+
+let! NestedInt = Nested!(i32)
+let n1 = NestedInt.complex()
+
+// -----------------------------------------------------------------------------
+// 5. Function parameters in where-clause
+// -----------------------------------------------------------------------------
+let! WithParams = fn!(T: type): type {
+    type as Self {
+        data: T
+    } where {
+        let with_data = fn(d: T): Self {
+            let result: Self
+            result
+        }
+        
+        let with_flag = fn(flag: i32, d: T): Self {
+            let result: Self
+            result
+        }
+    }
+}
+
+let! WithParamsInt = WithParams!(i32)
+let wp1 = WithParamsInt.with_data(42)
+let wp2 = WithParamsInt.with_flag(1, 100)
+
+// -----------------------------------------------------------------------------
+// 6. Concrete type (non-template) with where clause
+// -----------------------------------------------------------------------------
+let ConcreteWithWhere = type as Self {
+    x: i32
+    y: i32
+} where {
+    let origin = fn(): Self {
+        let p: Self
+        p
+    }
+    
+    let at = fn(x: i32, y: i32): Self {
+        let p: Self
+        p
+    }
+}
+
+let cw1 = ConcreteWithWhere.origin()
+let cw2 = ConcreteWithWhere.at(5, 10)
+
+// -----------------------------------------------------------------------------
+// 7. Main entry point
+// -----------------------------------------------------------------------------
+let main = fn(): i32 {
+    // Use various instances
+    let a = SimpleInt.create()
+    let b = MultiInt.make()
+    let c = SameNameInt.first()
+    let d = ConcreteWithWhere.origin()
+    
+    0
+}

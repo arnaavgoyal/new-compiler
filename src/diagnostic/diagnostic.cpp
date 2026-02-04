@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <utility>
 
 #include "diag/diagnostic.h"
@@ -16,55 +17,88 @@ static void print_loc_prefix(ExpandedSourceLocation &loc) {
         << ioformat::RESET;
 }
 
-static void print_loc_highlight(ExpandedSourceLocation &loc, char const *hc) {
+static void print_loc_highlight(std::vector<ExpandedSourceLocation> &locs, char const *hc) {
 
+    if (locs.empty()) return;
+
+    // All locations should be on the same line
+    unsigned line_num = locs[0].start_row;
+    
     // print code highlight
-    unsigned pre_offset = 8;
-    unsigned len = 0;
-    unsigned i = 0;
-    std::cout << std::setfill(' ') << std::setw(5) << loc.start_row << " | ";
-    unsigned pos = loc.src->lines[loc.start_row-1];
-    bool flag = false;
-    //::cout << loc.end_offset - loc.start_offset << std::endl;
-    int c = loc.src->content[pos];
+    std::cout << std::setfill(' ') << std::setw(5) << line_num << " | ";
+    unsigned pos = locs[0].src->lines[line_num-1];
+    int c = locs[0].src->content[pos];
+    
     while (c != '\n' && c != EOF) {
-        if (pos == loc.start_offset) {
+        bool in_range = false;
+        for (auto &loc : locs) {
+            if (pos >= loc.start_offset && pos <= loc.end_offset) {
+                in_range = true;
+                break;
+            }
+        }
+        
+        if (in_range) {
             std::cout << hc;
-            pre_offset += i;
-            flag = true;
         }
-        else if (pos == loc.end_offset + 1) {
-            std::cout << ioformat::RESET;
-            flag = false;
-        }
-        if (flag) {
-            len++;
-        }
-        i++;
+        
         std::cout << (char)c;
-        c = loc.src->content[++pos];
+        
+        if (in_range) {
+            std::cout << ioformat::RESET;
+        }
+        
+        c = locs[0].src->content[++pos];
     }
-    len--;
     std::cout << std::endl;
 
-    // print underline
-    for (unsigned j = 0; j < pre_offset; j++) {
-        putchar(' ');
+    // Build underline with all carets/tildes on one line
+    std::cout << "        "; // 8 spaces to align with line number column
+    
+    unsigned line_start = locs[0].src->lines[line_num-1];
+    pos = line_start;
+    c = locs[0].src->content[pos];
+    
+    while (c != '\n' && c != EOF) {
+        bool is_caret = false;
+        bool is_tilde = false;
+        
+        // Check if this is the start of any location (caret)
+        for (auto &loc : locs) {
+            if (pos == loc.start_offset) {
+                is_caret = true;
+                std::cout << hc << "^";
+                break;
+            }
+        }
+        
+        // If not a caret, check if it's in a range (tilde)
+        if (!is_caret) {
+            for (auto &loc : locs) {
+                if (pos > loc.start_offset && pos <= loc.end_offset) {
+                    is_tilde = true;
+                    std::cout << hc << "~";
+                    break;
+                }
+            }
+        }
+        
+        // If neither, print space
+        if (!is_caret && !is_tilde) {
+            putchar(' ');
+        }
+        
+        if (is_caret || is_tilde) {
+            std::cout << ioformat::RESET;
+        }
+        
+        c = locs[0].src->content[++pos];
     }
-    std::cout << hc;
-    putchar('^');
-    for (unsigned j = 0; j < len; j++) {
-        putchar('~');
-    }
-    std::cout << ioformat::RESET << std::endl;
+    
+    std::cout << std::endl;
 }
 
 void DiagnosticHandler::print_diag(Diagnostic &diag) {
-
-    auto esl = SourceManager::expand(diag.locs[0]);
-
-    // print location prefix
-    print_loc_prefix(esl);
 
     char const *highlight_col = ioformat::GREEN;
     char const *diag_ty_str = nullptr;
@@ -86,13 +120,39 @@ void DiagnosticHandler::print_diag(Diagnostic &diag) {
         break;
     }
 
-    // print error
-    std::cout << highlight_col << diag_ty_str << ": "
-            << ioformat::WHITE << diag.finalstr
-            << ioformat::RESET << std::endl;
+    // group locations by line number
+    std::map<unsigned, std::vector<ExpandedSourceLocation>> lines_map;
+    std::vector<unsigned> line_order; // track order of first appearance
+    
+    for (auto &loc : diag.locs) {
+        auto esl = SourceManager::expand(loc);
+        unsigned line = esl.start_row;
+        if (lines_map.find(line) == lines_map.end()) {
+            line_order.push_back(line);
+        }
+        lines_map[line].push_back(esl);
+    }
 
-    // print loc highlight
-    print_loc_highlight(esl, highlight_col);
+    // print each line with its locations
+    for (size_t i = 0; i < line_order.size(); i++) {
+        unsigned line = line_order[i];
+        auto &locs_on_line = lines_map[line];
+        
+        // print location prefix for the first location on this line
+        print_loc_prefix(locs_on_line[0]);
+
+        // print error message only on the first line
+        if (i == 0) {
+            std::cout << highlight_col << diag_ty_str << ": "
+                    << ioformat::WHITE << diag.finalstr
+                    << ioformat::RESET << std::endl;
+        } else {
+            std::cout << std::endl;
+        }
+
+        // print all highlights for this line
+        print_loc_highlight(locs_on_line, highlight_col);
+    }
 }
 
 static void fmt(std::string &finalstr, char const *formatstr, char const *formatend, std::vector<std::string> &args) {

@@ -1,208 +1,189 @@
-type Node!(T) {
-    val: T
-    next: *Node!(T)
-}
-
-type BadNode!(T) {
-    val: T
-    next: BadNode!(T)
-}
-
-// namespacing test
-type Namespace {
-    x: Internal
-} where {
-    type Internal
-        | Some(Internal2)
-        | None
-    where {
-        type Internal2 = Namespace
-    }
-}
-
-let foo(fn: (i32) -> *i32): *i32 {
-    fn(0)
-}
-
-let main(): i32 {
-    []x.y.z
-    let test_invalid_annot: i32 + 3
-    let head: *Node!(i32)
-    head.val = *foo(\(x: i32): *i32 { 0 })
-    let x = 3 * 4 + 6
-    type Foo = Namespace.Internal.Internal2+2
-    if (head) {
-        head.val
+let main = fn(): i32 {
+    let x: i32 = 5
+    let y = 10
+    let z = x + y * 2
+//  let x = 2
+    
+    if (x) {
+        let nested: i32 = 100
+        nested
     }
     else {
         0
     }
 }
 
+// valid
+let! Node = fn!(T: type): type {
+    type as Self {
+        val: T
+        next: *Self
+    }
+}
 
-// ─────────────────────────────────────────────
-// 1. Simple alias chain (invalid cycle)
-// ─────────────────────────────────────────────
+// valid
+let! Option = fn!(T: type): type {
+    type
+        | Some(T)
+        | None
+}
+let! Vector = fn!(T: type): type {
+    type as Self {
+        data: *T
+        size: i32
+    } where {
+        let new = fn(): Self {
+            let v: Self
+            v
+        }
+    }
+}
+let! IntOptVec = Vector!(Option!(i32))
 
-// type A1 = B1
-// type B1 = C1
-// type C1 = A1
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 2. Pointer-broken self recursion (valid)
-// // ─────────────────────────────────────────────
-// 
-// type Node2 {
-//     next: *Node2
+// Test namespace access on a named type alias
+let vec_test = IntOptVec.new()
+
+// valid - with where clause
+let! Array = fn!(T: type, N: u32): type {
+    type as Self {
+        data: []T
+        size: u32
+    } where {
+        let init = fn(): Self {
+            let arr: Self
+            arr
+        }
+    }
+}
+
+// With where clause - test later
+// let! ArrayWithInit = fn!(T: type, N: u32): type {
+//     type as Self {
+//         data: []T
+//         size: u32
+//     } where {
+//         let init = fn(): Self {
+//             let arr: Self
+//             arr.size = N
+//             arr
+//         }
+//     }
 // }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 3. Struct ↔ struct via where-clause (invalid)
-// // ─────────────────────────────────────────────
-// 
-// type Outer3 {
-//     inner: Inner3
-// } where {
-//     type Inner3 {
-//         back: Outer3
+
+// Compile-time conditional example using if!
+let! MaybePointer = fn!(T: type, AsPtr: u32): type {
+    if! (AsPtr) {
+        *T
+    }
+    else {
+        T
+    }
+}
+
+// Tests: these should evaluate at compile time
+let! PtrInt = MaybePointer!(i32, 1)   // Should be *i32
+let! ValInt = MaybePointer!(i32, 0)   // Should be i32
+
+// Compile-time constant evaluation
+let! SIZE = 42
+let! IS_BIG = SIZE > 30  // Should evaluate to 1 (true)
+
+// Type intrinsic tests - note the ! suffix for meta calls
+let! IS_PTR_TEST = _is_pointer!(*i32)    // Should be 1
+let! IS_NOT_PTR = _is_pointer!(i32)      // Should be 0
+let! PTR_SIZE = _sizeof!(*i32)           // Should be 8
+
+// Meta function that returns a value based on type comparison
+let! cxx_template_var = fn!(T: type): i32 {
+    // Use if! for compile-time type comparison
+    if! (T == i32) { 1 }
+    else { 2 }
+}
+
+// Top-level meta expressions must evaluate to bindings
+// This if! evaluates cxx_template_var!(i64) which returns 2,
+// so 2 == 1 is false, and the else branch is taken
+if! cxx_template_var!(i64) == 1 {
+    let x = 4
+}
+else {
+    let x = 5
+}
+
+let! dispatch_fn = fn!(T: type): type {
+    if! (T == u8) { u16 }
+    else if! (T == u16) { u32 }
+    else { i64 }
+}
+
+let! specialized = fn!(T: type, f: (type) -> type): type {
+    Vector!(f!(T))
+}
+// spec_test type should resolve to Vector!(u32)
+let! spec_test = specialized!(u16, dispatch_fn)
+
+// Instantiate Array type first, then access its namespace
+let arr = Array!(i32, 6).init()
+
+// Test simple namespace access
+let! ArrayTest = Array!(i32, 6)
+
+// Test let without initializer (just type annotation)
+let uninit_var: i32
+
+let Base = type as Self {
+    x: i32
+} where {
+    let init = fn(): Self {
+        let b: Base
+        b.x = 3
+        b
+    }
+}
+let base = Base.init()
+
+// // invalid - cyclical dependency
+// let! BadNode = fn!(T: type): type {
+//     type as Me {
+//         x: Me
 //     }
 // }
 // 
-// 
-// // ─────────────────────────────────────────────
-// // 4. Union → struct → union (invalid)
-// // ─────────────────────────────────────────────
-// 
-// type Expr4
-//     | Lit4(i32)
-//     | Add4(AddExpr4)
-// where {
-//     type AddExpr4 {
-//         lhs: Expr4
-//         rhs: Expr4
+// // also invalid
+// let! Outer = fn!(T: type): type {
+//     type {
+//         x: Internal
+//     } where {
+//         let! Internal = fn!(T: type): type {
+//             type as Self {
+//                 x: Outer!(T)
+//             }
+//         }
 //     }
 // }
 // 
-// 
-// // ─────────────────────────────────────────────
-// // 5. Generic container (valid by itself)
-// // ─────────────────────────────────────────────
-// 
-// type Box5!(T) {
-//     value: T
+// // valid, but infinite recursion must be caught during evaluation
+// let! A = fn!(f: (type) -> type): type {
+//     A(f)
 // }
 // 
-// 
-// // ─────────────────────────────────────────────
-// // 6. Template-dependent deep cycle (invalid)
-// // ─────────────────────────────────────────────
-// 
-// type L1_6!(T) {
-//     a: L2_6!(Box5!(T))
+// // invalid - but would this be caught now or later?
+// let! MutRec1 = fn!(f: (type) -> type) : type {
+//     MutRec2!(f)
 // }
-// 
-// type L2_6!(T) {
-//     b: L3_6!(T)
+// let! MutRec2 = fn!(f: (type) -> type) : type {
+//     MutRec1!(f)
 // }
-// 
-// type L3_6!(T) {
-//     c: T
-// }
-// 
-// type Root6 {
-//     x: L1_6!(Root6)
-// }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 7. Mutually recursive templates (invalid)
-// // ─────────────────────────────────────────────
-// 
-// type A7!(T) {
-//     b: B7!(T)
-// }
-// 
-// type B7!(T) {
-//     c: C7!(T)
-// }
-// 
-// type C7!(T) {
-//     a: A7!(T)
-// }
-// 
-// type Top7 {
-//     v: A7!(Top7)
-// }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 8. Generic + pointer indirection (valid)
-// // ─────────────────────────────────────────────
-// 
-// type Tree8!(T) {
-//     left: *Tree8!(T)
-//     right: *Tree8!(T)
-//     value: T
-// }
-// 
-// type Forest8 {
-//     root: Tree8!(i32)
-// }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 9. Alias with where-clause adding requirements
-// //    (tests alias identity vs behavior)
-// // ─────────────────────────────────────────────
-// 
-// type Base9 {
-//     x: i32
-// }
-// 
-// type Alias9 = Base9 where {
-//     type Extra9 {
-//         y: Alias9
-//     }
-// }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 10. Invalid self-instantiating generic
-// // ─────────────────────────────────────────────
-// 
-// type Bad10!(T) {
-//     x: Bad10!(T)
-// }
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 11. Cross-generic value recursion via alias
-// // ─────────────────────────────────────────────
-// 
-// type Wrap11!(T) {
-//     v: T
-// }
-// 
-// type Alias11 = Wrap11!(Alias11)
-// 
-// 
-// // ─────────────────────────────────────────────
-// // 12. Mixed valid/invalid field graph
-// // ─────────────────────────────────────────────
-// 
-// type OkLeaf12 {
-//     n: i32
-// }
-// 
-// type BadMid12 {
-//     leaf: OkLeaf12
-//     back: BadTop12
-// }
-// 
-// type BadTop12 {
-//     mid: BadMid12
-// }
-// 
-// 
+
+let loop_test = fn(n: i32): i32 {
+    while (n) {
+        let x = n - 1
+        0
+    }
+}
+
+let lambda_test = fn(f: (i32) -> i32): i32 {
+    let identity = fn(x: i32): i32 { x }
+    identity(5)
+}
+ 

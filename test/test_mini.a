@@ -1,0 +1,47 @@
+// =============================================================================
+// TEST: Basic meta type patterns
+// =============================================================================
+// Minimal tests for common type patterns
+
+// -----------------------------------------------------------------------------
+// 1. Simple linked list with pointer indirection (valid)
+// -----------------------------------------------------------------------------
+let! LinkedList = fn!(T: type): type {
+    type as Self {
+        value: T
+        next: *Self       // Pointer breaks the cycle
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 2. Tree with multiple pointer children (valid)
+// -----------------------------------------------------------------------------
+let! TreeNode = fn!(T: type): type {
+    type as Self {
+        value: T
+        left: *Self
+        right: *Self
+        parent: *Self     // Multiple self-pointers are fine
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 3. Optional type using union (valid - no self-reference)
+// -----------------------------------------------------------------------------
+let! Optional = fn!(T: type): type {
+    type
+        | Some(T)
+        | None
+}
+
+// -----------------------------------------------------------------------------
+// 4. Instantiate and verify
+// -----------------------------------------------------------------------------
+let! IntList = LinkedList!(i32)
+let! IntTree = TreeNode!(i32)
+let! OptionalInt = Optional!(i32)
+
+// Main function to verify compilation
+let main = fn(): i32 {
+    0
+}

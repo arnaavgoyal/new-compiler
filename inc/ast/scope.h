@@ -31,20 +31,22 @@ public:
 
     owning_sv_map<xast::Node *> symbols;
     Scope *parent;
-    std::string namespace_name;  // for namespaced scopes (e.g., "TypeA" for types in TypeA's where block)
-    
-    // Template instantiation cache: maps (template_name + arg_stringification) -> instantiated node
-    owning_sv_map<xast::Node *> template_instantiations;
+    xast::Node *decl;
 
 
-    Scope() : parent(nullptr), namespace_name("") { }
+    Scope() : parent(nullptr), decl(nullptr) { }
     
     // Get fully scoped name for a symbol (e.g., "Outer::Inner::Symbol")
-    std::string get_scoped_name(const std::string &local_name) const {
-        if (namespace_name.empty()) {
-            return local_name;
+    std::string get_qualname() const {
+        std::string qualname;
+        if (parent) {
+            qualname = parent->get_qualname();
         }
-        return namespace_name + "::" + local_name;
+        if (decl) {
+            assert(decl && decl->data.is_ident());
+            qualname.append(*decl->data.ident);
+        }
+        return qualname;
     }
 
     int dump(int ind = 0) {

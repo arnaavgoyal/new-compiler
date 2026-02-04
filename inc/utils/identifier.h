@@ -7,7 +7,6 @@
 #include "utils/source.h"
 
 namespace fe {
-namespace xast {
 
 struct Identifier {
     std::string_view str;
@@ -24,7 +23,6 @@ struct Identifier {
     std::string_view &operator *() { assert(valid()); return str; }
 };
 
-} // xast
 } // fe
 
 #endif

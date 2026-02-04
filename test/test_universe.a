@@ -1,0 +1,51 @@
+// Test expression universe validation
+
+// VALID: Arrow operator in type context (function type parameter)
+let lambda_takes_fn = fn(f: (i32) -> i32): i32 {
+    f(10)
+}
+
+// VALID: Constant expressions
+let! CONST_A = 10
+let! CONST_B = 20
+let! CONST_SUM = CONST_A + CONST_B
+
+// Test type constructor with meta param
+let! Option = fn!(T: type): type {
+    type
+        | Some(T)
+        | None
+}
+
+let! Vec = fn!(T: type): type {
+    type {
+        data: *T
+        len: u32
+    }
+}
+
+let! OptVec = Vec!(Option!(i32))
+
+// Main function to test value expressions
+let main = fn(): i32 {
+    let x = 5
+    let y = 10
+    
+    // VALID: Arithmetic in value context
+    let sum = x + y
+    let prod = x * y
+    
+    // VALID: Relational in value context
+    let gt = if (x > y) { 1 } else { 0 }
+    
+    sum
+}
+
+// ERROR TEST: subscript on type context (should error)
+// This tests that [] subscript operator is caught when used on types
+let! BadTypeSubscript = fn!(T: type): type {
+    // This should be []T (slice type), not T[0] (subscript)
+    type {
+        data: T
+    }
+}

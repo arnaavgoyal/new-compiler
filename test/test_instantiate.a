@@ -1,0 +1,49 @@
+// Test file for meta instantiation (no cycles)
+
+// 1. Simple struct - direct composite, no params
+let! Point = type {
+    x: i32
+    y: i32
+}
+
+// 2. Type constructor with parameter
+let! Box = fn!(T: type): type {
+    type {
+        value: T
+    }
+}
+
+// 3. Self-referential with pointer (valid)
+let! LinkedList = fn!(T: type): type {
+    type as Self {
+        value: T
+        next: *Self
+    }
+}
+
+// 4. Union type
+let! Option = fn!(T: type): type {
+    type as union
+        | Some(T)
+        | None
+}
+
+// 5. Type alias using another type constructor
+let! IntBox = Box!(i32)
+
+// 6. Nested type constructors
+let! Pair = fn!(A: type, B: type): type {
+    type {
+        first: A
+        second: B
+    }
+}
+
+// 7. Chain of dependencies
+let! Wrapper = fn!(T: type): type {
+    type { inner: Box!(T) }
+}
+
+let main = fn(): i32 {
+    0
+}

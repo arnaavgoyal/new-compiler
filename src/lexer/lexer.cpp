@@ -182,7 +182,7 @@ lex_start:
         KEYWORD_CHECK(b, 'b', token::kw_break)
         KEYWORD_CHECK(c, 'c', token::kw_continue)
         KEYWORD_CHECK(e, 'e', token::kw_else)
-        KEYWORD_CHECK(f, 'f', token::kw_false)
+        KEYWORD_CHECK(f, 'f', token::kw_false, token::kw_fn)
         KEYWORD_CHECK(i, 'i', token::kw_if)
         KEYWORD_CHECK(l, 'l', token::kw_let)
         KEYWORD_CHECK(r, 'r', token::kw_return)
@@ -348,6 +348,9 @@ lex_start:
             break;
         case '.':
             type = token::op_dot;
+            break;
+        case '~':
+            type = token::op_tilde;
             break;
         case ',':
             type = token::op_comma;

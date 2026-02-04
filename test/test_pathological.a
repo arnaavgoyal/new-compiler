@@ -1,0 +1,202 @@
+// =============================================================================
+// PATHOLOGICAL TEST CASES FOR META DEPENDENCY ANALYSIS
+// =============================================================================
+// This file contains various test cases to verify the topological analysis
+// correctly handles complex dependency patterns.
+
+// -----------------------------------------------------------------------------
+// VALID CASES - These should all compile without errors
+// -----------------------------------------------------------------------------
+
+// 1. Simple linked list with pointer indirection (valid)
+let! LinkedList = fn!(T: type): type {
+    type as Self {
+        value: T
+        next: *Self       // Pointer breaks the cycle
+    }
+}
+
+// 2. Tree with multiple pointer children (valid)
+let! TreeNode = fn!(T: type): type {
+    type as Self {
+        value: T
+        left: *Self
+        right: *Self
+        parent: *Self     // Multiple self-pointers are fine
+    }
+}
+
+// 3. Optional type using union (valid - no self-reference)
+let! Optional = fn!(T: type): type {
+    type as union
+        | Some(T)
+        | None
+}
+
+// 4. Result type with two type params (valid)
+let! Result = fn!(T: type, E: type): type {
+    type as union
+        | Ok(T)
+        | Err(E)
+}
+
+// 5. Slice/array indirection (valid)
+let! DynArray = fn!(T: type): type {
+    type {
+        data: []T         // Slice indirection is safe
+        len: u32
+        cap: u32
+    }
+}
+
+// 6. Chain of type aliases (valid - no actual cycle)
+let! Inner = fn!(T: type): type {
+    type { val: T }
+}
+let! Wrapper = fn!(T: type): type {
+    type { inner: Inner!(T) }    // Uses Inner, not self
+}
+let! Container = fn!(T: type): type {
+    type { wrapped: Wrapper!(T) }  // Chain: Container -> Wrapper -> Inner
+}
+
+// 7. Mutual pointer references (valid - pointers break both directions)
+let! GraphNodeA = fn!(T: type): type {
+    type as Self {
+        value: T
+        neighbor: *GraphNodeB!(T)  // Pointer to B
+    }
+}
+let! GraphNodeB = fn!(T: type): type {
+    type as Self {
+        value: T
+        neighbor: *GraphNodeA!(T)  // Pointer back to A
+    }
+}
+
+// 8. Complex multi-level pointer (valid)
+let! PointerChain = fn!(T: type): type {
+    type as Self {
+        direct: *Self           // Single pointer
+        double_ptr: **Self      // Double pointer
+        triple: ***Self         // Triple pointer
+    }
+}
+
+// 9. Mixed pointer and slice (valid)
+let! MixedIndirect = fn!(T: type): type {
+    type as Self {
+        ptr_array: []*Self      // Slice of pointers
+        array_ptr: *[]Self      // Pointer to slice
+    }
+}
+
+// 10. Nested type with where clause methods (valid - methods can reference Self)
+let! WithMethods = fn!(T: type): type {
+    type as Self {
+        value: T
+    } where {
+        let new = fn(v: T): Self {       // Return Self is fine
+            v
+        }
+        let clone = fn(self: *Self): Self {  // Method using *Self param
+            self
+        }
+    }
+}
+
+// 11. Deeply nested valid structure
+let! Level3 = fn!(T: type): type { type { val: T } }
+let! Level2 = fn!(T: type): type { type { inner: Level3!(T) } }
+let! Level1 = fn!(T: type): type { type { inner: Level2!(T) } }
+let! TopLevel = fn!(T: type): type { type { inner: Level1!(T) } }
+
+// 12. Conditional-like structure (valid if both branches use pointers)
+let! EitherPtr = fn!(A: type, B: type): type {
+    type as union
+        | Left(*A)
+        | Right(*B)
+}
+
+// -----------------------------------------------------------------------------
+// INVALID CASES - These should all produce cycle errors
+// -----------------------------------------------------------------------------
+
+// 13. Direct self-containment (INVALID - immediate cycle)
+let! DirectSelf = fn!(T: type): type {
+    type as Self {
+        value: T
+        nested: Self          // ERROR: Direct self-containment
+    }
+}
+
+// 14. Union with self-containment (INVALID)
+let! BadUnion = fn!(T: type): type {
+    type as Self
+        | Value(T)
+        | Recurse(Self)         // ERROR: Union variant directly contains Self
+}
+
+// 15. Mutual direct containment A->B (INVALID - neither uses pointers)
+let! CycleA = fn!(T: type): type {
+    type { other: CycleB!(T) }  // ERROR: Direct containment of B
+}
+let! CycleB = fn!(T: type): type {
+    type { other: CycleA!(T) }  // ERROR: Direct containment of A
+}
+
+// 16. Three-way cycle (INVALID)
+let! TriA = fn!(T: type): type { type { next: TriB!(T) } }
+let! TriB = fn!(T: type): type { type { next: TriC!(T) } }
+let! TriC = fn!(T: type): type { type { next: TriA!(T) } }  // Cycle: A->B->C->A
+
+// 17. Deep cycle chain (INVALID)
+let! Deep1 = fn!(T: type): type { type { x: Deep2!(T) } }
+let! Deep2 = fn!(T: type): type { type { x: Deep3!(T) } }
+let! Deep3 = fn!(T: type): type { type { x: Deep4!(T) } }
+let! Deep4 = fn!(T: type): type { type { x: Deep5!(T) } }
+let! Deep5 = fn!(T: type): type { type { x: Deep1!(T) } }  // Long cycle
+
+// 18. Diamond with direct containment at bottom (INVALID - detected at type instantiation)
+// NOTE: This is caught during type instantiation, not meta dependency analysis.
+// The meta functions have no cycles, but Self is passed to DiamondLeft/Right
+// which embeds it, creating an infinite-size type.
+let! DiamondLeft = fn!(T: type): type { type { val: T } }
+let! DiamondRight = fn!(T: type): type { type { val: T } }
+let! DiamondTop = fn!(T: type): type {
+    type as Self {
+        left: DiamondLeft!(Self)    // Creates layout cycle through instantiation
+        right: DiamondRight!(Self)
+    }
+}
+
+// 19. Partial indirection - one pointer, one direct (INVALID)
+let! PartialCycle = fn!(T: type): type {
+    type as Self {
+        safe: *Self           // This is fine
+        unsafe_field: Self    // ERROR: Direct containment
+    }
+}
+
+// 20. Nested type with external self-containment (INVALID)
+let! OuterBad = fn!(T: type): type {
+    type as Outer {
+        inner: InnerBad!(T)   // ERROR: InnerBad contains Outer directly
+    }
+}
+let! InnerBad = fn!(T: type): type {
+    type { 
+        parent: OuterBad!(T)  // ERROR: Creates mutual direct containment
+    }
+}
+
+// 21. Mutual meta function recursion (INVALID - functions call each other)
+let! MutualA = fn!(T: type): type { MutualB!(T) }
+let! MutualB = fn!(T: type): type { MutualA!(T) }
+
+// -----------------------------------------------------------------------------
+// Entry point
+// -----------------------------------------------------------------------------
+let main = fn(): i32 {
+    0
+}

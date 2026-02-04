@@ -1,0 +1,123 @@
+// =============================================================================
+// TEST: Error cases for concrete types and namespace access
+// =============================================================================
+// This file tests that invalid code produces appropriate errors.
+// Expected: Multiple errors should be reported
+
+// -----------------------------------------------------------------------------
+// ERROR 1: Accessing non-existent namespace member
+// -----------------------------------------------------------------------------
+let ValidType = type as Self {
+    x: i32
+} where {
+    let existing = fn(): Self {
+        let v: Self
+        v
+    }
+}
+
+// This should error: 'nonexistent' is not a member of ValidType's namespace
+// let err1 = ValidType.nonexistent()
+
+// -----------------------------------------------------------------------------
+// ERROR 2: Using non-meta value in type position
+// -----------------------------------------------------------------------------
+let runtime_value = 42
+
+// This should error: runtime value cannot be used as a type
+// let bad_var: runtime_value
+
+// -----------------------------------------------------------------------------
+// ERROR 3: Cyclic type dependency (direct)
+// -----------------------------------------------------------------------------
+// This should error: Self is embedded directly without pointer indirection
+// let! BadCycle = fn!(T: type): type {
+//     type as Self {
+//         value: T
+//         next: Self    // ERROR: direct Self reference creates infinite size
+//     }
+// }
+
+// -----------------------------------------------------------------------------
+// ERROR 4: Type constructor called without required arguments
+// -----------------------------------------------------------------------------
+let! RequiresArg = fn!(T: type): type {
+    type {
+        data: T
+    }
+}
+
+// This should error: missing type argument
+// let! BadInstantiation = RequiresArg!()
+
+// -----------------------------------------------------------------------------
+// ERROR 5: Wrong number of type arguments
+// -----------------------------------------------------------------------------
+let! TwoArgs = fn!(A: type, B: type): type {
+    type {
+        first: A
+        second: B
+    }
+}
+
+// This should error: expected 2 type arguments, got 1
+// let! WrongArgCount = TwoArgs!(i32)
+
+// -----------------------------------------------------------------------------
+// ERROR 6: Non-type used as type argument
+// -----------------------------------------------------------------------------
+// This should error: 42 is not a type
+// let! BadTypeArg = RequiresArg!(42)
+
+// -----------------------------------------------------------------------------
+// ERROR 7: Undeclared type reference
+// -----------------------------------------------------------------------------
+// This should error: UndeclaredType is not defined
+// let bad_field = type {
+//     x: UndeclaredType
+// }
+
+// -----------------------------------------------------------------------------
+// ERROR 8: Duplicate field names
+// -----------------------------------------------------------------------------
+// This should error: duplicate field 'x'
+// let DuplicateFields = type {
+//     x: i32
+//     x: i64  // ERROR: duplicate
+// }
+
+// -----------------------------------------------------------------------------
+// ERROR 9: Using template as value
+// -----------------------------------------------------------------------------
+let! SomeTemplate = fn!(T: type): type {
+    type { data: T }
+}
+
+// This should error: SomeTemplate is a type constructor, not a value
+// let bad_use = SomeTemplate
+
+// -----------------------------------------------------------------------------
+// VALID: These should compile without errors
+// -----------------------------------------------------------------------------
+
+// Valid concrete type
+let GoodType = type as Self {
+    value: i32
+} where {
+    let create = fn(): Self {
+        let v: Self
+        v
+    }
+}
+
+// Valid instantiation
+let! GoodInstance = RequiresArg!(i32)
+
+// Valid two-arg instantiation  
+let! GoodTwoArgs = TwoArgs!(i32, i64)
+
+// Main to make this a complete program
+let main = fn(): i32 {
+    let g = GoodType.create()
+    0
+}

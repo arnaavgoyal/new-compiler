@@ -1,54 +1,5 @@
 program
-    = { decl }
-    ;
-
-decl
-    = valdecl
-    | typedecl
-    ;
-
-valdecl
-    = "let", identifier, [ template_params ], valdecl_content
-    ;
-
-valdecl_content
-    = "(", [ param { ",", param } ], ")", type_annotation, stmtblock
-    | [ type_annotation ], [ "=", expr ]
-    ;
-
-param
-    = identifier, ":", expr
-    ;
-
-typedecl
-    = "type", identifier, [ template_params ], typedecl_content, [ where_clause ]
-    ;
-
-typedecl_content
-    = "=", expr
-    | "{", { decl }, "}"
-    | "|", variant, { "|", variant }
-    ;
-
-variant
-    = identifier, [ "(", expr, { ",", expr }, ")" ]
-    ;
-
-where_clause
-    = "where", "{", { decl }, "}"
-    ;
-
-template_params
-    = "!", "(", template_param, { ",", template_param }, ")"
-    ;
-
-template_param
-    = identifier
-    | identifier, ":", expr
-    ;
-
-type_annotation
-    = ":", expr
+    = { bind }
     ;
 
 stmtblock
@@ -56,40 +7,82 @@ stmtblock
     ;
 
 stmt
-    = decl
+    = bind
     | expr
-    | ifthen
-    | loop
     ;
 
-ifthen
-    = "if", "(", expr, ")", stmtblock,
-      [ "else", ( ifthen | stmtblock ) ]
+bind
+    = "let", [ meta ], identifier, [ type_annotation ], "=", expr
     ;
 
-loop
-    = "while", "(", expr, ")", stmtblock
+meta
+    = "!"
+
+type_annotation
+    = ":", expr
     ;
 
 expr
-    = binaryexpr
+    = "type" typedecl
+    | branch
+    | loop
+    | func
+    | binaryexpr
+    ;
+
+typedecl
+    = ( struct | union ), [ "where", "{", { bind }, "}" ]
+    ;
+
+struct
+    = "{", { identifier, type_annotation }, "}"
+    ;
+
+union
+    = "|", variant, { "|", variant }
+    ;
+
+variant
+    = identifier, [ "(", expr, { ",", expr }, ")" ]
+    ;
+
+branch
+    = "if", [ meta ], expr, stmtblock, [ "else", ( branch | stmtblock ) ]
+    ;
+
+loop
+    = "while", [ meta ], expr, stmtblock
+    ;
+
+func
+    = "fn", [ meta ], [ captures ], params, type_annotation, stmtblock
+    ;
+
+captures
+    = "[", capture, { ",", capture }, "]"
+    ;
+
+capture
+    = "&", identifier
+    | identifier
+    ;
+
+params
+    = "(", identifier, type_annotation, { ",", identifier, type_annotation }, ")"
     ;
 
 binaryexpr
-    = binaryexpr, binop, unaryexpr
-    | unaryexpr
+    = binaryexpr, binop, prefixexpr  (* not all binops are left-assoc *)
+    | prefixexpr
     ;
 
-unaryexpr
-    = prefixop, unaryexpr
-    | postfixexpr
+prefixexpr
+    = prefixop, prefixexpr
+    | primaryexpr, [ postfixexpr ]
     ;
 
-postfixexpr
-    = postfixexpr, "(", [ expr, { ",", expr } ], ")"
-    | postfixexpr, "[", expr, "]"
-    | postfixexpr, "as", expr
-    | primaryexpr
+prefixop
+    = ? prefix operators ?
     ;
 
 primaryexpr
@@ -98,10 +91,21 @@ primaryexpr
     | literal
     ;
 
-prefixop
-    = "*"
-    | "[]"
-    | ? other prefix operators ?
+postfixexpr
+    = postfixexpr, call_postfix       (* call *)
+    | postfixexpr, "[", expr, "]"     (* subscript *)
+    | postfixexpr, "as", expr         (* cast *)
+    | postfixexpr, ".", identifier    (* scope open / member access *)
+    | postfixexpr, "->", prefixexpr   (* only for function types *)
+    | postfixexpr, postfixop
+    ;
+
+call_postfix
+    = [ meta ], "(", [ expr, { ",", expr } ], ")"
+    ;
+
+postfixop
+    = ? postfix operators ?
     ;
 
 binop
@@ -113,10 +117,10 @@ identifier
     ;
 
 literal
-    = '"', { printchar }, '"'
-    | "'", [ printchar ], "'"
-    | numchar, [ alphachar ], { numchar }
-    | { numchar }, ".", numchar, { numchar }
+    = '"', { printchar }, '"'                 (* string *)
+    | "'", [ printchar ], "'"                 (* char *)
+    | numchar, [ alphachar ], { numchar }     (* integral *)
+    | { numchar }, ".", numchar, { numchar }  (* float *)
     ;
 
 printchar
@@ -133,14 +137,3 @@ alphachar
 numchar
     = ? numeric characters ?
     ;
-
-(*  TYPE EXPRS - this is not relevant to parsing, but to semantics  *)
-
-expr = type_expr | val_expr
-val_expr = ...
-type_expr = ptr | slice | func | type
-ptr = "*", type_expr
-slice = "[]", type_expr
-func = "(", [ type_expr { ",", type_expr } ], ")", "->", type_expr
-type = identifier, [ tmplargs ], [ ".", type ]
-tmplargs = "!", "(", [ expr { ",", expr } ], ")"

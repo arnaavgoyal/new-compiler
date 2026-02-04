@@ -12,22 +12,6 @@ namespace xast {
 template <typename Ret, typename... Ctx>
 struct Visitor {
 
-    Ret dispatch(Node *n, Ctx... ctx) {
-        if (!n) {
-            if constexpr (std::is_void_v<Ret>) { return; }
-            else { return {}; }
-        }
-        switch(n->kind) {
-        
-#define NK(x, num, c) \
-    case nk::x: return visit_##x(n, std::forward<Ctx>(ctx)...);
-#include "ast/nodekinds"
-
-        default: assert(false && "this should be unreachable");
-
-        }
-    }
-
 #define NK(x, num, c)                                           \
     virtual Ret visit_##x(Node *n, Ctx... ctx) {                \
         for (auto edge : n->opedges) {                          \
@@ -37,6 +21,24 @@ struct Visitor {
         else { return {}; }                                     \
     }
 #include "ast/nodekinds"
+#undef NK
+
+Ret dispatch(Node *n, Ctx... ctx) {
+        if (!n) {
+            if constexpr (std::is_void_v<Ret>) { return; }
+            else { return {}; }
+        }
+        switch(n->kind) {
+        
+#define NK(x, num, c) \
+    case nk::x: return visit_##x(n, std::forward<Ctx>(ctx)...);
+#include "ast/nodekinds"
+#undef NK
+
+        default: assert(false && "this should be unreachable");
+
+        }
+    }
 
 
     // entry function

@@ -1,0 +1,204 @@
+// Test comprehensive grammar features
+
+let main = fn(): i32 {
+    let point = type {
+        x: i32
+        y: i32
+    }
+    
+    let result = type
+        | Ok
+        | Err
+
+    let x: i32 = 42
+    let y = x + 1
+    
+    if (y) {
+        let z = y * 2
+        while (z) {
+            let w = z - 1
+            0
+        }
+        z
+    }
+    else {
+        0
+    }
+}
+
+let higher_order = fn(f: (i32) -> i32): i32 {
+    f(10)
+}
+
+let nested_fn = fn(): (i32) -> i32 {
+    fn(x: i32): i32 { x + 1 }
+}
+
+
+
+// ─────────────────────────────────────────────
+// 1. Simple alias chain (invalid cycle)
+// ─────────────────────────────────────────────
+
+// type A1 = B1
+// type B1 = C1
+// type C1 = A1
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 2. Pointer-broken self recursion (valid)
+// // ─────────────────────────────────────────────
+// 
+// type Node2 {
+//     next: *Node2
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 3. Struct ↔ struct via where-clause (invalid)
+// // ─────────────────────────────────────────────
+// 
+// type Outer3 {
+//     inner: Inner3
+// } where {
+//     type Inner3 {
+//         back: Outer3
+//     }
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 4. Union → struct → union (invalid)
+// // ─────────────────────────────────────────────
+// 
+// type Expr4
+//     | Lit4(i32)
+//     | Add4(AddExpr4)
+// where {
+//     type AddExpr4 {
+//         lhs: Expr4
+//         rhs: Expr4
+//     }
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 5. Generic container (valid by itself)
+// // ─────────────────────────────────────────────
+// 
+// type Box5!(T) {
+//     value: T
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 6. Template-dependent deep cycle (invalid)
+// // ─────────────────────────────────────────────
+// 
+// type L1_6!(T) {
+//     a: L2_6!(Box5!(T))
+// }
+// 
+// type L2_6!(T) {
+//     b: L3_6!(T)
+// }
+// 
+// type L3_6!(T) {
+//     c: T
+// }
+// 
+// type Root6 {
+//     x: L1_6!(Root6)
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 7. Mutually recursive templates (invalid)
+// // ─────────────────────────────────────────────
+// 
+// type A7!(T) {
+//     b: B7!(T)
+// }
+// 
+// type B7!(T) {
+//     c: C7!(T)
+// }
+// 
+// type C7!(T) {
+//     a: A7!(T)
+// }
+// 
+// type Top7 {
+//     v: A7!(Top7)
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 8. Generic + pointer indirection (valid)
+// // ─────────────────────────────────────────────
+// 
+// type Tree8!(T) {
+//     left: *Tree8!(T)
+//     right: *Tree8!(T)
+//     value: T
+// }
+// 
+// type Forest8 {
+//     root: Tree8!(i32)
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 9. Alias with where-clause adding requirements
+// //    (tests alias identity vs behavior)
+// // ─────────────────────────────────────────────
+// 
+// type Base9 {
+//     x: i32
+// }
+// 
+// type Alias9 = Base9 where {
+//     type Extra9 {
+//         y: Alias9
+//     }
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 10. Invalid self-instantiating generic
+// // ─────────────────────────────────────────────
+// 
+// type Bad10!(T) {
+//     x: Bad10!(T)
+// }
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 11. Cross-generic value recursion via alias
+// // ─────────────────────────────────────────────
+// 
+// type Wrap11!(T) {
+//     v: T
+// }
+// 
+// type Alias11 = Wrap11!(Alias11)
+// 
+// 
+// // ─────────────────────────────────────────────
+// // 12. Mixed valid/invalid field graph
+// // ─────────────────────────────────────────────
+// 
+// type OkLeaf12 {
+//     n: i32
+// }
+// 
+// type BadMid12 {
+//     leaf: OkLeaf12
+//     back: BadTop12
+// }
+// 
+// type BadTop12 {
+//     mid: BadMid12
+// }
+// 
+// 

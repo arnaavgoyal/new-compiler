@@ -1,0 +1,153 @@
+// =============================================================================
+// TEST: Concrete types and namespace access
+// =============================================================================
+// Tests for:
+// - Non-template composite types with regular `let` (auto-marked meta)
+// - Dot operator for namespace access on type aliases
+// - Where-clause function scoping
+// - internalref node for type aliases
+
+// -----------------------------------------------------------------------------
+// 1. Concrete type definition (non-template, uses regular let)
+// -----------------------------------------------------------------------------
+// The type expression is automatically marked as meta, so regular `let` works
+let Point2D = type as Self {
+    x: i32
+    y: i32
+} where {
+    let new = fn(x: i32, y: i32): Self {
+        let p: Self
+        p
+    }
+    
+    let origin = fn(): Self {
+        let p: Self
+        p
+    }
+}
+
+// Test: namespace access on concrete type
+let p1 = Point2D.new(10, 20)
+let p2 = Point2D.origin()
+
+// -----------------------------------------------------------------------------
+// 2. Another concrete type to ensure multiple work
+// -----------------------------------------------------------------------------
+let Counter = type as Self {
+    count: i32
+} where {
+    let create = fn(): Self {
+        let c: Self
+        c
+    }
+}
+
+let counter = Counter.create()
+
+// -----------------------------------------------------------------------------
+// 3. Template type with where clause
+// -----------------------------------------------------------------------------
+let! Container = fn!(T: type): type {
+    type as Self {
+        data: T
+        valid: i32
+    } where {
+        let make = fn(): Self {
+            let c: Self
+            c
+        }
+        
+        let empty = fn(): Self {
+            let c: Self
+            c
+        }
+    }
+}
+
+// Instantiate template
+let! IntContainer = Container!(i32)
+
+// Test: namespace access on instantiated type alias
+let ic1 = IntContainer.make()
+let ic2 = IntContainer.empty()
+
+// Direct inline instantiation with namespace access
+let ic3 = Container!(i64).make()
+
+// -----------------------------------------------------------------------------
+// 4. Nested template instantiation with namespace access
+// -----------------------------------------------------------------------------
+let! Wrapper = fn!(T: type): type {
+    type as Self {
+        inner: T
+    } where {
+        let wrap = fn(): Self {
+            let w: Self
+            w
+        }
+    }
+}
+
+// Nested: Wrapper around Container
+let! WrappedContainer = Wrapper!(Container!(i32))
+let wc = WrappedContainer.wrap()
+
+// -----------------------------------------------------------------------------
+// 5. Type alias resolution (internalref)
+// -----------------------------------------------------------------------------
+let! MaybePointer = fn!(T: type, AsPtr: i32): type {
+    if! (AsPtr) {
+        *T
+    }
+    else {
+        T
+    }
+}
+
+// These should create internalref nodes pointing to the resolved types
+let! PtrInt = MaybePointer!(i32, 1)   // Should be *i32
+let! ValInt = MaybePointer!(i32, 0)   // Should be i32
+
+// Use the type aliases
+let ptr_val: PtrInt    // *i32
+let val_val: ValInt    // i32
+
+// -----------------------------------------------------------------------------
+// 6. Variables inside where-clause functions (scope test)
+// -----------------------------------------------------------------------------
+let! Vector = fn!(T: type): type {
+    type as Self {
+        data: *T
+        size: i32
+        capacity: i32
+    } where {
+        // Multiple variables in function body
+        let new = fn(): Self {
+            let v: Self
+            let x: i32
+            let y: i32
+            v
+        }
+        
+        // Function with parameters
+        let with_capacity = fn(cap: i32): Self {
+            let v: Self
+            v
+        }
+    }
+}
+
+let! IntVec = Vector!(i32)
+let vec1 = IntVec.new()
+let vec2 = IntVec.with_capacity(10)
+
+// -----------------------------------------------------------------------------
+// 7. Main entry point
+// -----------------------------------------------------------------------------
+let main = fn(): i32 {
+    // Use various types to verify everything compiles
+    let local_point = Point2D.new(1, 2)
+    let local_vec = IntVec.new()
+    
+    0
+}

@@ -31,18 +31,14 @@ private:
     /** The env for longjmp back to runner on syntax error*/
     jmp_buf env;
 
+    // FIXME: super hacky
+    bool in_type_annot = false;
+
     /** ------------------- UTILS ------------------- */
 
     xast::Node *make_node(
         xast::nk kind,
-        xast::Identifier ident,
-        SourceLocation loc,
-        token::token_type
-    );
-
-    xast::Node *make_node(
-        xast::nk kind,
-        uint64_t ival,
+        xast::NodeData p,
         SourceLocation loc,
         token::token_type
     );
@@ -68,38 +64,6 @@ private:
      * @param expected the expected type of token to match
     */
     void match(token::token_type expected);
-
-    /**
-     * Generically implements the parsing of a left-associative binary operation
-     * at a precedence level.
-     * 
-     * @param higher_prec the higher precedence function to call when parsing
-     *                    operands
-     * @param types list of tokens to consider equal precedence for the operation
-     * @param ops list of ops associated with the corresponding tokens
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *left_assoc_bin_op(
-        xast::Node *(Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types,
-        std::vector<op::kind> const &ops
-    );
-
-    /**
-     * Generically implements the parsing of a right-associative binary operation
-     * at a precedence level.
-     * 
-     * @param higher_prec the higher precedence function to call when parsing
-     *                    operands
-     * @param types list of tokens to consider equal precedence for the operation
-     * @param ops list of ops associated with the corresponding tokens
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *right_assoc_bin_op(
-        xast::Node *(Parser::*higher_prec)(),
-        std::vector<token::token_type> const &types,
-        std::vector<op::kind> const &ops
-    );
 
     /** ------------------- EXPRESSION PARSING ------------------- */
 
@@ -140,17 +104,6 @@ private:
     xast::Node *parse_prefix();
 
     /**
-     * OPERATOR PRECEDENCE [1, 2] - Adjacency.
-     * 
-     * In the unified grammar, adjacent expressions are implicitly applied.
-     * For example, "f x y" is parsed as adjacency with three children.
-     * During semantic analysis, this is interpreted as f(x, y) or f x y depending on context.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_adjacency();
-
-    /**
      * OPERATOR PRECEDENCE [1, 2] - Unary.
      * 
      * Parses a unary expression (prefix operators).
@@ -159,152 +112,28 @@ private:
     */
     xast::Node *parse_unary();
 
-    /**
-     * Helper to check if the current token can start an adjacency expression.
-     * Used to determine when to continue parsing adjacent expressions.
-     * 
-     * @return true if current token can start a unary expression
-    */
-    bool can_start_adjacency_expr() const;
+    xast::Node *parse_binop(int minbp = 0);
 
-    /**
-     * OPERATOR PRECEDENCE [1, 3].
-     * 
-     * Parses a multiplicative expression given that the current token is the first
-     * token of the multiplicative expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token
-     * contains 'a' in 'a / *b - c', then it will contain '-' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_multiplicative();
+    xast::Node *parse_loop();
 
-    /**
-     * OPERATOR PRECEDENCE - Function Type Arrow
-     * 
-     * Parses a function type expression with -> operator.
-     * Right-associative, so A -> B -> C is parsed as A -> (B -> C).
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_function_type();
+    xast::Node *parse_branch();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4].
-     * 
-     * Parses a additive expression given that the current token is the first
-     * token of the additive expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a + b >= c', then it will contain '>=' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_additive();
+    xast::Node *parse_struct();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6].
-     * 
-     * Parses a greater/less relational expression given that the current token is the
-     * first token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a >= b == c', then it will contain '==' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_gl_relational();
+    xast::Node *parse_union();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6, 7].
-     * 
-     * Parses a equal/not equal relational expression given that the current token is the
-     * first token of the relational expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a == b && c', then it will contain '&&' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_eq_relational();
+    xast::Node *parse_composite();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11].
-     * 
-     * Parses a logical AND expression given that the current token is the first
-     * token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a && b || c', then it will contain '||' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_logical_and();
+    xast::Node *parse_type_kw();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12].
-     * 
-     * Parses a logical OR expression given that the current token is the first
-     * token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a || b;', then it will contain ';' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_logical_or();
+    xast::Node *parse_structural();
 
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12], U [14].
-     * 
-     * Parses an assignment expression given that the current token is the first
-     * token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a = b, c', then it will contain ',' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_assignment();
-
-    /**
-     * OPERATOR PRECEDENCE [1, 4] U [6, 7] U [11, 12] U [14, 15].
-     * 
-     * Parses a comma expression given that the current token is the first
-     * token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens. Thus, the current token will be left containing
-     * the token AFTER the last relevant token. For example, if the current token contains
-     * 'a' in 'a, b, c;', then it will contain ';' after this function is done.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
-    xast::Node *parse_comma(std::optional<token::token_type> end = std::nullopt);
-
-    /**
-     * This function serves as the entry point for parsing expressions. It
-     * will simply call the lowest precedence expression function to start
-     * the parsing.
-     * 
-     * The current token must be the first token of the expression.
-     * 
-     * ALWAYS consumes all parsed tokens.
-     * 
-     * @return the generated result or nullptr if no expression was found
-    */
     xast::Node *parse_expr();
+
+    xast::Node *parse_comma(std::optional<token::token_type> end = std::nullopt);
 
     /** ------------------- STATEMENT PARSING ------------------- */
 
-    xast::Node *parse_type_expr_postfix(xast::Node *node);
     xast::Node *parse_type_expr(bool required = true);
 
     xast::Node *parse_type_annotation(bool required = true);
@@ -323,17 +152,12 @@ private:
      * 
      * @param node the node to add the arguments to
     */
-    std::vector<xast::Node *> parse_call_args();
-
-    xast::Node *parse_tmpl_params();
-    xast::Node *parse_tmpl_args();
 
     xast::Node *parse_stmt_block(bool need_new_scope);
 
     xast::Node *parse_function();
 
-    xast::Node *parse_typebind();
-    xast::Node *parse_valbind();
+    xast::Node *parse_bind();
 
     /**
      * Parses a statement given that the current token is the start of the

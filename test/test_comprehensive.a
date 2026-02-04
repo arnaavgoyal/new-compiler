@@ -1,0 +1,35 @@
+// Test comprehensive grammar features
+
+let main = fn(): i32 {
+    let point = type {
+        x: i32
+        y: i32
+    }
+    
+    let result = type
+        | Ok
+        | Err
+
+    let x: i32 = 42
+    let y = x + 1
+    
+    if (y) {
+        let z = y * 2
+        while (z) {
+            let w = z - 1
+            0
+        }
+        z
+    }
+    else {
+        0
+    }
+}
+
+let higher_order = fn(f: (i32) -> i32): i32 {
+    f(10)
+}
+
+let nested_fn = fn(): (i32) -> i32 {
+    fn(x: i32): i32 { x + 1 }
+}

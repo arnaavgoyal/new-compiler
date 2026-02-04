@@ -5,6 +5,7 @@
 // syntax
 
 DIAGNOSTIC(expected_declaration_in_non_execution_context, error, "expected declaration (top level scope is not a valid execution context)")
+DIAGNOSTIC(non_declaration_in_non_execution_scope, error, "only declarations are allowed at top level and in where-clauses (found %0)")
 DIAGNOSTIC(expected_expression, error, "expected expression")
 DIAGNOSTIC(expected_token, error, "expected '%0'")
 DIAGNOSTIC(expected_type, error, "expected type expression")
@@ -32,9 +33,9 @@ DIAGNOSTIC(expected_symbol_found_type, error, "expected symbol '%0' but found ty
 DIAGNOSTIC(pointer_to_function_type_invalid, error, "pointer to function is not a valid type")
 DIAGNOSTIC(type_is_not_templated, error, "type '%0' is not a templated type")
 
-// func decls
-DIAGNOSTIC(func_decl_too_few_parameters, error, "too few parameters declared for function '%0' of type '%1' (expected %2, got %3)")
-DIAGNOSTIC(func_decl_too_many_parameters, error, "too many parameters declared for function '%0' of type '%1' (expected %2, got %3)")
+// expr universes
+DIAGNOSTIC(operator_not_allowed_in_type_expr, error, "operator '%0' not allowed in a type context")
+DIAGNOSTIC(operator_not_allowed_in_value_expr, error, "operator '%0' not allowed in a value context")
 
 // call exprs
 DIAGNOSTIC(noncallable_expression, error, "expression is not callable (type is '%0')")
@@ -66,6 +67,7 @@ DIAGNOSTIC(binary_op_typecheck, error, "incompatible operands to binary operator
 DIAGNOSTIC(arrow_only_in_type_expr, error, "arrow operator '->' can only be used in type expressions, not value expressions")
 DIAGNOSTIC(invalid_operation_on_type, error, "this operation cannot be applied to type expressions")
 DIAGNOSTIC(subscript_on_type, error, "subscript operator '[]' cannot be applied to type expressions")
+DIAGNOSTIC(dot_on_non_field_accessible_type, error, "dot operator '.' cannot be applied to non field-accessible type ('%0')")
 DIAGNOSTIC(call_on_type, error, "call operator '()' cannot be applied to type expressions")
 
 // assignment typecheck
@@ -77,6 +79,30 @@ DIAGNOSTIC(assignment_requires_explicit_downcast, error, "assignment requires ex
 
 // integral literals
 DIAGNOSTIC(integral_literal_too_big, error, "integral literal '%0' is too large for any integral type")
+
+// meta (compile-time) evaluation
+DIAGNOSTIC(meta_depends_on_runtime, error, "compile-time expression depends on runtime value '%0'")
+DIAGNOSTIC(note_meta_dependency, note, "in dependency of compile-time binding '%0'")
+DIAGNOSTIC(meta_cycle_detected, error, "cycle detected in compile-time dependencies: %0")
+DIAGNOSTIC(note_meta_cycle_node, note, "'%0' depends on '%1' here")
+
+// expression universe validation
+DIAGNOSTIC(type_only_operator_in_value_context, error, "operator '%0' is only valid in type expressions")
+DIAGNOSTIC(value_only_operator_in_type_context, error, "operator '%0' is only valid in value expressions")
+DIAGNOSTIC(type_used_in_value_context, error, "type '%0' cannot be used in a value expression")
+DIAGNOSTIC(value_used_in_type_context, error, "value '%0' cannot be used in a type expression")
+DIAGNOSTIC(meta_expr_type_mismatch, error, "meta expression returns %0 but %1 is expected")
+DIAGNOSTIC(if_meta_branch_type_mismatch, error, "if! branches return different universes (then: %0, else: %1)")
+DIAGNOSTIC(while_meta_not_allowed_in_type, error, "while! loop cannot be used in type context (use if! instead)")
+
+// constant evaluation
+DIAGNOSTIC(const_eval_not_compile_time, error, "expression is not evaluable at compile time")
+DIAGNOSTIC(const_eval_division_by_zero, error, "division by zero in constant expression")
+DIAGNOSTIC(const_eval_overflow, error, "overflow in constant expression")
+
+// type checking
+DIAGNOSTIC(branch_type_mismatch, error, "if branches have incompatible types (then: '%0', else: '%1')")
+DIAGNOSTIC(return_type_mismatch, error, "function body type '%0' does not match declared return type '%1'")
 
 // dev
 
